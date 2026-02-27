@@ -1678,7 +1678,7 @@ Balls: ${match.currentPartnershipBalls}`
   );
 
   advanceGame();
-}
+
   /* ================= TARGET CHECK ================= */
 
   if (
