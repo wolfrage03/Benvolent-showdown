@@ -1169,17 +1169,30 @@ function getLiveScore() {
   if (!match) return "⚠️ No active match.";
 
   const overs = `${match.currentOver}.${match.currentBall}`;
-
-  const ballsBowled =
-    (match.currentOver * 6) + match.currentBall;
-
-  const totalBalls =
-    (match.totalOvers || 0) * 6;
+  const ballsBowled = (match.currentOver * 6) + match.currentBall;
+  const totalBalls = (match.totalOvers || 0) * 6;
+  const ballsLeft = totalBalls - ballsBowled;
 
   const runRate =
     ballsBowled > 0
       ? ((match.score / ballsBowled) * 6).toFixed(2)
       : "0.00";
+
+  let requiredRuns = "";
+  let requiredRR = "";
+
+  if (match.innings === 2) {
+    const runsNeeded = (match.firstInningsScore + 1) - match.score;
+
+    requiredRuns = runsNeeded > 0
+      ? `🎯 Need ${runsNeeded} from ${ballsLeft} balls`
+      : "✅ Target Achieved";
+
+    requiredRR =
+      (runsNeeded > 0 && ballsLeft > 0)
+        ? ((runsNeeded / ballsLeft) * 6).toFixed(2)
+        : "-";
+  }
 
   const strikerStats =
     match.batterStats?.[match.striker] || { runs: 0, balls: 0 };
@@ -1201,7 +1214,8 @@ function getLiveScore() {
     match.bowlerStats?.[match.bowler] || {
       balls: 0,
       runs: 0,
-      wickets: 0
+      wickets: 0,
+      history: []
     };
 
   const bowlerOvers =
@@ -1212,66 +1226,38 @@ function getLiveScore() {
       ? ((bowlerStats.runs / bowlerStats.balls) * 6).toFixed(2)
       : "0.00";
 
-  // DOT BALLS
   const dots =
     match.bowlerStats?.[match.bowler]?.history?.filter(x => x === 0).length || 0;
 
-  // OVER HISTORY FORMAT
-  function ordinal(n) {
-    const s = ["th","st","nd","rd"];
-    const v = n % 100;
-    return n + (s[(v-20)%10] || s[v] || s[0]);
-  }
-
   const overHistoryFormatted = match.overHistory
-    .map((o, index) => {
-      const balls = o.balls.join(", ");
-      return `${ordinal(index + 1)} (${balls})`;
-    })
-    .join("\n");
+    .map((o, index) => `${index + 1}: ${o.balls.join(" ")}`)
+    .join(" | ");
 
   return `
-━━━━━━━━━━━━━━━━━━
-🏏 𝗟𝗜𝗩𝗘 𝗦𝗖𝗢𝗥𝗘𝗕𝗢𝗔𝗥𝗗
-━━━━━━━━━━━━━━━━━━
+╔═══════════════════╗
+🏏  LIVE SCOREBOARD
+╚═══════════════════╝
 
-📊 Score: ${match.score}/${match.wickets}  (${overs}/${match.totalOvers})
-⚡ Run Rate: ${runRate}
+📊 ${match.score}/${match.wickets}  (${overs}/${match.totalOvers})
+⚡ RR: ${runRate}${match.innings === 2 ? ` | RRR: ${requiredRR}` : ""}
 
-🏏 Batting: ${match.battingTeam === "A" ? match.teamAName : match.teamBName}
-🎯 Bowling: ${match.bowlingTeam === "A" ? match.teamAName : match.teamBName}
+${match.innings === 2 ? requiredRuns + "\n" : ""}
 
-━━━━━━━━━━━━━━━━━━
-🟢 𝗕𝗔𝗧𝗧𝗘𝗥𝗦
-━━━━━━━━━━━━━━━━━━
-
-⭐ ${getName(match.striker)}*  
-${strikerStats.runs} (${strikerStats.balls}) | SR ${strikerSR}
-
-${getName(match.nonStriker)}  
-${nonStrikerStats.runs} (${nonStrikerStats.balls}) | SR ${nonStrikerSR}
+🔵 Batting: ${match.battingTeam === "A" ? match.teamAName : match.teamBName}
+🔴 Bowling: ${match.bowlingTeam === "A" ? match.teamAName : match.teamBName}
 
 ━━━━━━━━━━━━━━━━━━
-🔴 𝗕𝗢𝗪𝗟𝗘𝗥
-━━━━━━━━━━━━━━━━━━
+🏏 Batters
+⭐ ${getName(match.striker)}*  ${strikerStats.runs}(${strikerStats.balls})  SR:${strikerSR}
+   ${getName(match.nonStriker)}  ${nonStrikerStats.runs}(${nonStrikerStats.balls})  SR:${nonStrikerSR}
 
-${getName(match.bowler)}  
-${bowlerOvers}-${dots}-${bowlerStats.runs}-${bowlerStats.wickets}  
-Econ: ${economy}
+🎯 Bowler
+${getName(match.bowler)}
+${bowlerOvers}-${dots}-${bowlerStats.runs}-${bowlerStats.wickets}  Econ:${economy}
 
-━━━━━━━━━━━━━━━━━━
-📜 𝗢𝗩𝗘𝗥 𝗛𝗜𝗦𝗧𝗢𝗥𝗬
-━━━━━━━━━━━━━━━━━━
-${overHistoryFormatted || "No overs yet."}
+🤝 Partnership: ${match.currentPartnershipRuns} (${match.currentPartnershipBalls})
 
-━━━━━━━━━━━━━━━━━━
-🤝 𝗣𝗔𝗥𝗧𝗡𝗘𝗥𝗦𝗛𝗜𝗣
-━━━━━━━━━━━━━━━━━━
-
-🏏 ${getName(match.striker)} & ${getName(match.nonStriker)}  
-${match.currentPartnershipRuns} (${match.currentPartnershipBalls})
-
-━━━━━━━━━━━━━━━━━━
+📜 Overs: ${overHistoryFormatted || "Yet to start"}
 `;
 }
 bot.command("score", (ctx) => {
@@ -1570,16 +1556,14 @@ async function processBall() {
 
     match.awaitingBat = true;
     startTurnTimer("bat");
-    
     return;
-}
-
+  }
 
   if (!match.batterStats[match.striker]) {
     match.batterStats[match.striker] = { runs: 0, balls: 0 };
   }
 
-    match.batterStats[match.striker].balls++;
+  match.batterStats[match.striker].balls++;
 
   if (!match.bowlerStats[match.bowler]) {
     match.bowlerStats[match.bowler] = {
@@ -1593,90 +1577,108 @@ async function processBall() {
   match.bowlerStats[match.bowler].balls++;
   match.bowlerStats[match.bowler].history.push(bat);
 
- 
-/* ================= WICKET ================= */
+  /* ================= WICKET ================= */
 
-if (bat === bowl) {
+  if (bat === bowl) {
 
-  match.wickets++;
-  match.wicketStreak++;
-  match.bowlerStats[match.bowler].wickets++;
-  match.currentOverRuns += 0;
-  match.currentBall++; // ✅ Correct ball system
-  match.overHistory[match.overHistory.length - 1]
-     ?.balls.push("W");
-  // 🤝 Count wicket ball in partnership
-  match.currentPartnershipBalls++;
+    match.wickets++;
+    match.wicketStreak++;
+    match.bowlerStats[match.bowler].wickets++;
+    match.currentBall++;
+    match.overHistory[match.overHistory.length - 1]
+      ?.balls.push("W");
 
-  let line = (match.wicketStreak === 3)
-    ? randomLine("hattrick")
-    : randomLine("wicket");
+    match.currentPartnershipBalls++;
 
-  bot.telegram.sendMessage(
-    match.groupId,
-    `🎯 ${getName(match.bowler)} ➜ ${getName(match.striker)}\n${line}`
-  );
+    let line = (match.wicketStreak === 3)
+      ? randomLine("hattrick")
+      : randomLine("wicket");
 
-  // 🤝 Show partnership before breaking
-  bot.telegram.sendMessage(
-    match.groupId,
-    `🤝 Partnership Broken!
+    // ✅ Commentary FIRST
+    await bot.telegram.sendMessage(
+      match.groupId,
+      `${line}`
+    );
+
+    // 🤝 Partnership broken
+    await bot.telegram.sendMessage(
+      match.groupId,
+      `🤝 Partnership Broken!
 Runs: ${match.currentPartnershipRuns}
 Balls: ${match.currentPartnershipBalls}`
-  );
+    );
 
-  // 🔄 Reset partnership
-  match.currentPartnershipRuns = 0;
-  match.currentPartnershipBalls = 0;
+    match.currentPartnershipRuns = 0;
+    match.currentPartnershipBalls = 0;
 
-  /* ================= ALL OUT CHECK ================= */
+    if (match.wickets >= match.maxWickets) {
+      return endInnings();
+    }
 
-  if (match.wickets >= match.maxWickets) {
-    return endInnings();   // ✅ Correct function
+    if (handleOverCompletion()) return;
+
+    match.phase = "new_batter";
+
+    return bot.telegram.sendMessage(
+      match.groupId,
+      "📢 Send new batter:\n/batter number"
+    );
   }
 
- 
+  /* ================= RUNS ================= */
+
+  match.score += bat;
+  match.currentOverRuns += bat;
+
+  match.currentPartnershipRuns += bat;
+  match.currentPartnershipBalls++;
+
+  match.batterStats[match.striker].runs += bat;
+  match.bowlerStats[match.bowler].runs += bat;
+
+  match.currentBall++;
+  match.overHistory[match.overHistory.length - 1]
+    ?.balls.push(bat);
+
+  match.wicketStreak = 0;
+
+  if (match.currentPartnershipRuns === 50) {
+    await bot.telegram.sendMessage(match.groupId, "🔥 50 Run Partnership!");
+  }
+
+  if (match.currentPartnershipRuns === 100) {
+    await bot.telegram.sendMessage(match.groupId, "💯 100 Run Partnership!");
+  }
+
+  // ✅ Commentary FIRST
+  await bot.telegram.sendMessage(
+    match.groupId,
+    `${randomLine(bat)}`
+  );
+
+  // ✅ Rotate strike BEFORE next ball alert
+  if ([1,3,5].includes(bat))
+    swapStrike();
+
+  // 🏁 Chase check
+  if (
+    match.innings === 2 &&
+    match.score > match.firstInningsScore
+  ) {
+    return endMatchWithWinner(match.battingTeam);
+  }
+
+  // 🔄 Over completion check
   if (handleOverCompletion()) return;
 
-  /* ================= NORMAL NEW BATTER ================= */
-
-  match.phase = "new_batter";
-
-  return bot.telegram.sendMessage(
+  // ✅ NEXT BALL ALERT (After everything updated)
+  await bot.telegram.sendMessage(
     match.groupId,
-    "📢 Send new batter:\n/batter number"
+    `🎯 NEXT BALL\n${getName(match.bowler)} ➝ ${getName(match.striker)}`
   );
+
+  advanceGame();
 }
-/* ================= RUNS ================= */
-
-   match.score += bat;
-   match.currentOverRuns += bat;
-
-// 🤝 Partnership update
-   match.currentPartnershipRuns += bat;
-   match.currentPartnershipBalls++;
-   match.batterStats[match.striker].runs += bat;
-   match.bowlerStats[match.bowler].runs += bat;
-   match.currentBall++;
-   match.overHistory[match.overHistory.length - 1]
-     ?.balls.push(bat);
-   match.wicketStreak = 0;
-   
-   if (match.currentPartnershipRuns === 50) {
-     bot.telegram.sendMessage(match.groupId, "🔥 50 Run Partnership!");
-   }
-
-   if (match.currentPartnershipRuns === 100) {
-     bot.telegram.sendMessage(match.groupId, "💯 100 Run Partnership!");
-   }
-   bot.telegram.sendMessage(
-     match.groupId,
-     `🎯 ${getName(match.bowler)} ➜ ${getName(match.striker)}\n${randomLine(bat)}`
-   );
-
-   if ([1,3,5].includes(bat))
-     swapStrike();
-
   /* ================= TARGET CHECK ================= */
 
   if (
