@@ -1,7 +1,34 @@
 require("dotenv").config();
+const connectDB = require("./database");
+
+connectDB();
 const { Telegraf, Markup } = require("telegraf");
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
+
+let BOT_USERNAME;
+
+bot.telegram.getMe().then(me => {
+  BOT_USERNAME = me.username;
+});
+
+let userRegistry = {};
+
+bot.on("message", (ctx, next) => {
+  if (ctx.from && ctx.from.username) {
+    userRegistry[ctx.from.username.toLowerCase()] = ctx.from.id;
+  }
+  return next();
+});
+
+// DM START HANDLER
+bot.start(async (ctx, next) => {
+  if (ctx.chat.type !== "private") return next();
+
+  await ctx.reply(
+    "✅ Bot connected.\n\nWhen you are selected as bowler, send your number (1-6) here."
+  );
+});
 
 let match;
 
@@ -14,7 +41,8 @@ function resetMatch() {
     teamA: [],
     teamB: [],
     captains: { A: null, B: null },
-
+    teamAName: null,
+    teamBName: null,
     tossWinner: null,
 
     battingTeam: null,
@@ -41,7 +69,27 @@ function resetMatch() {
     awaitingBat: false,
     awaitingBowl: false,
     batNumber: null,
-    bowlNumber: null
+    bowlNumber: null,
+
+    bowlerMissCount: 0,
+    batterMissCount: 0,
+    warning30: null,
+    warning10: null,
+    ballTimer: null,
+    ballLocked: false,
+    batterStats: {},   // { userId: runs }
+    bowlerStats: {},   // { userId: { balls:0, runs:0, wickets:0, history: [] } }
+    lastCommandTime: 0,
+    phaseBeforeSwitch: null,
+    lastOverBowler: null,
+    suspendedBowlers: {},   // { userId: overNumber }
+    currentOverNumber: 0,   // track real over number
+    wicketStreak: 0,
+    currentOverRuns: 0,
+    currentPartnershipRuns: 0,
+    currentPartnershipBalls: 0,
+    overHistory: [],   // stores completed overs
+    currentOverBalls: []  // balls of ongoing over
   };
 }
 resetMatch();
@@ -56,18 +104,395 @@ const battingPlayers = () =>
 const bowlingPlayers = () =>
   match.bowlingTeam === "A" ? match.teamA : match.teamB;
 
+function orderedBattingPlayers() {
+  const players = battingPlayers();
+  const captainId =
+    match.battingTeam === "A" ? match.captains.A : match.captains.B;
+
+  return [
+    ...players.filter(p => p.id === captainId),
+    ...players.filter(p => p.id !== captainId)
+  ];
+}
+
 function swapStrike() {
   const t = match.striker;
   match.striker = match.nonStriker;
   match.nonStriker = t;
 }
+function getDisplayName(user) {
+  if (!user) return "Player";
 
+  if (user.username)
+    return `@${user.username}`;
+
+  if (user.first_name && user.last_name)
+    return `${user.first_name} ${user.last_name}`;
+
+  if (user.first_name)
+    return user.first_name;
+
+  return "Player";
+}
 function getName(id) {
   const all = [...match.teamA, ...match.teamB];
   const p = all.find(x => x.id === id);
-  return p ? p.first_name : "Player";
+  return p ? p.name : "Player";
 }
 
+function clearTimers() {
+  if (match.warning30) clearTimeout(match.warning30);
+  if (match.warning10) clearTimeout(match.warning10);
+  if (match.ballTimer) clearTimeout(match.ballTimer);
+}
+
+function bowlDMButton() {
+  return Markup.inlineKeyboard([
+    [
+      Markup.button.url(
+        "🎯 Bowl in DM",
+        `https://t.me/${BOT_USERNAME}`
+      )
+    ]
+  ]);
+}
+function getOverHistory() {
+
+  if (!match.overHistory.length)
+    return "No overs completed yet.";
+
+  return match.overHistory.map(o => {
+
+    const balls = o.balls.join(",");
+    return `Over ${o.over} - ${getName(o.bowler)} = (${balls})`;
+
+  }).join("\n");
+
+}
+
+function advanceGame() {
+
+  if (!match) return;
+
+  if (match.phase === "switch") return;
+
+  if (match.wickets >= match.maxWickets) {
+    endInnings();
+    return;
+  }
+
+  if (match.currentOver >= match.totalOvers) {
+    endInnings();
+    return;
+  }
+
+  startBall();
+}
+/* ================= COMMENTARY ENGINE ================= */
+
+const commentary = {
+
+  0: [
+    "Tight as a drum! No run.",
+    "Beaten! Nothing off that delivery.",
+    "Solid defence — straight to the fielder.",
+    "Pressure building… dot ball!",
+    "Right on the money, no scoring opportunity."
+  ],
+
+  1: [
+    "Just a gentle push for one.",
+    "Quick single taken!",
+    "Soft hands, easy run.",
+    "Rotating the strike nicely.",
+    "Smart cricket — keeps the scoreboard ticking."
+  ],
+
+  2: [
+    "Placed beautifully — they’ll come back for two!",
+    "Good running between the wickets.",
+    "In the gap! Comfortable couple.",
+    "Excellent awareness — two more added.",
+    "They hustle back for the second!"
+  ],
+
+  3: [
+    "Into the deep — they’ll get three!",
+    "Superb running, that’s three all the way.",
+    "Chased hard… but three runs taken.",
+    "Great placement and even better running!",
+    "Turning ones into threes — brilliant effort."
+  ],
+
+  4: [
+    "Cracked away! That’s four!",
+    "Beautifully timed — races to the boundary!",
+    "No stopping that — FOUR!",
+    "Threaded the gap perfectly!",
+    "Pure class — boundary!"
+  ],
+
+  5: [
+    "Overthrows! That’s five runs gifted!",
+    "Misfield and they’ll get five!",
+    "Chaos in the field — five runs taken!",
+    "That’s costly — five to the total!",
+    "Extra runs courtesy of an overthrow!"
+  ],
+
+  6: [
+    "That’s massive! SIX!",
+    "High and handsome — out of the park!",
+    "Clears the ropes with ease!",
+    "What a strike! Maximum!",
+    "That’s gone into the stands!"
+  ],
+
+  wicket: [
+    "Cleaned him up!",
+    "Gone! Big breakthrough!",
+    "Straight to the fielder — taken!",
+    "What a delivery — timber!",
+    "That’s a huge wicket at this stage!"
+  ],
+
+  hattrick: [
+    "Three in three! Unbelievable!",
+    "That’s a hattrick! Magical spell!",
+    "History made — three consecutive wickets!",
+    "What a moment — hattrick hero!",
+    "Hattrick ball… and he’s done it!"
+  ],
+
+  maiden: [
+    "Maiden over! Absolute control.",
+    "Six balls, no runs — brilliant bowling.",
+    "Pressure cooker stuff — maiden!",
+    "Tidy and disciplined — no scoring.",
+    "Dot after dot — that’s a maiden!"
+  ]
+};
+
+function randomLine(type) {
+  const list = commentary[type];
+  return list[Math.floor(Math.random() * list.length)];
+}
+
+const bowlingPrompts = [
+  "🎯 Bowl now!\nType a number between 1 and 6.",
+  "🚀 It’s your delivery!\nSend your bowling number quickly (1–6).",
+  "⏳ Waiting for your ball…\nReply with a number from 1 to 6.",
+  "🔥 Time to strike!\nEnter your bowling number (1–6).",
+  "💣 Drop a deadly delivery!\nSend your number (1–6).",
+  "👀 Batter is ready… can you outsmart them?\nType your bowling number now!",
+  "🧠 Mind game starts here!\nChoose a number (1–6) and send it fast.",
+  "🎯 Aim for the wicket!\nSend your secret bowling number.",
+  "😈 Try to trap the batter!\nEnter your number (1–6).",
+  "🧩 Strategic Move Required\nChoose your bowling number.",
+  "🎲 Roll the magic number!\nSend 1–6.",
+  "💥 Boom or Bust?\nChoose your bowling number!",
+  "🪄 Cast your bowling spell!\nSend a number (1–6).",
+  "🧨 Let’s see if you can explode the stumps!\nEnter your number."
+];
+
+function randomBowlingPrompt() {
+  return bowlingPrompts[
+    Math.floor(Math.random() * bowlingPrompts.length)
+  ];
+}
+
+const batterPrompts = [
+  "🏏 Batter’s Turn!\nSend your number (0–6) now!",
+  "🎯 Face the delivery!\nChoose a number between 0 and 6.",
+  "🚀 Play your shot!\nEnter your number (0–6).",
+  "🔥 Time to score!\nBatter, send your number!",
+  "⏳ Waiting for the batter…\nPick a number (0–6).",
+  "💥 Can you smash this one?\nSend your number (0–6)!",
+  "👀 Bowler is ready…\nBatter, what’s your move? (0–6)",
+  "🧠 Mind game ON!\nChoose wisely between 0–6.",
+  "🎯 Boundary or wicket?\nBatter, enter your number!",
+  "😈 Pressure is building!\nSend your shot (0–6).",
+  "🏃 Quick shot needed!\nEnter 0–6 immediately!",
+  "🔔 Ball delivered!\nBatter, respond with 0–6!",
+  "🧩 Strategic Play Required\nChoose your number now!",
+  "⚔️ Battle in progress!\nBatter, send 0–6."
+];
+
+function randomBatterPrompt() {
+  return batterPrompts[
+    Math.floor(Math.random() * batterPrompts.length)
+  ];
+}
+
+const teams = [
+  "Mumbai Indians",
+  "Chennai Super Kings",
+  "Royal Challengers Bengaluru",
+  "Kolkata Knight Riders",
+  "Rajasthan Royals",
+  "Delhi Capitals",
+  "Sunrisers Hyderabad",
+  "Gujarat Titans",
+  "Sydney Sixers",
+  "Perth Scorchers",
+  "Melbourne Stars",
+  "Brisbane Heat",
+  "Oval Invincibles",
+  "Southern Brave",
+  "Manchester Originals",
+  "London Spirit",
+  "Paarl Royals",
+  "Guyana Amazon Warriors",
+  "Barbados Royals",
+  "Seattle Orcas",
+  "San Francisco Unicorns",
+  "Cursed Spirits",
+  "Gojo Infinity",
+  "Straw Hat Raiders",
+  "Red Hair Pirates",
+  "Hidden Leaf Legends",
+  "Akatsuki Storm",
+  "Demon Slayers XI",
+  "Hashira Hurricanes",
+  "Saiyan Warriors",
+  "Z Fighters XI",
+  "Blade Breakers",
+  "Dragon Emperor XI",
+  "Phantom Troupe",
+  "Nen Masters",
+  "State Alchemists",
+  "Elric Brothers XI",
+  "Titan Shifters",
+  "Survey Corps Strikers",
+  "Soul Reapers XI",
+  "Gotei 13 Warriors",
+  "Hero Academia United",
+  "Plus Ultra Strikers",
+  "Blue Lock Strikers",
+  "Egoist XI",
+  "Hero Association",
+  "Kira Dominion",
+  "Shinigami Reign",
+  "Karasuno Crows",
+  "Nekoma Cats"
+];
+
+function getRandomTeams() {
+  const shuffled = teams.sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, 2);
+}
+
+
+/* ================= MANUAL ADD PLAYER (USERNAME / ID / REPLY) ================= */
+
+bot.command("add", (ctx) => {
+
+  if (!match || ctx.chat.id !== match.groupId)
+    return ctx.reply("⚠️ No active match.");
+
+  if (!isHost(ctx.from.id))
+    return ctx.reply("❌ Only host can add players.");
+
+  const args = ctx.message.text.split(" ");
+  if (args.length < 2)
+    return ctx.reply("Usage:\n/add A @username\n/add B userID\nReply + /add A");
+
+  const team = args[1].toUpperCase();
+
+  if (!["A","B"].includes(team))
+    return ctx.reply("❌ Team must be A or B.");
+
+  let userId;
+  let name;
+
+  /* ========= ✅ REPLY METHOD ========= */
+
+  if (ctx.message.reply_to_message) {
+
+    const repliedUser = ctx.message.reply_to_message.from;
+
+    userId = repliedUser.id;
+    name = repliedUser.username
+      ? `@${repliedUser.username}`
+      : repliedUser.first_name;
+
+  }
+
+  /* ========= ✅ USERNAME / ID METHOD ========= */
+
+  else {
+
+    if (args.length < 3)
+      return ctx.reply("Usage:\n/add A @username\n/add B userID\nReply + /add A");
+
+    let input = args[2];
+
+    if (input.startsWith("@")) {
+
+      input = input.replace("@","");
+      userId = userRegistry[input];
+
+      if (!userId)
+        return ctx.reply("❌ User has not interacted with bot yet.");
+
+      name = `@${input}`;
+    }
+
+    else if (!isNaN(input)) {
+      userId = Number(input);
+      name = `User_${input}`;
+    }
+
+    else {
+      return ctx.reply("❌ Invalid format.");
+    }
+  }
+
+  /* ========= DUPLICATE CHECK ========= */
+
+  if (match.teamA.find(p => p.id === userId) ||
+      match.teamB.find(p => p.id === userId))
+    return ctx.reply("⚠️ Player already added.");
+
+  const player = { id: userId, name };
+
+  if (team === "A") match.teamA.push(player);
+  else match.teamB.push(player);
+
+  ctx.reply(`✅ ${name} added to Team ${team}`);
+});
+/* ================= REMOVE PLAYER ================= */
+
+bot.command("remove", ctx => {
+
+if (!isHost(ctx.from.id))
+return ctx.reply("❌ Only host can remove players.");
+
+const arg = ctx.message.text.split(" ")[1];
+if (!arg) return ctx.reply("Usage: /remove A1 or B2");
+
+const team = arg[0].toUpperCase();
+const num = parseInt(arg.slice(1));
+
+if (!["A","B"].includes(team) || isNaN(num))
+return ctx.reply("Invalid format. Use A1 or B2");
+
+const teamArr = team === "A" ? match.teamA : match.teamB;
+
+if (num < 1 || num > teamArr.length)
+return ctx.reply("Player slot not found.");
+
+const removed = teamArr.splice(num - 1, 1)[0];
+
+// remove captain if removed
+if (match.captains[team] === removed.id)
+  match.captains[team] = null;
+
+// remove from dismissed list
+match.usedBatters = match.usedBatters.filter(id => id !== removed.id);
+
+ctx.reply(`🚫 ${removed.name} removed from Team ${team}`);
+});
 
 /* ================= START ================= */
 
@@ -84,27 +509,27 @@ bot.command("start", ctx => {
     ])
   );
 });
- /* ================= END MATCH ================= */
+ //* ================= END MATCH ================= */
 
 bot.command("endmatch", async (ctx) => {
 
-  // Must be in group
   if (ctx.chat.type === "private")
     return ctx.reply("❌ Use this in group.");
 
-  // Check active match
   if (!match || match.phase === "idle")
     return ctx.reply("⚠️ No active match running.");
 
-  // Check correct group
   if (ctx.chat.id !== match.groupId)
     return ctx.reply("⚠️ This match is not running in this group.");
 
-  // Only host allowed
-  if (ctx.from.id !== match.host)
-    return ctx.reply("❌ Only host can end the match.");
+  // ✅ Check if user is group admin
+  const member = await ctx.getChatMember(ctx.from.id);
+  const isAdmin = ["administrator", "creator"].includes(member.status);
 
-  ctx.reply(
+  if (ctx.from.id !== match.host && !isAdmin)
+    return ctx.reply("❌ Only host or group admin can end the match.");
+
+  return ctx.reply(
     "⚠️ Are you sure you want to end the match?",
     Markup.inlineKeyboard([
       [
@@ -116,24 +541,36 @@ bot.command("endmatch", async (ctx) => {
 });
 
 
+// ================= CONFIRM END =================
 bot.action("confirm_end", async (ctx) => {
 
   if (!match || match.phase === "idle")
-    return ctx.answerCbQuery("No match running");
+    return ctx.answerCbQuery("No match running.");
+
+  // ✅ Restrict button press also
+  const member = await ctx.getChatMember(ctx.from.id);
+  const isAdmin = ["administrator", "creator"].includes(member.status);
+
+  if (ctx.from.id !== match.host && !isAdmin)
+    return ctx.answerCbQuery("Only host/admin can confirm.");
 
   await ctx.editMessageReplyMarkup();
-
   await ctx.reply("🛑 Match Ended Successfully.");
 
+  clearTimers();   // 🔥 important
   resetMatch();
 });
 
 
+// ================= CANCEL =================
 bot.action("cancel_end", async (ctx) => {
-  await ctx.editMessageReplyMarkup();
-  ctx.answerCbQuery("Cancelled");
-});
 
+  if (ctx.from.id !== match.host)
+    return ctx.answerCbQuery("Only host can cancel.");
+
+  await ctx.editMessageReplyMarkup();
+  return ctx.answerCbQuery("Cancelled.");
+});
 /* ================= HOST ================= */
 
 bot.action("select_host", async ctx => {
@@ -142,6 +579,11 @@ bot.action("select_host", async ctx => {
 
   match.host = ctx.from.id;
   match.phase = "team_create";
+
+  const selected = getRandomTeams();
+  match.teamAName = selected[0];
+  match.teamBName = selected[1];
+
 
   await ctx.editMessageReplyMarkup();
 
@@ -152,17 +594,43 @@ bot.action("select_host", async ctx => {
 /* ================= CREATE TEAM ================= */
 
 bot.command("createteam", (ctx) => {
+
   if (!isHost(ctx.from.id))
     return ctx.reply("❌ Only host can create teams.");
 
-  if (match.phase !== "team_create")
-    return ctx.reply("⚠️ Teams already created.");
+  if (match.phase === "join")
+    return ctx.reply("⚠️ Joining already in progress.");
 
+  if (match.phase !== "team_create" &&
+      match.phase !== "captain" &&
+      match.phase !== "join")
+    return ctx.reply("⚠️ Cannot create teams at this stage.");
+
+  // ✅ DO NOT RESET if already exists
+  if (!match.teamA) match.teamA = [];
+  if (!match.teamB) match.teamB = [];
+  if (!match.captains) match.captains = { A: null, B: null };
+
+  // Just reopen joining
   match.phase = "join";
 
-  ctx.reply("✅ Teams Created!\n\nPlayers use:\n/joina\n/joinb\n\n⏳ Joining open for 1 minute...");
+  ctx.reply(
+`🏏 Teams Selected!
+
+🔵 Team A: ${match.teamAName}
+🔴 Team B: ${match.teamBName}
+
+✅ Joining Open!
+
+Players join using:
+👉 /joina
+👉 /joinb
+
+⏳ Joining open for 1 minute`
+);
 
   setTimeout(() => {
+
     if (match.phase !== "join") return;
 
     match.phase = "captain";
@@ -170,18 +638,18 @@ bot.command("createteam", (ctx) => {
     bot.telegram.sendMessage(match.groupId,
 `🔒 Joining Closed!
 
-Team A: ${match.teamA.length} players
-Team B: ${match.teamB.length} players
+Team A: ${match.teamA.length}
+Team B: ${match.teamB.length}
 
 Host use /choosecap`
     );
 
   }, 60000);
 });
-
 /* ================= JOIN ================= */
 
 bot.command("joina", ctx => {
+
   if (match.phase !== "join")
     return ctx.reply("⚠️ Joining is not open.");
 
@@ -194,13 +662,20 @@ bot.command("joina", ctx => {
   if (match.teamB.find(p => p.id === ctx.from.id))
     return ctx.reply("⚠️ You are already in Team B.");
 
-  match.teamA.push(ctx.from);
+  const player = {
+    id: ctx.from.id,
+    name: ctx.from.username
+      ? `@${ctx.from.username}`
+      : ctx.from.first_name || "Player"
+  };
 
-  ctx.reply(`✅ ${ctx.from.first_name} joined Team A`);
+  match.teamA.push(player);
+
+  ctx.reply(`✅ ${player.name} joined Team A`);
 });
 
-
 bot.command("joinb", ctx => {
+
   if (match.phase !== "join")
     return ctx.reply("⚠️ Joining is not open.");
 
@@ -213,9 +688,16 @@ bot.command("joinb", ctx => {
   if (match.teamA.find(p => p.id === ctx.from.id))
     return ctx.reply("⚠️ You are already in Team A.");
 
-  match.teamB.push(ctx.from);
+  const player = {
+    id: ctx.from.id,
+    name: ctx.from.username
+      ? `@${ctx.from.username}`
+      : ctx.from.first_name || "Player"
+  };
 
-  ctx.reply(`✅ ${ctx.from.first_name} joined Team B`);
+  match.teamB.push(player);
+
+  ctx.reply(`✅ ${player.name} joined Team B`);
 });
 /* ================= CAPTAIN ================= */
 
@@ -245,7 +727,7 @@ bot.action("cap_A", async ctx => {
 
   await ctx.answerCbQuery("Captain A Selected");
 
-  ctx.reply(`👑 ${ctx.from.first_name} is Captain of Team A`);
+  ctx.reply(`👑 ${getDisplayName(ctx.from)} is Captain of Team A`);
 
   updateCaptainButtons(ctx);
 });
@@ -262,7 +744,7 @@ bot.action("cap_B", async ctx => {
 
   await ctx.answerCbQuery("Captain B Selected");
 
-  ctx.reply(`👑 ${ctx.from.first_name} is Captain of Team B`);
+  ctx.reply(`👑 ${getDisplayName(ctx.from)} is Captain of Team B`);
 
   updateCaptainButtons(ctx);
 });
@@ -299,19 +781,17 @@ bot.command("players", (ctx) => {
 
     let list = [];
 
-    // If captain exists, put captain first
     if (captainId) {
       const captain = teamArray.find(p => p.id === captainId);
       if (captain) {
-        list.push(`1. 👑 ${captain.first_name} (Captain)`);
+        list.push(`1. 👑 ${captain.name} (Captain)`);
       }
     }
 
-    // Add remaining players (excluding captain)
     const others = teamArray.filter(p => p.id !== captainId);
 
-    others.forEach((p, index) => {
-      list.push(`${list.length + 1}. ${p.first_name}`);
+    others.forEach(p => {
+      list.push(`${list.length + 1}. ${p.name}`);
     });
 
     return list.join("\n");
@@ -323,10 +803,10 @@ bot.command("players", (ctx) => {
   ctx.reply(
 `👥 PLAYERS LIST
 
-🔵 Team A:
+🔵 ${match.teamAName}:
 ${teamAList}
 
-🔴 Team B:
+🔴 ${match.teamBName}:
 ${teamBList}`
   );
 });
@@ -382,7 +862,11 @@ bot.action(["toss_odd", "toss_even"], async ctx => {
     match.groupId,
 `🎲 Toss Number: ${tossNumber} (${result})
 
-🏆 Toss Winner: Team ${winnerTeam}
+🏆 Toss Winner: 🏆 Toss Winner: ${
+                   winnerTeam === "A"
+                     ? match.teamAName
+                     : match.teamBName
+                  }
 
 Choose Bat or Bowl:`,
     Markup.inlineKeyboard([
@@ -418,8 +902,8 @@ bot.action(["decision_bat", "decision_bowl"], async ctx => {
   match.innings = 1;
   match.score = 0;
   match.wickets = 0;
-  match.currentOver = 1;
-  match.currentBall = 1;
+  match.currentOver = 0;
+  match.currentBall = 0;
 
   match.phase = "setovers";
 
@@ -429,11 +913,20 @@ bot.action(["decision_bat", "decision_bowl"], async ctx => {
     match.groupId,
 `📢 Toss Decision Confirmed
 
-🏏 Team ${match.battingTeam} Batting First
-🎯 Team ${match.bowlingTeam} Bowling First
+🏏 ${
+  match.battingTeam === "A"
+    ? match.teamAName
+    : match.teamBName
+} Batting First
+
+🎯 ${
+  match.bowlingTeam === "A"
+    ? match.teamAName
+    : match.teamBName
+} Bowling First
 
 Host set overs:
-/setovers 2`
+/setovers 1-25`
   );
 });
 
@@ -458,190 +951,734 @@ bot.command("setovers", ctx => {
 
   match.phase = "set_striker";
 
-  ctx.reply(`Overs set: ${overs}\n\nSend STRIKER:\n/batter <number>`); 
+  ctx.reply(
+  `Overs set: ${overs}
+
+  Send STRIKER in group:
+  /batter 1`
+  ); 
   
 })
 /* ================= SET BATTER ================= */
 
 bot.command("batter", ctx => {
+
   if (!isHost(ctx.from.id)) return;
 
-  const num = parseInt(ctx.message.text.split(" ")[1]);
-  const players = battingPlayers();
+  if (ctx.chat.id !== match.groupId)
+    return ctx.reply("⚠️ Send batter number in GROUP only.");
 
-  if (!num || num < 1 || num > players.length)
-    return ctx.reply("Invalid number");
+  const num = parseInt(ctx.message.text.split(" ")[1]);
+  if (!num) return ctx.reply("❌ Provide batter number");
+
+  const players = orderedBattingPlayers(); // ✅ USE ORDERED
+
+  if (num < 1 || num > players.length)
+    return ctx.reply("❌ Invalid number");
 
   const selected = players[num - 1];
 
-  if (match.usedBatters.includes(selected.id))
-    return ctx.reply("Batter already out!");
+  if (!selected)
+    return ctx.reply("⚠️ Player not found");
 
+  if (match.usedBatters.includes(selected.id))
+    return ctx.reply("⚠️ Player already batted / dismissed");
+
+  const name = selected.name;
+  const orderNumber = match.usedBatters.length + 1;
+
+  const ordinal = n => {
+    const s = ["th","st","nd","rd"];
+    const v = n % 100;
+    return n + (s[(v-20)%10] || s[v] || s[0]);
+  };
+
+  // STRIKER
   if (match.phase === "set_striker") {
+
     match.striker = selected.id;
+    if (!match.batterStats[selected.id]) {
+      match.batterStats[selected.id] = { runs: 0, balls: 0 };
+    }
     match.usedBatters.push(selected.id);
     match.phase = "set_non_striker";
-    return ctx.reply("Send NON-STRIKER:\n/batter 2");
+
+    return ctx.reply(
+`🏏 ${name} is ${ordinal(orderNumber)} batter at STRIKER end
+
+Now send NON-STRIKER:
+/batter number`);
   }
 
+  // NON STRIKER
   if (match.phase === "set_non_striker") {
+
     if (selected.id === match.striker)
-      return ctx.reply("Cannot select same batter");
+      return ctx.reply("⚠️ Choose different player");
 
     match.nonStriker = selected.id;
     match.usedBatters.push(selected.id);
     match.maxWickets = players.length - 1;
     match.phase = "set_bowler";
 
-    return ctx.reply("Send Bowler:\n/bowler 1");
+    return ctx.reply(
+`🏏 ${name} is ${ordinal(orderNumber)} batter at NON-STRIKER end
+
+🎯 Send bowler:
+/bowler number`);
   }
 
+  // NEW BATTER
   if (match.phase === "new_batter") {
+
+    if (selected.id === match.nonStriker)
+      return ctx.reply("⚠️ Choose different player");
+
     match.striker = selected.id;
+    if (!match.batterStats[selected.id]) {
+      match.batterStats[selected.id] = { runs: 0, balls: 0 };
+    }
     match.usedBatters.push(selected.id);
     match.phase = "play";
+
+    ctx.reply(`🏏 ${name} is ${ordinal(orderNumber)} batter`);
+
     return startBall();
   }
-});
 
+});
 /* ================= SET BOWLER ================= */
 
-bot.command("bowler", ctx => {
-  if (!isHost(ctx.from.id)) return;
+bot.command("bowler", async (ctx) => {
 
-  const num = parseInt(ctx.message.text.split(" ")[1]);
-  const players = bowlingPlayers();
+  if (match.phase !== "set_bowler")
+    return ctx.reply("⚠️ You can set bowler only when bot asks.");
 
-  if (!num || num < 1 || num > players.length)
-    return ctx.reply("Invalid number");
+  if (ctx.chat.id !== match.groupId)
+    return ctx.reply("⚠️ This match is not running here.");
 
-  const selected = players[num - 1];
+  if (!isHost(ctx.from.id))
+    return ctx.reply("❌ Only host can set bowler.");
 
-  if (selected.id === match.lastBowler)
-    return ctx.reply("Bowler cannot bowl consecutive overs");
+  const text = ctx.message.text.split(" ");
+  if (text.length < 2)
+    return ctx.reply("⚠️ Use: /bowler <number>");
 
-  match.bowler = selected.id;
-  match.lastBowler = selected.id;
+  const num = parseInt(text[1]);
+  if (!num) return ctx.reply("Invalid number");
+
+  // ✅ ORDERED BOWLING PLAYERS
+  const players = (() => {
+    const base = bowlingPlayers();
+    const captainId =
+      match.bowlingTeam === "A"
+        ? match.captains.A
+        : match.captains.B;
+
+    return [
+      ...base.filter(p => p.id === captainId),
+      ...base.filter(p => p.id !== captainId)
+    ];
+  })();
+
+  if (num < 1 || num > players.length)
+    return ctx.reply("⚠️ Invalid player number.");
+
+  const player = players[num - 1];
+
+  if (match.lastOverBowler === player.id)
+    return ctx.reply("⚠️ Same bowler cannot bowl consecutive overs.");
+
+  // Suspended bowler restriction
+  if (match.suspendedBowlers[player.id] &&
+    match.suspendedBowlers[player.id] >= match.currentOver)
+   return ctx.reply("⚠️ This bowler is suspended for this over.");
+
+  match.bowler = player.id;
+
+  match.overHistory.push({
+    over: match.currentOver + 1,
+    bowler: match.bowler,
+    balls: []
+  });
   match.phase = "play";
 
-  ctx.reply(`Bowler: ${selected.first_name}`);
-  startBall();
+  match.awaitingBat = false;
+  match.awaitingBowl = true;
+
+  const botInfo = await bot.telegram.getMe();
+
+  await ctx.reply(
+`🎯 Bowler Selected: ${player.name}
+
+📩 Bowler open DM and send number`,
+    Markup.inlineKeyboard([
+      Markup.button.url(
+        "📨 Open Bot DM",
+        `https://t.me/${BOT_USERNAME}`
+      )
+    ])
+  );
+
+  advanceGame();
 });
+
+
+// ================= OVER COMPLETION =================
+
+function handleOverCompletion() {
+
+  if (match.currentBall < 6) return false;
+
+  if (match.currentOverRuns === 0) {
+    bot.telegram.sendMessage(
+      match.groupId,
+      `🎯 ${getName(match.bowler)}\n${randomLine("maiden")}`
+    );
+  }
+
+  match.currentOver++;
+  match.currentBall = 0;
+  match.currentOverRuns = 0;
+  match.wicketStreak = 0;
+
+  // 🔥 Over limit check
+  if (match.currentOver >= match.totalOvers) {
+    endInnings();
+    return true;   // VERY IMPORTANT
+}
+  match.lastOverBowler = match.bowler;
+  swapStrike();
+
+  setPhase("set_bowler");
+
+  bot.telegram.sendMessage(
+    match.groupId,
+    `🔄 Over Completed!
+Score: ${match.score}/${match.wickets}
+🎯 Send new bowler:
+/bowler number`
+  );
+
+  return true;
+}
+/* ================= SCORE ================= */
+
+function getLiveScore() {
+
+  if (!match) return "⚠️ No active match.";
+
+  const overs = `${match.currentOver}.${match.currentBall}`;
+
+  const ballsBowled =
+    (match.currentOver * 6) + match.currentBall;
+
+  const totalBalls =
+    (match.totalOvers || 0) * 6;
+
+  const runRate =
+    ballsBowled > 0
+      ? ((match.score / ballsBowled) * 6).toFixed(2)
+      : "0.00";
+
+  const strikerStats =
+    match.batterStats?.[match.striker] || { runs: 0, balls: 0 };
+
+  const nonStrikerStats =
+    match.batterStats?.[match.nonStriker] || { runs: 0, balls: 0 };
+
+  const strikerSR =
+    strikerStats.balls > 0
+      ? ((strikerStats.runs / strikerStats.balls) * 100).toFixed(1)
+      : "0.0";
+
+  const nonStrikerSR =
+    nonStrikerStats.balls > 0
+      ? ((nonStrikerStats.runs / nonStrikerStats.balls) * 100).toFixed(1)
+      : "0.0";
+
+  const bowlerStats =
+    match.bowlerStats?.[match.bowler] || {
+      balls: 0,
+      runs: 0,
+      wickets: 0
+    };
+
+  const bowlerOvers =
+    Math.floor(bowlerStats.balls / 6) + "." + (bowlerStats.balls % 6);
+
+  const economy =
+    bowlerStats.balls > 0
+      ? ((bowlerStats.runs / bowlerStats.balls) * 6).toFixed(2)
+      : "0.00";
+
+  // DOT BALLS
+  const dots =
+    match.bowlerStats?.[match.bowler]?.history?.filter(x => x === 0).length || 0;
+
+  // OVER HISTORY FORMAT
+  function ordinal(n) {
+    const s = ["th","st","nd","rd"];
+    const v = n % 100;
+    return n + (s[(v-20)%10] || s[v] || s[0]);
+  }
+
+  const overHistoryFormatted = match.overHistory
+    .map((o, index) => {
+      const balls = o.balls.join(", ");
+      return `${ordinal(index + 1)} (${balls})`;
+    })
+    .join("\n");
+
+  return `
+━━━━━━━━━━━━━━━━━━
+🏏 𝗟𝗜𝗩𝗘 𝗦𝗖𝗢𝗥𝗘𝗕𝗢𝗔𝗥𝗗
+━━━━━━━━━━━━━━━━━━
+
+📊 Score: ${match.score}/${match.wickets}  (${overs}/${match.totalOvers})
+⚡ Run Rate: ${runRate}
+
+🏏 Batting: ${match.battingTeam === "A" ? match.teamAName : match.teamBName}
+🎯 Bowling: ${match.bowlingTeam === "A" ? match.teamAName : match.teamBName}
+
+━━━━━━━━━━━━━━━━━━
+🟢 𝗕𝗔𝗧𝗧𝗘𝗥𝗦
+━━━━━━━━━━━━━━━━━━
+
+⭐ ${getName(match.striker)}*  
+${strikerStats.runs} (${strikerStats.balls}) | SR ${strikerSR}
+
+${getName(match.nonStriker)}  
+${nonStrikerStats.runs} (${nonStrikerStats.balls}) | SR ${nonStrikerSR}
+
+━━━━━━━━━━━━━━━━━━
+🔴 𝗕𝗢𝗪𝗟𝗘𝗥
+━━━━━━━━━━━━━━━━━━
+
+${getName(match.bowler)}  
+${bowlerOvers}-${dots}-${bowlerStats.runs}-${bowlerStats.wickets}  
+Econ: ${economy}
+
+━━━━━━━━━━━━━━━━━━
+📜 𝗢𝗩𝗘𝗥 𝗛𝗜𝗦𝗧𝗢𝗥𝗬
+━━━━━━━━━━━━━━━━━━
+${overHistoryFormatted || "No overs yet."}
+
+━━━━━━━━━━━━━━━━━━
+🤝 𝗣𝗔𝗥𝗧𝗡𝗘𝗥𝗦𝗛𝗜𝗣
+━━━━━━━━━━━━━━━━━━
+
+🏏 ${getName(match.striker)} & ${getName(match.nonStriker)}  
+${match.currentPartnershipRuns} (${match.currentPartnershipBalls})
+
+━━━━━━━━━━━━━━━━━━
+`;
+}
+bot.command("score", (ctx) => {
+  if (!match || !match.groupId)
+    return ctx.reply("⚠️ No active match.");
+
+  ctx.reply(getLiveScore());
+});
+
+
+ /* ================= BALL TIMEOUT ================= */
+
+function ballTimeout() {
+
+  clearTimers();
+
+  /* ================= BOWLER MISSED ================= */
+
+  if (match.awaitingBowl) {
+
+    match.awaitingBowl = false;
+    match.bowlerMissCount++;
+
+    match.score += 6;
+
+    bot.telegram.sendMessage(
+      match.groupId,
+`⚠️ Bowler missed!
++6 runs awarded (Ball does NOT count)`
+    );
+
+    if (match.bowlerMissCount >= 2) {
+
+      match.bowlerMissCount = 0;
+
+      if (!match.suspendedBowlers)
+        match.suspendedBowlers = {};
+
+      match.suspendedBowlers[match.bowler] =
+        match.currentOver + 1;
+
+      match.phase = "set_bowler";
+
+      return bot.telegram.sendMessage(
+        match.groupId,
+`🚫 Bowler removed due to consecutive delays.
+Cannot bowl this over and next over.
+
+Host select new bowler:
+/bowler number`
+      );
+    }
+    if (handleOverCompletion()) return;
+    return advanceGame();
+  }
+
+  /* ================= BATTER MISSED ================= */
+  if (match.awaitingBat) {
+
+    match.awaitingBat = false;
+    match.batterMissCount++;
+
+    match.currentBall++;
+    match.score -= 6;
+
+    if (!match.batterStats[match.striker])
+      match.batterStats[match.striker] = { runs: 0, balls: 0 };
+
+    match.batterStats[match.striker].runs -= 6;
+    match.batterStats[match.striker].balls++;
+
+    bot.telegram.sendMessage(
+      match.groupId,
+`⚠️ Batter missed!
+-6 runs penalty (Ball counted)`
+    );
+
+    if (match.batterMissCount >= 2) {
+
+      match.batterMissCount = 0;
+      match.wickets++;
+
+      bot.telegram.sendMessage(
+        match.groupId,
+        "❌ Batter OUT due to consecutive delay!"
+      );
+
+      if (match.wickets >= match.maxWickets)
+        return endInnings();
+
+      match.phase = "new_batter";
+
+      return bot.telegram.sendMessage(
+        match.groupId,
+        "📢 Send new batter:\n/batter number"
+      );
+    }
+
+    if (handleOverCompletion()) return;
+
+    return advanceGame();
+  }
+}
+
+   async function announceBall() {
+
+     if (!match.bowler || !match.striker) return;
+
+     match.ballLocked = false;
+     match.batNumber = null;
+     match.bowlNumber = null;
+
+  // 🔥 FORCE PING (works even without username)
+     const bowlerPing = `[🎯 ${getName(match.bowler)}](tg://user?id=${match.bowler})`;
+
+     await bot.telegram.sendMessage(
+       match.groupId,
+       `${bowlerPing}\n\n${randomBowlingPrompt()}`,
+       {
+         parse_mode: "Markdown",
+         ...bowlDMButton()
+       }
+     );
+      // 🔥 Extra DM reminder to bowler (every ball)
+     await bot.telegram.sendMessage(
+       match.bowler,
+       "Send number 1-6 in bot DM."
+     ).catch(() => {});
+}
+
+
+// ================= TIMER CONTROLLER =================
+
+function startTurnTimer(type) {
+
+  match.warning30 = setTimeout(() => {
+    if ((type === "bowl" && match.awaitingBowl) ||
+        (type === "bat" && match.awaitingBat)) {
+
+      bot.telegram.sendMessage(
+        match.groupId,
+        `⚠️ ${type === "bowl" ? "Bowler" : "Batter"}: 30 seconds left!`
+      );
+    }
+  }, 30000);
+
+  match.warning10 = setTimeout(() => {
+    if ((type === "bowl" && match.awaitingBowl) ||
+        (type === "bat" && match.awaitingBat)) {
+
+      bot.telegram.sendMessage(
+        match.groupId,
+        `⏳ ${type === "bowl" ? "Bowler" : "Batter"}: 10 seconds left!`
+      );
+    }
+  }, 50000);
+
+  match.ballTimer = setTimeout(ballTimeout, 60000);
+}
+
+
+
+// ================= SAFE PHASE SETTER =================
+
+function setPhase(newPhase) {
+  console.log(`PHASE: ${match.phase} → ${newPhase}`);
+  match.phase = newPhase;
+}
 
 /* ================= START BALL ================= */
 
-function startBall() {
+async function startBall() {
+
+  if (match.phase === "switch") return;   // 🔥 HARD STOP
+  if (match.currentOver >= match.totalOvers) return;
+  if (match.wickets >= match.maxWickets) return;
+
   clearTimers();
 
   match.awaitingBowl = true;
   match.awaitingBat = false;
-  match.batNumber = null;
-  match.bowlNumber = null;
 
-  bot.telegram.sendMessage(match.groupId,
-`📊 Score: ${match.score}/${match.wickets}
-Overs: ${match.currentOver}.${match.currentBall}
-
-🎯 Bowler bowling...`);
-
-  bot.telegram.sendMessage(match.bowler,
-`🎯 Bowl Now
-Send number (0-6)`);
-
-
-  match.warning30 = setTimeout(() => {
-    bot.telegram.sendMessage(match.groupId,"⚠️ 30 seconds left!");
-  }, 30000);
-
-  match.warning10 = setTimeout(() => {
-    bot.telegram.sendMessage(match.groupId,"⏳ 10 seconds left!");
-  }, 50000);
-
-  match.ballTimer = setTimeout(() => {
-    bot.telegram.sendMessage(match.groupId,"⌛ Time Up! Ball skipped.");
-    nextBall();
-  }, 60000);
+  await announceBall();
+  startTurnTimer("bowl");
 }
+  
 /* ================= HANDLE INPUT ================= */
 
-bot.on("text", ctx => {
-  if (match.phase !== "play") return;
+bot.on("text", async (ctx, next) => {
 
-  const num = parseInt(ctx.message.text);
-  if (isNaN(num) || num < 0 || num > 6) return;
-
-  // 🎯 Bowler sends number in DM
-  if (
-    ctx.chat.type === "private" &&
-    ctx.from.id === match.bowler &&
-    match.awaitingBowl
-  ) {
-    match.bowlNumber = num;
-    match.awaitingBowl = false;
-    match.awaitingBat = true;
-
-    return bot.telegram.sendMessage(
-      match.groupId,
-      `📩 Bowler has bowled!
-
-🏏 ${getName(match.striker)} (Striker) send number (0-6)`
-    );
+  // 🔥 Let commands pass through
+  if (ctx.message.text.startsWith("/")) {
+    return next();
   }
 
-  // 🏏 Only STRIKER can bat in group
-  if (
-    ctx.chat.id === match.groupId &&
-    ctx.from.id === match.striker &&
-    match.awaitingBat
-  ) {
-    match.batNumber = num;
+
+  /* ================= GROUP BATTER INPUT ================= */
+
+  if (ctx.chat.type !== "private") {
+
+    if (!match) return;
+
+    if (match.phase !== "play") return;
+
+    if (!match.awaitingBat) return;
+
+    if (ctx.from.id !== match.striker)
+      return ctx.reply("❌ You are not the striker.");
+
+    const text = ctx.message.text.trim();
+
+    if (!/^[0-6]$/.test(text))
+      return ctx.reply("❌ Send number between 0-6.");
+
+    if (match.ballLocked)
+      return ctx.reply("⚠️ Already submitted.");
+
+    match.ballLocked = true;
+
+    match.batNumber = Number(text);
     match.awaitingBat = false;
-    processBall();
+
+    clearTimers();
+
+    return processBall();
   }
+
+  /* ================= PRIVATE BOWLER INPUT ================= */
+
+  if (!match) return;
+
+  if (match.phase !== "play") 
+    return ctx.reply("⚠️ No active ball.");
+
+  if (!match.awaitingBowl)
+    return ctx.reply("⏳ Not accepting bowl now.");
+
+  if (ctx.from.id !== match.bowler)
+    return ctx.reply("❌ You are not the current bowler.");
+
+  const text = ctx.message.text.trim();
+
+  if (!/^[1-6]$/.test(text))
+    return ctx.reply("❌ Send number between 1-6.");
+
+  if (match.ballLocked)
+    return ctx.reply("⚠️ Already submitted for this ball.");
+
+
+
+  match.bowlNumber = Number(text);
+  match.awaitingBowl = false;
+  match.awaitingBat = true;
+
+  clearTimers();
+
+  await ctx.reply("✅ Ball submitted!");
+
+  const batterPing = `[🏏 ${getName(match.striker)}](tg://user?id=${match.striker})`;
+
+  const ballNumber = `${match.currentOver}.${match.currentBall + 1}`;
+
+  await bot.telegram.sendMessage(
+    match.groupId,
+    `${batterPing}\n\n${randomBatterPrompt()}\n\n🎱 Ball: ${ballNumber}`,
+    {
+      parse_mode: "Markdown"
+    }
+);
+
+  startTurnTimer("bat");
 });
+
+
+
+
 /* ================= PROCESS BALL ================= */
 
-function processBall() {
+
+async function processBall() {
+
+  match.bowlerMissCount = 0;
+  match.batterMissCount = 0;
+  clearTimers();
 
   const bat = match.batNumber;
   const bowl = match.bowlNumber;
 
-  match.currentBall++;
+  // 🔥 Prevent 0 on hattrick ball
+  if (match.wicketStreak === 2 && bat === 0) {
 
-  // 🟥 WICKET
-  if (bat === bowl) {
+    await bot.telegram.sendMessage(
+      match.groupId,
+      "🔥 HATTRICK BALL! Batter cannot play 0!"
+    );
 
-    match.wickets++;
+    match.awaitingBat = true;
+    startTurnTimer("bat");
+    
+    return;
+}
 
-    bot.telegram.sendMessage(match.groupId,
-`❌ OUT!
 
-Score: ${match.score}/${match.wickets}
-Overs: ${match.currentOver}.${match.currentBall}`);
-
-    if (match.wickets >= match.maxWickets)
-      return endInnings();
-
-    match.phase = "new_batter";
-
-    return bot.telegram.sendMessage(match.groupId,
-"📢 Send new batter:\n/batter number");
+  if (!match.batterStats[match.striker]) {
+    match.batterStats[match.striker] = { runs: 0, balls: 0 };
   }
 
-  // 🟢 RUNS
-  match.score += bat;
+    match.batterStats[match.striker].balls++;
 
-  // 🔄 Strike change on odd runs
-  if ([1,3,5].includes(bat))
-    swapStrike();
+  if (!match.bowlerStats[match.bowler]) {
+    match.bowlerStats[match.bowler] = {
+      balls: 0,
+      runs: 0,
+      wickets: 0,
+      history: []
+    };
+  }
 
-  bot.telegram.sendMessage(match.groupId,
-`🏏 ${bat} Runs!
+  match.bowlerStats[match.bowler].balls++;
+  match.bowlerStats[match.bowler].history.push(bat);
 
-Score: ${match.score}/${match.wickets}
-Overs: ${match.currentOver}.${match.currentBall}`);
+ 
+/* ================= WICKET ================= */
 
-  // 🏁 TARGET CHECK (2nd innings)
+if (bat === bowl) {
+
+  match.wickets++;
+  match.wicketStreak++;
+  match.bowlerStats[match.bowler].wickets++;
+  match.currentOverRuns += 0;
+  match.currentBall++; // ✅ Correct ball system
+  match.overHistory[match.overHistory.length - 1]
+     ?.balls.push("W");
+  // 🤝 Count wicket ball in partnership
+  match.currentPartnershipBalls++;
+
+  let line = (match.wicketStreak === 3)
+    ? randomLine("hattrick")
+    : randomLine("wicket");
+
+  bot.telegram.sendMessage(
+    match.groupId,
+    `🎯 ${getName(match.bowler)} ➜ ${getName(match.striker)}\n${line}`
+  );
+
+  // 🤝 Show partnership before breaking
+  bot.telegram.sendMessage(
+    match.groupId,
+    `🤝 Partnership Broken!
+Runs: ${match.currentPartnershipRuns}
+Balls: ${match.currentPartnershipBalls}`
+  );
+
+  // 🔄 Reset partnership
+  match.currentPartnershipRuns = 0;
+  match.currentPartnershipBalls = 0;
+
+  /* ================= ALL OUT CHECK ================= */
+
+  if (match.wickets >= match.maxWickets) {
+    return endInnings();   // ✅ Correct function
+  }
+
+ 
+  if (handleOverCompletion()) return;
+
+  /* ================= NORMAL NEW BATTER ================= */
+
+  match.phase = "new_batter";
+
+  return bot.telegram.sendMessage(
+    match.groupId,
+    "📢 Send new batter:\n/batter number"
+  );
+}
+/* ================= RUNS ================= */
+
+   match.score += bat;
+   match.currentOverRuns += bat;
+
+// 🤝 Partnership update
+   match.currentPartnershipRuns += bat;
+   match.currentPartnershipBalls++;
+   match.batterStats[match.striker].runs += bat;
+   match.bowlerStats[match.bowler].runs += bat;
+   match.currentBall++;
+   match.overHistory[match.overHistory.length - 1]
+     ?.balls.push(bat);
+   match.wicketStreak = 0;
+   
+   if (match.currentPartnershipRuns === 50) {
+     bot.telegram.sendMessage(match.groupId, "🔥 50 Run Partnership!");
+   }
+
+   if (match.currentPartnershipRuns === 100) {
+     bot.telegram.sendMessage(match.groupId, "💯 100 Run Partnership!");
+   }
+   bot.telegram.sendMessage(
+     match.groupId,
+     `🎯 ${getName(match.bowler)} ➜ ${getName(match.striker)}\n${randomLine(bat)}`
+   );
+
+   if ([1,3,5].includes(bat))
+     swapStrike();
+
+  /* ================= TARGET CHECK ================= */
+
   if (
     match.innings === 2 &&
     match.score > match.firstInningsScore
@@ -649,91 +1686,142 @@ Overs: ${match.currentOver}.${match.currentBall}`);
     return endMatchWithWinner(match.battingTeam);
   }
 
-  // 🔁 OVER COMPLETE
-  if (match.currentBall === 6) {
 
-    match.currentOver++;
-    match.currentBall = 0;
+   if (handleOverCompletion()) return;
 
-    // Swap strike at over end
-    swapStrike();
+   
 
-    if (match.currentOver >= match.totalOvers)
-      return endInnings();
-
-    match.phase = "set_bowler";
-
-    return bot.telegram.sendMessage(match.groupId,
-`🔄 Over Completed!
-
-Score: ${match.score}/${match.wickets}
-
-Send new bowler:
-/bowler number`);
-  }
-
-  startBall();
+  advanceGame();
 }
 /* ================= END INNINGS ================= */
 
 function endInnings() {
 
-  bot.telegram.sendMessage(match.groupId,
-`🏁 Innings ${match.innings} Finished
-Score: ${match.score}/${match.wickets}`);
+  clearTimers();
 
-  // 🔁 FIRST INNINGS END
+  // 🥇 FIRST INNINGS
   if (match.innings === 1) {
 
     match.firstInningsScore = match.score;
-    match.innings = 2;
 
-    match.score = 0;
-    match.wickets = 0;
-    match.currentOver = 0;
-    match.currentBall = 0;
-    match.usedBatters = [];
+    // Lock state properly
+    match.phase = "switch";
+    match.awaitingBat = false;
+    match.awaitingBowl = false;
 
-    const temp = match.battingTeam;
-    match.battingTeam = match.bowlingTeam;
-    match.bowlingTeam = temp;
+    return bot.telegram.sendMessage(
+      match.groupId,
+`🏁 First Innings Completed
 
-    match.maxWickets = battingPlayers().length - 1;
+Score: ${match.score}/${match.wickets}
 
-    match.phase = "set_striker";
-
-    return bot.telegram.sendMessage(match.groupId,
-`🎯 Target: ${match.firstInningsScore + 1}
-
-Second Innings Starting
-
-Send striker:
-/batter number`);
+Host type:
+/inningsswitch`
+    );
   }
 
-  // 🔚 MATCH RESULT
-  if (match.score > match.firstInningsScore)
-    endMatchWithWinner(match.battingTeam);
-  else if (match.score < match.firstInningsScore)
-    endMatchWithWinner(match.bowlingTeam);
-  else {
-    bot.telegram.sendMessage(match.groupId,"🤝 Match Tied!");
-    resetMatch();
+  // 🥈 SECOND INNINGS RESULT
+
+  if (match.score > match.firstInningsScore) {
+    return endMatchWithWinner(match.battingTeam);
   }
+
+  if (match.score < match.firstInningsScore) {
+    return endMatchWithWinner(match.bowlingTeam);
+  }
+
+  bot.telegram.sendMessage(match.groupId, "🤝 Match Tied!");
+  return resetMatch();
 }
+/* ================= INNINGS SWITCH ================= */
+
+bot.command("inningsswitch", async (ctx) => {
+
+  // 🔎 Match exists?
+  if (!match || !match.groupId) {
+    return ctx.reply("⚠️ No active match.");
+  }
+
+  // 🔐 Host check (using match.host)
+  if (String(ctx.from.id) !== String(match.host)) {
+    return ctx.reply("❌ Only the match host can switch innings.");
+  }
+
+  // 🔄 Phase check
+  if (match.phase !== "switch") {
+    return ctx.reply(
+      `⚠️ Cannot switch innings now.\nCurrent phase: ${match.phase}`
+    );
+  }
+
+  // 🏏 Move to 2nd innings
+  match.innings = 2;
+
+  // 🔁 Swap teams
+  const tempTeam = match.battingTeam;
+  match.battingTeam = match.bowlingTeam;
+  match.bowlingTeam = tempTeam;
+
+  // 🔁 Reset innings stats
+  match.score = 0;
+  match.wickets = 0;
+  match.currentOver = 0;
+  match.currentBall = 0;
+  match.currentOverNumber = 0;
+  match.currentPartnershipRuns = 0;
+  match.currentPartnershipBalls = 0;
+  match.currentOverRuns = 0;
+  match.wicketStreak = 0;
+  match.bowlerMissCount = 0;
+  match.batterMissCount = 0;
+
+  match.usedBatters = [];
+  match.striker = null;
+  match.nonStriker = null;
+  match.bowler = null;
+  match.lastBowler = null;
+  match.suspendedBowlers = {};
+  match.overHistory = [];
+  match.currentOverBalls = [];
+  match.awaitingBat = false;
+  match.awaitingBowl = false;
+
+  // 🟢 Start second innings properly
+  match.phase = "set_striker";
+
+  return ctx.reply(
+`🔁 Innings Switched Successfully!
+
+🏏 Now Batting: ${match.battingTeam}
+🎯 Target: ${match.firstInningsScore + 1}
+
+Set STRIKER:
+/batter number`
+  );
+});
 
 /* ================= DECLARE WINNER ================= */
 
 function endMatchWithWinner(team) {
-  bot.telegram.sendMessage(match.groupId,
-`🏆 Team ${team} Wins!
+  const winnerName =
+    team === "A"
+      ? match.teamAName
+      : match.teamBName;
 
-Final Score:
+  bot.telegram.sendMessage(
+    match.groupId,
+    `🏆 ${winnerName} Wins!
+
+📊 Final Score:
 Innings 1: ${match.firstInningsScore}
-Innings 2: ${match.score}`);
+Innings 2: ${match.score}`
+  );
 
   resetMatch();
 }
+bot.catch(err => {
+  console.error("BOT ERROR:", err);
+});
 
 bot.launch();
 console.log("🏏 FULL HAND CRICKET BOT RUNNING...");
