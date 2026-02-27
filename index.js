@@ -44,7 +44,7 @@ function resetMatch() {
     teamAName: null,
     teamBName: null,
     tossWinner: null,
-
+    pendingCaptainChange: null,
     battingTeam: null,
     bowlingTeam: null,
 
@@ -113,6 +113,12 @@ function orderedBattingPlayers() {
     ...players.filter(p => p.id === captainId),
     ...players.filter(p => p.id !== captainId)
   ];
+}
+
+function getPlayerTeam(userId) {
+  if (match.teamA.includes(userId)) return "teamA";
+  if (match.teamB.includes(userId)) return "teamB";
+  return null;
 }
 
 function swapStrike() {
@@ -591,6 +597,251 @@ bot.action("select_host", async ctx => {
   ctx.reply("Host use /createteam to create teams.");
 });
 
+// ================= HOSTCHANGE =================
+
+
+bot.command("changehost", async (ctx) => {
+
+  if (!match) return ctx.reply("No active match.");
+
+  if (ctx.chat.id !== match.groupId)
+    return ctx.reply("Use this command in match group.");
+
+  const userId = ctx.from.id;
+
+  // Prevent duplicate voting
+  if (match.hostChange?.active)
+    return ctx.reply("⚠️ Host change voting already active.");
+
+  // If current host → instant selection
+  if (userId === match.host) {
+    return showHostSelection();
+  }
+
+  // Otherwise start voting
+  return startHostVoting(ctx);
+});
+
+async function startHostVoting(ctx) {
+
+  match.hostChange = {
+    active: true,
+    teamVotes: {
+      teamA: new Set(),
+      teamB: new Set()
+    },
+    messageId: null,
+    timeout: null
+  };
+
+  const msg = await ctx.reply(
+    getVoteText(),
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "✅ Vote for Host Change", callback_data: "vote_host_change" }],
+          [{ text: "❌ Cancel Voting", callback_data: "cancel_host_vote" }]
+        ]
+      }
+    }
+  );
+
+  match.hostChange.messageId = msg.message_id;
+
+  // ⏳ AUTO EXPIRE (60s)
+  match.hostChange.timeout = setTimeout(async () => {
+
+    if (!match.hostChange?.active) return;
+
+    await bot.telegram.editMessageReplyMarkup(
+      match.groupId,
+      match.hostChange.messageId,
+      null,
+      { inline_keyboard: [] }
+    );
+
+    await bot.telegram.sendMessage(
+      match.groupId,
+      "⏳ Host change voting expired."
+    );
+
+    match.hostChange = null;
+
+  }, 60000);
+}
+
+function getVoteText() {
+
+  const aVotes = match.hostChange.teamVotes.teamA.size;
+  const bVotes = match.hostChange.teamVotes.teamB.size;
+
+  return `
+🗳 HOST CHANGE VOTING
+
+Team A Votes: ${aVotes}/2
+Team B Votes: ${bVotes}/2
+
+Need 2 players from each team.
+Voting expires in 60 seconds.
+`;
+}
+
+bot.action("vote_host_change", async (ctx) => {
+
+  if (!match.hostChange?.active)
+    return ctx.answerCbQuery("Voting not active.");
+
+  const userId = ctx.from.id;
+
+  // Only match players
+  const isPlayer =
+    match.teamA.some(p => p.id === userId) ||
+    match.teamB.some(p => p.id === userId);
+
+  if (!isPlayer)
+    return ctx.answerCbQuery("Only match players can vote.");
+
+  const team = getPlayerTeam(userId);
+
+  if (!team)
+    return ctx.answerCbQuery("Invalid team.");
+
+  // Already voted?
+  if (match.hostChange.teamVotes[team].has(userId))
+    return ctx.answerCbQuery("You already voted.");
+
+  // Max 2 per team
+  if (match.hostChange.teamVotes[team].size >= 2)
+    return ctx.answerCbQuery("Your team already has 2 votes.");
+
+  match.hostChange.teamVotes[team].add(userId);
+
+  ctx.answerCbQuery("Vote counted.");
+
+  const aVotes = match.hostChange.teamVotes.teamA.size;
+  const bVotes = match.hostChange.teamVotes.teamB.size;
+
+  // 🔄 LIVE UPDATE MESSAGE
+  await bot.telegram.editMessageText(
+    match.groupId,
+    match.hostChange.messageId,
+    null,
+    getVoteText(),
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "✅ Vote for Host Change", callback_data: "vote_host_change" }],
+          [{ text: "❌ Cancel Voting", callback_data: "cancel_host_vote" }]
+        ]
+      }
+    }
+  );
+
+  // ✅ SUCCESS CONDITION
+  if (aVotes === 2 && bVotes === 2) {
+
+    clearTimeout(match.hostChange.timeout);
+    match.hostChange.active = false;
+
+    return showHostSelection();
+  }
+});
+
+async function showHostSelection() {
+
+  // Remove voting buttons
+  if (match.hostChange?.messageId) {
+    await bot.telegram.editMessageReplyMarkup(
+      match.groupId,
+      match.hostChange.messageId,
+      null,
+      { inline_keyboard: [] }
+    );
+  }
+
+  const msg = await bot.telegram.sendMessage(
+    match.groupId,
+    "⚡ Please take charge as new host.",
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "👑 Take Host", callback_data: "take_host" }],
+          [{ text: "❌ Cancel", callback_data: "cancel_host_vote" }]
+        ]
+      }
+    }
+  );
+
+  match.hostChange.messageId = msg.message_id;
+}
+
+bot.action("take_host", async (ctx) => {
+
+  if (!match.hostChange)
+    return ctx.answerCbQuery("Not allowed.");
+
+  const userId = ctx.from.id;
+
+  // ❌ Block if player is currently playing
+  if (match.teamA.includes(userId) || match.teamB.includes(userId)) {
+    return ctx.answerCbQuery("Only non-playing members can become host.");
+  }
+
+  // Optional: block if user is bot
+  if (ctx.from.is_bot)
+    return ctx.answerCbQuery("Bots cannot become host.");
+
+  match.host = userId;
+
+  await bot.telegram.editMessageReplyMarkup(
+    match.groupId,
+    match.hostChange.messageId,
+    null,
+    { inline_keyboard: [] }
+  );
+
+  match.hostChange = null;
+
+  await bot.telegram.sendMessage(
+    match.groupId,
+    `👑 ${getDisplayName(ctx.from)} is now the new host!`
+  );
+
+  ctx.answerCbQuery("You are now host.");
+});
+
+bot.action("cancel_host_vote", async (ctx) => {
+
+  if (!match.hostChange)
+    return ctx.answerCbQuery("No active voting.");
+
+  const userId = ctx.from.id;
+  const member = await ctx.getChatMember(userId);
+
+  const isAdmin = ["administrator", "creator"].includes(member.status);
+
+  if (userId !== match.host && !isAdmin)
+    return ctx.answerCbQuery("Only host or admin can cancel.");
+
+  clearTimeout(match.hostChange.timeout);
+
+  await bot.telegram.editMessageReplyMarkup(
+    match.groupId,
+    match.hostChange.messageId,
+    null,
+    { inline_keyboard: [] }
+  );
+
+  await bot.telegram.sendMessage(
+    match.groupId,
+    "❌ Host change voting cancelled."
+  );
+
+  match.hostChange = null;
+
+  ctx.answerCbQuery("Cancelled.");
+});
+
 /* ================= CREATE TEAM ================= */
 
 bot.command("createteam", (ctx) => {
@@ -614,11 +865,11 @@ bot.command("createteam", (ctx) => {
   // Just reopen joining
   match.phase = "join";
 
-  ctx.reply(
+ctx.reply(
 `🏏 Teams Selected!
 
-🔵 Team A: ${match.teamAName}
-🔴 Team B: ${match.teamBName}
+🔵 ${match.teamAName} (A)
+🔴 ${match.teamBName} (B)
 
 ✅ Joining Open!
 
@@ -699,6 +950,102 @@ bot.command("joinb", ctx => {
 
   ctx.reply(`✅ ${player.name} joined Team B`);
 });
+
+
+// ================= CHANGETEAM =================
+
+
+bot.command("changeteam", async (ctx) => {
+
+  if (!isHost(ctx.from.id))
+    return ctx.reply("❌ Only host can change teams.");
+
+  // ❌ Block after gameplay starts
+  if (match.phase === "play" || match.striker !== null)
+    return ctx.reply("❌ Cannot change teams after match has started.");
+
+  // Optional extra safety
+  if (match.innings > 1 || match.currentOver > 0)
+    return ctx.reply("❌ Cannot change teams during match.");
+
+
+  const args = ctx.message.text.split(" ");
+
+  if (args.length !== 3)
+    return ctx.reply("Usage: /changeteam A 2");
+
+  const targetTeam = args[1].toUpperCase();
+  const playerNumber = parseInt(args[2]);
+
+  if (!["A", "B"].includes(targetTeam))
+    return ctx.reply("Team must be A or B.");
+
+  const fromTeam = targetTeam === "A" ? match.teamB : match.teamA;
+  const toTeam = targetTeam === "A" ? match.teamA : match.teamB;
+
+  if (playerNumber < 1 || playerNumber > fromTeam.length)
+    return ctx.reply("Invalid player number.");
+
+  const player = fromTeam[playerNumber - 1];
+
+  // ❌ Captain cannot be moved
+  if (player.id === match.captains.A || player.id === match.captains.B)
+    return ctx.reply("❌ Captain cannot be moved.");
+
+  // Save pending change
+  match.pendingTeamChange = {
+    player,
+    fromTeam,
+    toTeam,
+    targetTeam
+  };
+
+  return ctx.reply(
+    `⚠️ Confirm move ${player.name} to Team ${targetTeam}?`,
+    Markup.inlineKeyboard([
+      [
+        Markup.button.callback("✅ Confirm", "confirm_team_change"),
+        Markup.button.callback("❌ Cancel", "cancel_team_change")
+      ]
+    ])
+  );
+});
+
+bot.action("confirm_team_change", async (ctx) => {
+   
+  if (!isHost(ctx.from.id))
+    return ctx.answerCbQuery("Only host can confirm.");
+  if (!match.pendingTeamChange)
+    return ctx.answerCbQuery("No pending change.");
+
+  const { player, fromTeam, toTeam, targetTeam } = match.pendingTeamChange;
+
+  // Remove from old team
+  const index = fromTeam.findIndex(p => p.id === player.id);
+  if (index !== -1) fromTeam.splice(index, 1);
+
+  // Add to new team
+  toTeam.push(player);
+
+  match.pendingTeamChange = null;
+
+  await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+
+  ctx.reply(`✅ ${player.name} moved to Team ${targetTeam}`);
+});
+
+
+bot.action("cancel_team_change", async (ctx) => {
+    
+  if (!isHost(ctx.from.id))
+    return ctx.answerCbQuery("Only host can cancel.");
+  match.pendingTeamChange = null;
+
+  await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+
+  ctx.answerCbQuery("Cancelled.");
+});
+
 /* ================= CAPTAIN ================= */
 
 bot.command("choosecap", ctx => {
@@ -801,15 +1148,122 @@ bot.command("players", (ctx) => {
   const teamBList = formatTeam(match.teamB, match.captains.B);
 
   ctx.reply(
-`👥 PLAYERS LIST
+  `👥 PLAYERS LIST
 
-🔵 ${match.teamAName}:
-${teamAList}
+  🔵 ${match.teamAName} (A):
+  ${teamAList}
 
-🔴 ${match.teamBName}:
-${teamBList}`
+  🔴 ${match.teamBName} (B):
+  ${teamBList}`
   );
 });
+
+// ================= CAPCHANGE =================
+
+bot.command("capchange", async (ctx) => {
+
+  if (ctx.chat.type === "private") return;
+
+  if (match.phase === "idle")
+    return ctx.reply("❌ No active match.");
+
+  if (ctx.from.id !== match.host)
+    return ctx.reply("❌ Only host can change captain.");
+
+  const args = ctx.message.text.split(" ");
+
+  if (args.length !== 3)
+    return ctx.reply("Usage:\n/capchange A 2");
+
+  const teamLetter = args[1].toUpperCase();
+  const number = parseInt(args[2]);
+
+  if (!["A", "B"].includes(teamLetter))
+    return ctx.reply("❌ Use A or B.");
+
+  const team = teamLetter === "A" ? match.teamA : match.teamB;
+
+  if (!number || number < 1 || number > team.length)
+    return ctx.reply("❌ Invalid player number.");
+
+  const newCaptainId = team[number - 1];
+
+  if (teamLetter === "A" && match.captains.A === newCaptainId)
+    return ctx.reply("⚠️ Already captain.");
+
+  if (teamLetter === "B" && match.captains.B === newCaptainId)
+    return ctx.reply("⚠️ Already captain.");
+
+  match.pendingCaptainChange = {
+    team: teamLetter,
+    index: number - 1,
+    playerId: newCaptainId
+  };
+
+  const name = getName(newCaptainId);
+
+  await ctx.reply(
+    `⚠️ Confirm Captain Change?
+
+Team ${teamLetter}
+New Captain: ${name}`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "✅ Confirm", callback_data: "confirm_cap_change" },
+            { text: "❌ Cancel", callback_data: "cancel_cap_change" }
+          ]
+        ]
+      }
+    }
+  );
+});
+
+bot.action("confirm_cap_change", async (ctx) => {
+
+  if (!match.pendingCaptainChange)
+    return ctx.answerCbQuery("Expired.");
+
+  if (ctx.from.id !== match.host)
+    return ctx.answerCbQuery("Only host can confirm.");
+
+  const { team, index, playerId } = match.pendingCaptainChange;
+
+  const teamArray = team === "A" ? match.teamA : match.teamB;
+
+  // 🔥 SWAP METHOD (Best & Cleanest)
+  const temp = teamArray[0];
+  teamArray[0] = teamArray[index];
+  teamArray[index] = temp;
+
+  if (team === "A")
+    match.captains.A = playerId;
+  else
+    match.captains.B = playerId;
+
+  match.pendingCaptainChange = null;
+
+  await ctx.editMessageText(
+    `👑 Captain Updated Successfully!
+
+Team ${team}
+New Captain: ${getName(playerId)}`
+  );
+});
+
+
+bot.action("cancel_cap_change", async (ctx) => {
+
+  if (ctx.from.id !== match.host)
+    return ctx.answerCbQuery("Only host can cancel.");
+
+  match.pendingCaptainChange = null;
+
+  await ctx.editMessageText("❌ Captain change cancelled.");
+});
+
+
 /* ================= TOSS ================= */
 
 function startToss() {
@@ -862,11 +1316,11 @@ bot.action(["toss_odd", "toss_even"], async ctx => {
     match.groupId,
 `🎲 Toss Number: ${tossNumber} (${result})
 
-🏆 Toss Winner: 🏆 Toss Winner: ${
-                   winnerTeam === "A"
-                     ? match.teamAName
-                     : match.teamBName
-                  }
+🏆 Toss Winner: ${
+  winnerTeam === "A"
+    ? `${match.teamAName} (A)`
+    : `${match.teamBName} (B)`
+}
 
 Choose Bat or Bowl:`,
     Markup.inlineKeyboard([
@@ -915,14 +1369,14 @@ bot.action(["decision_bat", "decision_bowl"], async ctx => {
 
 🏏 ${
   match.battingTeam === "A"
-    ? match.teamAName
-    : match.teamBName
+    ? `${match.teamAName} (A)`
+    : `${match.teamBName} (B)`
 } Batting First
 
 🎯 ${
   match.bowlingTeam === "A"
-    ? match.teamAName
-    : match.teamBName
+    ? `${match.teamAName} (A)`
+    : `${match.teamBName} (B)`
 } Bowling First
 
 Host set overs:
@@ -1242,9 +1696,17 @@ function getLiveScore() {
 ⚡ RR: ${runRate}${match.innings === 2 ? ` | RRR: ${requiredRR}` : ""}
 
 ${match.innings === 2 ? requiredRuns + "\n" : ""}
+🔵 Batting: ${
+  match.battingTeam === "A"
+    ? `${match.teamAName} (A)`
+    : `${match.teamBName} (B)`
+}
 
-🔵 Batting: ${match.battingTeam === "A" ? match.teamAName : match.teamBName}
-🔴 Bowling: ${match.bowlingTeam === "A" ? match.teamAName : match.teamBName}
+🔴 Bowling: ${
+  match.bowlingTeam === "A"
+    ? `${match.teamAName} (A)`
+    : `${match.teamBName} (B)`
+}
 
 ━━━━━━━━━━━━━━━━━━
 🏏 Batters
@@ -1361,6 +1823,10 @@ Host select new bowler:
     return advanceGame();
   }
 }
+
+
+// ================= ANNOUNCE BALL =================
+
 
    async function announceBall() {
 
@@ -1670,12 +2136,6 @@ Balls: ${match.currentPartnershipBalls}`
 
   // 🔄 Over completion check
   if (handleOverCompletion()) return;
-
-  // ✅ NEXT BALL ALERT (After everything updated)
-  await bot.telegram.sendMessage(
-    match.groupId,
-    `🎯 NEXT BALL\n${getName(match.bowler)} ➝ ${getName(match.striker)}`
-  );
 
   advanceGame();
 
