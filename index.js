@@ -758,6 +758,7 @@ async function showHostSelection() {
       { inline_keyboard: [] }
     );
   }
+   match.hostChange.active = false;
 
   const msg = await bot.telegram.sendMessage(
     match.groupId,
@@ -777,17 +778,19 @@ async function showHostSelection() {
 
 bot.action("take_host", async (ctx) => {
 
-  if (!match.hostChange)
+  if (!match?.hostChange)
     return ctx.answerCbQuery("Not allowed.");
 
   const userId = ctx.from.id;
 
-  // ❌ Block if player is currently playing
-  if (match.teamA.includes(userId) || match.teamB.includes(userId)) {
-    return ctx.answerCbQuery("Only non-playing members can become host.");
-  }
+  // Correct playing check
+  const isPlaying =
+    match.teamA.some(p => p.id === userId) ||
+    match.teamB.some(p => p.id === userId);
 
-  // Optional: block if user is bot
+  if (isPlaying)
+    return ctx.answerCbQuery("Only non-playing members can become host.");
+
   if (ctx.from.is_bot)
     return ctx.answerCbQuery("Bots cannot become host.");
 
@@ -812,29 +815,29 @@ bot.action("take_host", async (ctx) => {
 
 bot.action("cancel_host_vote", async (ctx) => {
 
-  if (!match.hostChange)
+  if (!match?.hostChange)
     return ctx.answerCbQuery("No active voting.");
 
   const userId = ctx.from.id;
-  const member = await ctx.getChatMember(userId);
 
-  const isAdmin = ["administrator", "creator"].includes(member.status);
-
-  if (userId !== match.host && !isAdmin)
-    return ctx.answerCbQuery("Only host or admin can cancel.");
+  // Allow only current host
+  if (userId !== match.host)
+    return ctx.answerCbQuery("Only current host can cancel.");
 
   clearTimeout(match.hostChange.timeout);
 
-  await bot.telegram.editMessageReplyMarkup(
-    match.groupId,
-    match.hostChange.messageId,
-    null,
-    { inline_keyboard: [] }
-  );
+  try {
+    await bot.telegram.editMessageReplyMarkup(
+      match.groupId,
+      match.hostChange.messageId,
+      null,
+      { inline_keyboard: [] }
+    );
+  } catch (e) {}
 
   await bot.telegram.sendMessage(
     match.groupId,
-    "❌ Host change voting cancelled."
+    "❌ Host change cancelled."
   );
 
   match.hostChange = null;
@@ -980,7 +983,15 @@ bot.command("changeteam", async (ctx) => {
   if (!["A", "B"].includes(targetTeam))
     return ctx.reply("Team must be A or B.");
 
-  const fromTeam = targetTeam === "A" ? match.teamB : match.teamA;
+ const rawFromTeam = targetTeam === "A" ? match.teamB : match.teamA;
+ const fromCaptain =
+   targetTeam === "A" ? match.captains.B : match.captains.A;
+
+ // Rebuild display order
+ const fromTeam = [
+   ...rawFromTeam.filter(p => p.id === fromCaptain),
+   ...rawFromTeam.filter(p => p.id !== fromCaptain)
+];
   const toTeam = targetTeam === "A" ? match.teamA : match.teamB;
 
   if (playerNumber < 1 || playerNumber > fromTeam.length)
@@ -1228,14 +1239,7 @@ bot.action("confirm_cap_change", async (ctx) => {
   if (ctx.from.id !== match.host)
     return ctx.answerCbQuery("Only host can confirm.");
 
-  const { team, index, playerId } = match.pendingCaptainChange;
-
-  const teamArray = team === "A" ? match.teamA : match.teamB;
-
-  // 🔥 SWAP METHOD (Best & Cleanest)
-  const temp = teamArray[0];
-  teamArray[0] = teamArray[index];
-  teamArray[index] = temp;
+  const { team, playerId } = match.pendingCaptainChange;
 
   if (team === "A")
     match.captains.A = playerId;
@@ -1244,11 +1248,12 @@ bot.action("confirm_cap_change", async (ctx) => {
 
   match.pendingCaptainChange = null;
 
-  await ctx.editMessageText(
-    `👑 Captain Updated Successfully!
+  const mention = `<a href="tg://user?id=${playerId}">${getName(playerId)}</a>`;
 
-Team ${team}
-New Captain: ${getName(playerId)}`
+  await ctx.editMessageText(
+    `👑 Captain Updated Successfully!\n\n` +
+    `${mention} is now the new Captain of Team ${team}!`,
+    { parse_mode: "HTML" }
   );
 });
 
