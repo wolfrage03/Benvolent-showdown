@@ -2,6 +2,9 @@ require("dotenv").config();
 const connectDB = require("./database");
 
 connectDB();
+
+const User = require("./models/User");
+
 const { Telegraf, Markup } = require("telegraf");
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
@@ -96,6 +99,23 @@ function resetMatch() {
 resetMatch();
 
 /* ================= HELPERS ================= */
+
+const mongoose = require("mongoose");
+
+const userSchema = new mongoose.Schema({
+  telegramId: { type: Number, required: true, unique: true },
+  username: String,
+  firstName: String,
+
+  matchesPlayed: { type: Number, default: 0 },
+  matchesWon: { type: Number, default: 0 },
+  timesHost: { type: Number, default: 0 },
+
+  createdAt: { type: Date, default: Date.now }
+});
+
+module.exports = mongoose.model("User", userSchema);
+
 
 const isHost = id => id === match.host;
 
@@ -503,20 +523,39 @@ ctx.reply(`🚫 ${removed.name} removed from Team ${team}`);
 
 /* ================= START ================= */
 
-bot.command("start", ctx => {
+bot.command("start", async (ctx) => {
   if (ctx.chat.type === "private") return;
+
+  /* SAVE USER */
+  try {
+    const { id, username, first_name, last_name } = ctx.from;
+
+    await User.updateOne(
+      { telegramId: id },
+      {
+        $set: {
+          username,
+          firstName: first_name,
+          lastName: last_name
+        }
+      },
+      { upsert: true }
+    );
+  } catch (err) {
+    console.error("User save error:", err);
+  }
 
   resetMatch();
   match.groupId = ctx.chat.id;
   match.phase = "host_select";
 
-  ctx.reply("🏏 Match Starting!\nSelect Host:",
+  ctx.reply(
+    "🏏 Match Starting!\nSelect Host:",
     Markup.inlineKeyboard([
       [Markup.button.callback("Become Host", "select_host")]
     ])
   );
-});
- //* ================= END MATCH ================= */
+}); //* ================= END MATCH ================= */
 
 bot.command("endmatch", async (ctx) => {
 
@@ -2304,13 +2343,14 @@ Set STRIKER:
 
 /* ================= DECLARE WINNER ================= */
 
-function endMatchWithWinner(team) {
+async function endMatchWithWinner(team) {
+
   const winnerName =
     team === "A"
       ? match.teamAName
       : match.teamBName;
 
-  bot.telegram.sendMessage(
+  await bot.telegram.sendMessage(
     match.groupId,
     `🏆 ${winnerName} Wins!
 
@@ -2319,7 +2359,37 @@ Innings 1: ${match.firstInningsScore}
 Innings 2: ${match.score}`
   );
 
+  try {
+    // 🔹 Collect all players
+    const teamAIds = match.teamA.map(p => p.id);
+    const teamBIds = match.teamB.map(p => p.id);
+
+    // 🔹 Matches played
+    const allPlayers = [...teamAIds, ...teamBIds];
+
+    for (const id of allPlayers) {
+      await User.updateOne(
+        { telegramId: id },
+        { $inc: { matchesPlayed: 1 } }
+      );
+    }
+
+    // 🔹 Matches won
+    const winners = team === "A" ? teamAIds : teamBIds;
+
+    for (const id of winners) {
+      await User.updateOne(
+        { telegramId: id },
+        { $inc: { matchesWon: 1 } }
+      );
+    }
+
+  } catch (err) {
+    console.error("Stats update error:", err);
+  }
+
   resetMatch();
+}
 }
 bot.catch(err => {
   console.error("BOT ERROR:", err);
