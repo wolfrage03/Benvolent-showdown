@@ -47,7 +47,9 @@ function resetMatch() {
     pendingCaptainChange: null,
     battingTeam: null,
     bowlingTeam: null,
-
+    hostChange: null,
+    pendingTeamChange: null,
+    pendingCaptainChange: null,
     totalOvers: 0,
     currentOver: 0,
     currentBall: 0,
@@ -116,8 +118,8 @@ function orderedBattingPlayers() {
 }
 
 function getPlayerTeam(userId) {
-  if (match.teamA.includes(userId)) return "teamA";
-  if (match.teamB.includes(userId)) return "teamB";
+  if (match.teamA.some(p => p.id === userId)) return "teamA";
+  if (match.teamB.some(p => p.id === userId)) return "teamB";
   return null;
 }
 
@@ -758,7 +760,8 @@ async function showHostSelection() {
       { inline_keyboard: [] }
     );
   }
-   match.hostChange.active = false;
+   if (match.hostChange)
+     match.hostChange.active = false;
 
   const msg = await bot.telegram.sendMessage(
     match.groupId,
@@ -1029,14 +1032,18 @@ bot.action("confirm_team_change", async (ctx) => {
   if (!match.pendingTeamChange)
     return ctx.answerCbQuery("No pending change.");
 
-  const { player, fromTeam, toTeam, targetTeam } = match.pendingTeamChange;
+  const { player, targetTeam } = match.pendingTeamChange;
 
-  // Remove from old team
-  const index = fromTeam.findIndex(p => p.id === player.id);
-  if (index !== -1) fromTeam.splice(index, 1);
+const realFromTeam =
+  targetTeam === "A" ? match.teamB : match.teamA;
 
-  // Add to new team
-  toTeam.push(player);
+const realToTeam =
+  targetTeam === "A" ? match.teamA : match.teamB;
+
+const index = realFromTeam.findIndex(p => p.id === player.id);
+if (index !== -1) realFromTeam.splice(index, 1);
+
+realToTeam.push(player);
 
   match.pendingTeamChange = null;
 
