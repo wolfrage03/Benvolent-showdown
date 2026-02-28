@@ -753,7 +753,6 @@ bot.action("vote_host_change", async (ctx) => {
     clearTimeout(match.hostChange.timeout);
     match.hostChange.active = false;
     return showHostSelection();
-}
   }
 });
 
