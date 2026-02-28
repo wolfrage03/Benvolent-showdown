@@ -756,9 +756,8 @@ bot.action("vote_host_change", async (ctx) => {
   }
 });
 
-async function showHostSelection() {
 
-  async function showHostSelection() {
+async function showHostSelection() {
 
   if (!match.hostChange) {
     match.hostChange = { phase: "selection" };
