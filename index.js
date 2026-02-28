@@ -419,7 +419,7 @@ function getRandomTeams() {
 
 /* ================= MANUAL ADD PLAYER (USERNAME / ID / REPLY) ================= */
 
-bot.command("add", (ctx) => {
+bot.command("add", async (ctx) => {
 
   if (!match || ctx.chat.id !== match.groupId)
     return ctx.reply("⚠️ No active match.");
