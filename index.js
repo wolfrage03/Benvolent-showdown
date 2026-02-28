@@ -2299,27 +2299,7 @@ Balls: ${match.currentPartnershipBalls}`
     match.bowlNumber = null;
   }
 }
-  /* ================= TARGET CHECK ================= */
 
-  if (
-    match.innings === 2 &&
-    match.score > match.firstInningsScore
-  ) {
-    return endMatchWithWinner(match.battingTeam);
-  }
-
-
-   if (handleOverCompletion()) return;
-
-   
-
-   advanceGame();  // last line in processBall()
-
-  // 🔓 Unlock so next ball can start
-  match.ballLocked = false;
-
-   
-}
 /* ================= END INNINGS ================= */
 
 function endInnings() {
