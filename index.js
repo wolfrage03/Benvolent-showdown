@@ -758,7 +758,10 @@ bot.action("vote_host_change", async (ctx) => {
 
 async function showHostSelection() {
 
-  // Remove voting buttons
+  if (!match.hostChange) return;
+
+  match.hostChange.phase = "selection"; // ✅ NEW
+
   if (match.hostChange?.messageId) {
     await bot.telegram.editMessageReplyMarkup(
       match.groupId,
@@ -767,8 +770,6 @@ async function showHostSelection() {
       { inline_keyboard: [] }
     );
   }
-   if (match.hostChange)
-     match.hostChange.active = false;
 
   const msg = await bot.telegram.sendMessage(
     match.groupId,
@@ -786,14 +787,14 @@ async function showHostSelection() {
   match.hostChange.messageId = msg.message_id;
 }
 
+
 bot.action("take_host", async (ctx) => {
 
-  if (!match?.hostChange || match.hostChange.active)
+  if (!match?.hostChange || match.hostChange.phase !== "selection")
     return ctx.answerCbQuery("Not allowed.");
 
   const userId = ctx.from.id;
 
-  // Correct playing check
   const isPlaying =
     match.teamA.some(p => p.id === userId) ||
     match.teamB.some(p => p.id === userId);
@@ -831,10 +832,9 @@ bot.action("cancel_host_vote", async (ctx) => {
   const userId = ctx.from.id;
 
   // During voting → only host can cancel
-  if (match.hostChange.active && userId !== match.host)
+  if (!match.hostChange.phase && userId !== match.host)
     return ctx.answerCbQuery("Only host can cancel voting.");
 
-  // During selection → anyone can cancel
   clearTimeout(match.hostChange.timeout);
 
   try {
