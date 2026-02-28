@@ -974,34 +974,21 @@ bot.command("changeteam", async (ctx) => {
   if (!isHost(ctx.from.id))
     return ctx.reply("❌ Only host can change teams.");
 
-  // ❌ Block after gameplay starts
   if (match.phase === "play" || match.striker !== null)
-    return ctx.reply("❌ Cannot change teams after match has started.");
-
-  // Optional extra safety
-  if (match.innings > 1 || match.currentOver > 0)
-    return ctx.reply("❌ Cannot change teams during match.");
-
+    return ctx.reply("❌ Cannot change teams after match started.");
 
   const args = ctx.message.text.split(" ");
-
   if (args.length !== 3)
-    return ctx.reply("Usage: /changeteam A 2");
-
-  const targetTeam = args[1].toUpperCase();
-  const playerNumber = parseInt(args[2]);
-
-  if (!["A", "B"].includes(targetTeam))
-    return ctx.reply("Team must be A or B.");
+    return ctx.reply("Usage: /changeteam A 1");
 
   const sourceTeam = args[1].toUpperCase();
+  const playerNumber = parseInt(args[2]);
 
   if (!["A", "B"].includes(sourceTeam))
     return ctx.reply("Team must be A or B.");
 
   const fromTeam = sourceTeam === "A" ? match.teamA : match.teamB;
   const toTeam   = sourceTeam === "A" ? match.teamB : match.teamA;
-
   const targetTeam = sourceTeam === "A" ? "B" : "A";
 
   if (playerNumber < 1 || playerNumber > fromTeam.length)
@@ -1009,11 +996,9 @@ bot.command("changeteam", async (ctx) => {
 
   const player = fromTeam[playerNumber - 1];
 
-  // ❌ Captain cannot be moved
   if (player.id === match.captains.A || player.id === match.captains.B)
     return ctx.reply("❌ Captain cannot be moved.");
 
-  // Save pending change
   match.pendingTeamChange = {
     player,
     fromTeam,
@@ -1022,7 +1007,7 @@ bot.command("changeteam", async (ctx) => {
   };
 
   return ctx.reply(
-    `⚠️ Confirm move ${player.name} to Team ${targetTeam}?`,
+    `⚠️ Confirm move ${player.name} from Team ${sourceTeam} → Team ${targetTeam}?`,
     Markup.inlineKeyboard([
       [
         Markup.button.callback("✅ Confirm", "confirm_team_change"),
