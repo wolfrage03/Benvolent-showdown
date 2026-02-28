@@ -996,7 +996,7 @@ bot.command("changeteam", async (ctx) => {
     return ctx.reply("Team must be A or B.");
 
  const fromTeam = targetTeam === "A" ? match.teamB : match.teamA;
-];
+
   const toTeam = targetTeam === "A" ? match.teamA : match.teamB;
 
   if (playerNumber < 1 || playerNumber > fromTeam.length)
