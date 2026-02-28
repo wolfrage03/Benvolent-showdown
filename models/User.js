@@ -7,9 +7,9 @@ const userSchema = new mongoose.Schema({
   lastName: String,
   matchesPlayed: { type: Number, default: 0 },
   matchesWon: { type: Number, default: 0 },
+  timesHost: { type: Number, default: 0 },
   createdAt: { type: Date, default: Date.now }
 });
 
-// ✅ Prevent OverwriteModelError
 module.exports =
   mongoose.models.User || mongoose.model("User", userSchema);
