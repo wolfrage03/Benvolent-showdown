@@ -1186,7 +1186,7 @@ bot.command("capchange", async (ctx) => {
   if (!number || number < 1 || number > team.length)
     return ctx.reply("❌ Invalid player number.");
 
-  const newCaptainId = team[number - 1];
+  const newCaptainId = team[number - 1].id;
 
   if (teamLetter === "A" && match.captains.A === newCaptainId)
     return ctx.reply("⚠️ Already captain.");
