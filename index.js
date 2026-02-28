@@ -44,7 +44,6 @@ function resetMatch() {
     teamAName: null,
     teamBName: null,
     tossWinner: null,
-    pendingCaptainChange: null,
     battingTeam: null,
     bowlingTeam: null,
     hostChange: null,
@@ -1622,13 +1621,15 @@ bot.command("bowler", async (ctx) => {
 `🎯 Bowler Selected: ${player.name}
 
 📩 Bowler open DM and send number`,
-    Markup.inlineKeyboard([
-      Markup.button.url(
-        "📨 Open Bot DM",
-        `https://t.me/${BOT_USERNAME}`
-      )
-    ])
-  );
+  Markup.inlineKeyboard([
+    Markup.button.url(
+      "📨 Open Bot DM",
+      `https://t.me/${BOT_USERNAME}`
+    )
+  ])
+);
+
+
 
   advanceGame();
 });
