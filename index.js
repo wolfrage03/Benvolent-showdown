@@ -758,10 +758,13 @@ bot.action("vote_host_change", async (ctx) => {
 
 async function showHostSelection() {
 
-  if (!match.hostChange) return;
+  async function showHostSelection() {
 
-  match.hostChange.phase = "selection"; // ✅ NEW
-
+  if (!match.hostChange) {
+    match.hostChange = { phase: "selection" };
+  } else {
+    match.hostChange.phase = "selection";
+  }
   if (match.hostChange?.messageId) {
     await bot.telegram.editMessageReplyMarkup(
       match.groupId,
@@ -827,13 +830,13 @@ bot.action("take_host", async (ctx) => {
 bot.action("cancel_host_vote", async (ctx) => {
 
   if (!match?.hostChange)
-    return ctx.answerCbQuery("No active voting.");
+    return ctx.answerCbQuery("No active process.");
 
   const userId = ctx.from.id;
 
-  // During voting → only host can cancel
-  if (!match.hostChange.phase && userId !== match.host)
-    return ctx.answerCbQuery("Only host can cancel voting.");
+  // During voting → only host
+  if (match.hostChange.phase !== "selection" && userId !== match.host)
+    return ctx.answerCbQuery("Only host can cancel.");
 
   clearTimeout(match.hostChange.timeout);
 
@@ -844,17 +847,14 @@ bot.action("cancel_host_vote", async (ctx) => {
       null,
       { inline_keyboard: [] }
     );
-  } catch (e) {}
+  } catch {}
 
-  await bot.telegram.sendMessage(
-    match.groupId,
-    "❌ Host change cancelled."
-  );
+  await bot.telegram.sendMessage(match.groupId, "❌ Host change cancelled.");
 
   match.hostChange = null;
-
   ctx.answerCbQuery("Cancelled.");
 });
+
 
 /* ================= CREATE TEAM ================= */
 
