@@ -788,7 +788,7 @@ async function showHostSelection() {
 
 bot.action("take_host", async (ctx) => {
 
-  if (!match?.hostChange)
+  if (!match?.hostChange || match.hostChange.active)
     return ctx.answerCbQuery("Not allowed.");
 
   const userId = ctx.from.id;
@@ -830,10 +830,11 @@ bot.action("cancel_host_vote", async (ctx) => {
 
   const userId = ctx.from.id;
 
-  // Allow only current host
-  if (userId !== match.host)
-    return ctx.answerCbQuery("Only current host can cancel.");
+  // During voting → only host can cancel
+  if (match.hostChange.active && userId !== match.host)
+    return ctx.answerCbQuery("Only host can cancel voting.");
 
+  // During selection → anyone can cancel
   clearTimeout(match.hostChange.timeout);
 
   try {
@@ -993,9 +994,15 @@ bot.command("changeteam", async (ctx) => {
   if (!["A", "B"].includes(targetTeam))
     return ctx.reply("Team must be A or B.");
 
- const fromTeam = targetTeam === "A" ? match.teamB : match.teamA;
+  const sourceTeam = args[1].toUpperCase();
 
-  const toTeam = targetTeam === "A" ? match.teamA : match.teamB;
+  if (!["A", "B"].includes(sourceTeam))
+    return ctx.reply("Team must be A or B.");
+
+  const fromTeam = sourceTeam === "A" ? match.teamA : match.teamB;
+  const toTeam   = sourceTeam === "A" ? match.teamB : match.teamA;
+
+  const targetTeam = sourceTeam === "A" ? "B" : "A";
 
   if (playerNumber < 1 || playerNumber > fromTeam.length)
     return ctx.reply("Invalid player number.");
@@ -1071,26 +1078,19 @@ bot.action("confirm_team_change", async (ctx) => {
   if (!match.pendingTeamChange)
     return ctx.answerCbQuery("No pending change.");
 
-  const { player, targetTeam } = match.pendingTeamChange;
+  const { player, fromTeam, toTeam, targetTeam } =
+    match.pendingTeamChange;
 
-  const realFromTeam =
-    targetTeam === "A" ? match.teamB : match.teamA;
+  const index = fromTeam.findIndex(p => p.id === player.id);
+  if (index !== -1) fromTeam.splice(index, 1);
 
-  const realToTeam =
-    targetTeam === "A" ? match.teamA : match.teamB;
-
-  const index = realFromTeam.findIndex(p => p.id === player.id);
-  if (index !== -1) realFromTeam.splice(index, 1);
-
-  realToTeam.push(player);
+  toTeam.push(player);
 
   match.pendingTeamChange = null;
 
   await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
-
   await ctx.reply(`✅ ${player.name} moved to Team ${targetTeam}`);
 
-  // ✅ AUTO SHOW UPDATED PLAYER LIST
   showPlayersList();
 });
 
