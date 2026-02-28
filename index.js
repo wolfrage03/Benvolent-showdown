@@ -601,7 +601,6 @@ bot.action("select_host", async ctx => {
 
 // ================= HOSTCHANGE =================
 
-
 bot.command("changehost", async (ctx) => {
 
   if (!match) return ctx.reply("No active match.");
@@ -611,18 +610,25 @@ bot.command("changehost", async (ctx) => {
 
   const userId = ctx.from.id;
 
-  // Prevent duplicate voting
   if (match.hostChange?.active)
     return ctx.reply("⚠️ Host change voting already active.");
 
-  // If current host → instant selection
+  // ✅ Host direct command → instant selection
   if (userId === match.host) {
     return showHostSelection();
   }
 
-  // Otherwise start voting
+  // ✅ Only playing members can start voting
+  const isPlayer =
+    match.teamA.some(p => p.id === userId) ||
+    match.teamB.some(p => p.id === userId);
+
+  if (!isPlayer)
+    return ctx.reply("❌ Only playing members can request host change.");
+
   return startHostVoting(ctx);
 });
+
 
 async function startHostVoting(ctx) {
 
@@ -740,12 +746,15 @@ bot.action("vote_host_change", async (ctx) => {
   );
 
   // ✅ SUCCESS CONDITION
-  if (aVotes === 2 && bVotes === 2) {
+  const requiredA = Math.min(2, match.teamA.length);
+  const requiredB = Math.min(2, match.teamB.length);
+
+  if (aVotes >= requiredA && bVotes >= requiredB) {
 
     clearTimeout(match.hostChange.timeout);
     match.hostChange.active = false;
-
     return showHostSelection();
+}
   }
 });
 
@@ -986,14 +995,7 @@ bot.command("changeteam", async (ctx) => {
   if (!["A", "B"].includes(targetTeam))
     return ctx.reply("Team must be A or B.");
 
- const rawFromTeam = targetTeam === "A" ? match.teamB : match.teamA;
- const fromCaptain =
-   targetTeam === "A" ? match.captains.B : match.captains.A;
-
- // Rebuild display order
- const fromTeam = [
-   ...rawFromTeam.filter(p => p.id === fromCaptain),
-   ...rawFromTeam.filter(p => p.id !== fromCaptain)
+ const fromTeam = targetTeam === "A" ? match.teamB : match.teamA;
 ];
   const toTeam = targetTeam === "A" ? match.teamA : match.teamB;
 
@@ -1024,32 +1026,74 @@ bot.command("changeteam", async (ctx) => {
     ])
   );
 });
+function showPlayersList() {
+
+  function formatTeam(teamArray, captainId) {
+    if (!teamArray.length) return "No players";
+
+    let list = [];
+
+    if (captainId) {
+      const captain = teamArray.find(p => p.id === captainId);
+      if (captain) {
+        list.push(`1. 👑 ${captain.name} (Captain)`);
+      }
+    }
+
+    const others = teamArray.filter(p => p.id !== captainId);
+
+    others.forEach(p => {
+      list.push(`${list.length + 1}. ${p.name}`);
+    });
+
+    return list.join("\n");
+  }
+
+  const teamAList = formatTeam(match.teamA, match.captains.A);
+  const teamBList = formatTeam(match.teamB, match.captains.B);
+
+  bot.telegram.sendMessage(
+    match.groupId,
+`👥 UPDATED PLAYERS LIST
+
+🔵 ${match.teamAName} (A):
+${teamAList}
+
+🔴 ${match.teamBName} (B):
+${teamBList}`
+  );
+}
+
 
 bot.action("confirm_team_change", async (ctx) => {
-   
+
   if (!isHost(ctx.from.id))
     return ctx.answerCbQuery("Only host can confirm.");
+
   if (!match.pendingTeamChange)
     return ctx.answerCbQuery("No pending change.");
 
   const { player, targetTeam } = match.pendingTeamChange;
 
-const realFromTeam =
-  targetTeam === "A" ? match.teamB : match.teamA;
+  const realFromTeam =
+    targetTeam === "A" ? match.teamB : match.teamA;
 
-const realToTeam =
-  targetTeam === "A" ? match.teamA : match.teamB;
+  const realToTeam =
+    targetTeam === "A" ? match.teamA : match.teamB;
 
-const index = realFromTeam.findIndex(p => p.id === player.id);
-if (index !== -1) realFromTeam.splice(index, 1);
+  const index = realFromTeam.findIndex(p => p.id === player.id);
+  if (index !== -1) realFromTeam.splice(index, 1);
 
-realToTeam.push(player);
+  realToTeam.push(player);
 
   match.pendingTeamChange = null;
 
   await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
 
-  ctx.reply(`✅ ${player.name} moved to Team ${targetTeam}`);
+  await ctx.reply(`✅ ${player.name} moved to Team ${targetTeam}`);
+
+  // ✅ AUTO SHOW UPDATED PLAYER LIST
+  showPlayersList();
 });
 
 
