@@ -2389,7 +2389,7 @@ Innings 2: ${match.score}`
   }
 
   resetMatch();
-  }
+  
 }
 bot.catch(err => {
   console.error("BOT ERROR:", err);
