@@ -16,8 +16,7 @@ bot.telegram.getMe().then(me => {
 });
 
 
-// DM START HANDLER
-bot.start(async (ctx, next) => {
+//bot.start(async (ctx, next) => {
 
   if (ctx.chat.type !== "private") return next();
 
@@ -37,14 +36,23 @@ bot.start(async (ctx, next) => {
       { upsert: true }
     );
 
+    // ✅ PUT LOG HERE
+    console.log(
+      "✅ DM user saved:",
+      username?.toLowerCase(),
+      "| telegramId:",
+      id
+    );
+
   } catch (err) {
-    console.error("DM user save error:", err);
+    console.error("❌ DM user save error:", err);
   }
 
   await ctx.reply(
     "✅ Bot connected.\n\nWhen you are selected as bowler, send your number (1-6) here."
   );
 });
+
 
 let match;
 
@@ -460,7 +468,6 @@ bot.command("add", async (ctx) => {
 
     let input = args[2];
 
-    if (input.startsWith("@")) {
 
     if (input.startsWith("@")) {
 
