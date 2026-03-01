@@ -15,22 +15,21 @@ bot.telegram.getMe().then(me => {
   BOT_USERNAME = me.username;
 });
 
-let userRegistry = {};
 
 // DM START HANDLER
 bot.start(async (ctx, next) => {
 
   if (ctx.chat.type !== "private") return next();
 
-  // ✅ Save user in database
   try {
     const { id, username, first_name, last_name } = ctx.from;
 
     await User.updateOne(
-      { telegramId: id },
+      { telegramId: String(id) },
       {
         $set: {
-          username,
+          telegramId: String(id),
+          username: username?.toLowerCase(),
           firstName: first_name,
           lastName: last_name
         }
@@ -463,13 +462,19 @@ bot.command("add", async (ctx) => {
 
     if (input.startsWith("@")) {
 
-      input = input.replace("@","");
-      userId = userRegistry[input];
+  input = input.replace("@","").toLowerCase();
 
-    if (!userId) {
-      const user = await User.findOne({ username: input });
-      if (user) userId = user.telegramId;
-    } 
+  const user = await User.findOne({ username: input });
+
+  if (user) {
+    userId = Number(user.telegramId);
+  }
+
+  if (!userId)
+    return ctx.reply("❌ User not found. Ask them to start bot in DM.");
+
+  name = `@${input}`;
+}
 
     if (!userId)
       return ctx.reply("❌ User not found. Ask them to start bot in DM.");
@@ -542,10 +547,11 @@ bot.command("start", async (ctx) => {
     const { id, username, first_name, last_name } = ctx.from;
 
     await User.updateOne(
-      { telegramId: id },
+      { telegramId: String(id) },
       {
         $set: {
-          username,
+          telegramId: String(id),
+          username: username?.toLowerCase(),
           firstName: first_name,
           lastName: last_name
         }
