@@ -1,9 +1,23 @@
 require("dotenv").config();
+
+if (!process.env.BOT_TOKEN) {
+  console.error("❌ BOT_TOKEN missing in .env");
+  process.exit(1);
+}
+
+
 const connectDB = require("./database");
 
-connectDB();
+connectDB().catch(err => {
+  console.error("❌ Database connection failed:", err);
+  process.exit(1);
+});
+
+
 
 const User = require("./models/User");
+
+
 
 const { Telegraf, Markup } = require("telegraf");
 
@@ -15,8 +29,7 @@ bot.telegram.getMe().then(me => {
   BOT_USERNAME = me.username;
 });
 
-
-//bot.start(async (ctx, next) => {
+bot.start(async (ctx, next) => {
 
   if (ctx.chat.type !== "private") return next();
 
@@ -36,7 +49,6 @@ bot.telegram.getMe().then(me => {
       { upsert: true }
     );
 
-    // ✅ PUT LOG HERE
     console.log(
       "✅ DM user saved:",
       username?.toLowerCase(),
@@ -51,13 +63,19 @@ bot.telegram.getMe().then(me => {
   await ctx.reply(
     "✅ Bot connected.\n\nWhen you are selected as bowler, send your number (1-6) here."
   );
+
 });
+
 
 
 let match;
 
 function resetMatch() {
+
+  clearTimers(); // 🔥 prevent memory leaks
+
   match = {
+
     phase: "idle",
     host: null,
     groupId: null,
@@ -560,6 +578,10 @@ ctx.reply(`🚫 ${removed.name} removed from Team ${team}`);
 
 bot.command("start", async (ctx) => {
   if (ctx.chat.type === "private") return;
+   
+  if (match.phase !== "idle") {
+    return ctx.reply("⚠️ A match is already running.");
+  }
 
   /* SAVE USER */
   try {
@@ -1844,6 +1866,8 @@ bot.command("score", (ctx) => {
 
 async function ballTimeout() {
 
+  if (!match || match.phase === "idle") return;
+
   if (match.phase !== "play") return;
 
   // 🔒 Prevent collision with processBall
@@ -2485,9 +2509,44 @@ Innings 2: ${match.score}`
   resetMatch();
   
 }
-bot.catch(err => {
-  console.error("BOT ERROR:", err);
+bot.catch((err, ctx) => {
+  console.error("🤖 BOT ERROR:");
+  console.error("Update Type:", ctx?.updateType);
+  console.error("From:", ctx?.from?.id);
+  console.error("Error:", err);
 });
 
-bot.launch();
-console.log("🏏 FULL HAND CRICKET BOT RUNNING...");
+bot.use(async (ctx, next) => {
+  if (ctx.callbackQuery) {
+    try { await ctx.answerCbQuery(); } catch {}
+  }
+  return next();
+});
+
+(async () => {
+  try {
+    await bot.launch();
+    console.log("🚀 Bot started successfully");
+  } catch (err) {
+    console.error("❌ Bot failed to start:", err);
+    process.exit(1);
+  }
+})();
+
+process.once("SIGINT", () => {
+  console.log("🛑 SIGINT received");
+  bot.stop("SIGINT");
+});
+
+process.once("SIGTERM", () => {
+  console.log("🛑 SIGTERM received");
+  bot.stop("SIGTERM");
+});
+
+process.on("unhandledRejection", (err) => {
+  console.error("❌ UNHANDLED REJECTION:", err);
+});
+
+process.on("uncaughtException", (err) => {
+  console.error("❌ UNCAUGHT EXCEPTION:", err);
+});
