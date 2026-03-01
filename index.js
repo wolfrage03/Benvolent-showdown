@@ -5,7 +5,6 @@ if (!process.env.BOT_TOKEN) {
   process.exit(1);
 }
 
-
 const connectDB = require("./database");
 
 connectDB().catch(err => {
@@ -13,21 +12,24 @@ connectDB().catch(err => {
   process.exit(1);
 });
 
-
-
 const User = require("./models/User");
-
-
 
 const { Telegraf, Markup } = require("telegraf");
 
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
-let BOT_USERNAME;
+let BOT_USERNAME = null;
 
-bot.telegram.getMe().then(me => {
-  BOT_USERNAME = me.username;
-});
+(async () => {
+  try {
+    const me = await bot.telegram.getMe();
+    BOT_USERNAME = me.username;
+    console.log("🤖 Bot username:", BOT_USERNAME);
+  } catch (err) {
+    console.error("❌ Failed to fetch bot username:", err);
+  }
+})();
+
 
 bot.start(async (ctx, next) => {
 
@@ -68,17 +70,40 @@ bot.start(async (ctx, next) => {
 
 
 
-let match = null;
+// ================= MATCH STORAGE =================
 
-function resetMatch() {
+const matches = new Map();              // groupId → match
+const playerActiveMatch = new Map();    // userId → groupId
 
-  clearTimers(); // 🔥 prevent memory leaks
+function getMatch(ctx) {
+  if (!ctx.chat || !ctx.chat.id) return null;
+  return matches.get(ctx.chat.id) || null;
+}
 
-  match = {
+
+function resetMatch(groupId) {
+
+  const oldMatch = matches.get(groupId);
+
+  // 🔥 Clear active timers if exist
+  if (oldMatch) {
+    if (oldMatch.ballTimer) clearTimeout(oldMatch.ballTimer);
+    if (oldMatch.warning30) clearTimeout(oldMatch.warning30);
+    if (oldMatch.warning10) clearTimeout(oldMatch.warning10);
+
+    // Remove all players from active match map
+    for (const [userId, gid] of playerActiveMatch.entries()) {
+      if (gid === groupId) {
+        playerActiveMatch.delete(userId);
+      }
+    }
+  }
+
+  const match = {
 
     phase: "idle",
     host: null,
-    groupId: null,
+    groupId: groupId,
 
     teamA: [],
     teamB: [],
@@ -88,9 +113,11 @@ function resetMatch() {
     tossWinner: null,
     battingTeam: null,
     bowlingTeam: null,
+
     hostChange: null,
     pendingTeamChange: null,
     pendingCaptainChange: null,
+
     totalOvers: 0,
     currentOver: 0,
     currentBall: 0,
@@ -116,40 +143,53 @@ function resetMatch() {
 
     bowlerMissCount: 0,
     batterMissCount: 0,
+
     warning30: null,
     warning10: null,
     ballTimer: null,
     ballLocked: false,
-    batterStats: {},   // { userId: runs }
-    bowlerStats: {},   // { userId: { balls:0, runs:0, wickets:0, history: [] } }
+
+    batterStats: {},
+    bowlerStats: {},
+
     lastCommandTime: 0,
     phaseBeforeSwitch: null,
     lastOverBowler: null,
-    suspendedBowlers: {},   // { userId: overNumber }
-    currentOverNumber: 0,   // track real over number
+
+    suspendedBowlers: {},
+    currentOverNumber: 0,
+
     wicketStreak: 0,
     currentOverRuns: 0,
+
     currentPartnershipRuns: 0,
     currentPartnershipBalls: 0,
-    overHistory: [],   // stores completed overs
-    currentOverBalls: []  // balls of ongoing over
+
+    overHistory: [],
+    currentOverBalls: []
   };
+
+  matches.set(groupId, match);
+
+  return match;
 }
-resetMatch();
+
 
 /* ================= HELPERS ================= */
 
+const isHost = (match, id) => match && id === match.host;
 
-const isHost = id => id === match.host;
-
-const battingPlayers = () =>
+const battingPlayers = (match) =>
   match.battingTeam === "A" ? match.teamA : match.teamB;
 
-const bowlingPlayers = () =>
+const bowlingPlayers = (match) =>
   match.bowlingTeam === "A" ? match.teamA : match.teamB;
 
-function orderedBattingPlayers() {
-  const players = battingPlayers();
+// ✅ Pass match as param
+function orderedBattingPlayers(match) {
+  if (!match) return [];
+
+  const players = battingPlayers(match);
   const captainId =
     match.battingTeam === "A" ? match.captains.A : match.captains.B;
 
@@ -159,38 +199,42 @@ function orderedBattingPlayers() {
   ];
 }
 
-function getPlayerTeam(userId) {
-  if (match.teamA.some(p => p.id === userId)) return "teamA";
-  if (match.teamB.some(p => p.id === userId)) return "teamB";
+// ✅ Return consistent team keys (A / B)
+function getPlayerTeam(match, userId) {
+  if (!match) return null;
+  if (match.teamA.some(p => p.id === userId)) return "A";
+  if (match.teamB.some(p => p.id === userId)) return "B";
   return null;
 }
 
-function swapStrike() {
+// ✅ Strike swap with guard
+function swapStrike(match) {
+  if (!match) return;
   const t = match.striker;
   match.striker = match.nonStriker;
   match.nonStriker = t;
 }
+
 function getDisplayName(user) {
   if (!user) return "Player";
 
-  if (user.username)
-    return `@${user.username}`;
-
+  if (user.username) return `@${user.username}`;
   if (user.first_name && user.last_name)
     return `${user.first_name} ${user.last_name}`;
-
-  if (user.first_name)
-    return user.first_name;
+  if (user.first_name) return user.first_name;
 
   return "Player";
 }
-function getName(id) {
+
+// ✅ Pass match
+function getName(match, id) {
+  if (!match) return "Player";
   const all = [...match.teamA, ...match.teamB];
   const p = all.find(x => x.id === id);
   return p ? p.name : "Player";
 }
 
-function clearTimers() {
+function clearTimers(match) {
   if (!match) return;
 
   if (match.warning30) {
@@ -208,48 +252,40 @@ function clearTimers() {
     match.ballTimer = null;
   }
 }
-function bowlDMButton() {
-  return Markup.inlineKeyboard([
-    [
-      Markup.button.url(
-        "🎯 Bowl in DM",
-        `https://t.me/${BOT_USERNAME}`
-      )
-    ]
-  ]);
-}
-function getOverHistory() {
 
-  if (!match.overHistory.length)
+// ✅ Pass match
+function getOverHistory(match) {
+  if (!match || !match.overHistory.length)
     return "No overs completed yet.";
 
-  return match.overHistory.map(o => {
-
-    const balls = o.balls.join(",");
-    return `Over ${o.over} - ${getName(o.bowler)} = (${balls})`;
-
-  }).join("\n");
-
+  return match.overHistory
+    .map(o => {
+      const balls = o.balls.join(",");
+      return `Over ${o.over} - ${getName(match, o.bowler)} = (${balls})`;
+    })
+    .join("\n");
 }
 
-function advanceGame() {
-
+// ✅ Pure flow control
+function advanceGame(match) {
   if (!match) return;
 
   if (match.phase === "switch") return;
 
   if (match.wickets >= match.maxWickets) {
-    endInnings();
+    endInnings(match);
     return;
   }
 
   if (match.currentOver >= match.totalOvers) {
-    endInnings();
+    endInnings(match);
     return;
   }
 
-  startBall();
+  startBall(match);
 }
+
+
 /* ================= COMMENTARY ENGINE ================= */
 
 const commentary = {
@@ -449,13 +485,14 @@ function getRandomTeams() {
 
 bot.command("add", async (ctx) => {
 
+  const match = getMatch(ctx);
   if (!match || ctx.chat.id !== match.groupId)
     return ctx.reply("⚠️ No active match.");
 
-  if (!isHost(ctx.from.id))
+  if (!isHost(match, ctx.from.id))
     return ctx.reply("❌ Only host can add players.");
 
-  const args = ctx.message.text.split(" ");
+  const args = ctx.message.text.trim().split(/\s+/);
   if (args.length < 2)
     return ctx.reply("Usage:\n/add A @username\n/add B userID\nReply + /add A");
 
@@ -473,6 +510,9 @@ bot.command("add", async (ctx) => {
 
     const repliedUser = ctx.message.reply_to_message.from;
 
+    if (repliedUser.is_bot)
+      return ctx.reply("❌ Cannot add a bot as player.");
+
     userId = repliedUser.id;
     name = repliedUser.username
       ? `@${repliedUser.username}`
@@ -481,41 +521,43 @@ bot.command("add", async (ctx) => {
   }
 
   /* ========= ✅ USERNAME / ID METHOD ========= */
-else {
+  else {
 
-  if (args.length < 3)
-    return ctx.reply("Usage:\n/add A @username\n/add B userID\nReply + /add A");
+    if (args.length < 3)
+      return ctx.reply("Usage:\n/add A @username\n/add B userID\nReply + /add A");
 
-  let input = args[2];
-  input = input.trim();
+    let input = args[2].trim();
 
-  if (input.startsWith("@")) {
+    if (input.startsWith("@")) {
 
-    input = input.replace("@", "").toLowerCase();
+      const username = input.replace("@", "").toLowerCase();
 
-    const user = await User.findOne({ username: input });
+      const user = await User.findOne({ username });
 
-    if (!user)
-      return ctx.reply("❌ User not found. Ask them to start bot in DM.");
+      if (!user)
+        return ctx.reply("❌ User not found. Ask them to start bot in DM.");
 
-    userId = Number(user.telegramId);
-    name = `@${input}`;
+      userId = Number(user.telegramId);
+      name = `@${username}`;
 
-  } else if (!isNaN(input)) {
+    } 
+    else if (!isNaN(input)) {
 
-    userId = Number(input);
-    name = `User_${input}`;
+      userId = Number(input);
+      name = `User_${input}`;
 
-  } else {
-
-    return ctx.reply("❌ Invalid format.");
+    } 
+    else {
+      return ctx.reply("❌ Invalid format.");
+    }
   }
-}
 
   /* ========= DUPLICATE CHECK ========= */
 
-  if (match.teamA.find(p => p.id === userId) ||
-      match.teamB.find(p => p.id === userId))
+  if (
+    match.teamA?.some(p => p.id === userId) ||
+    match.teamB?.some(p => p.id === userId)
+  )
     return ctx.reply("⚠️ Player already added.");
 
   const player = { id: userId, name };
@@ -525,45 +567,59 @@ else {
 
   ctx.reply(`✅ ${name} added to Team ${team}`);
 });
+
+
 /* ================= REMOVE PLAYER ================= */
 
 bot.command("remove", ctx => {
 
-if (!isHost(ctx.from.id))
-return ctx.reply("❌ Only host can remove players.");
+  const match = getMatch(ctx);
+  if (!match)
+    return ctx.reply("⚠️ No active match.");
 
-const arg = ctx.message.text.split(" ")[1];
-if (!arg) return ctx.reply("Usage: /remove A1 or B2");
+  if (!isHost(match, ctx.from.id))
+    return ctx.reply("❌ Only host can remove players.");
 
-const team = arg[0].toUpperCase();
-const num = parseInt(arg.slice(1));
+  const args = ctx.message.text.trim().split(/\s+/);
+  if (args.length < 2)
+    return ctx.reply("Usage: /remove A1 or B2");
 
-if (!["A","B"].includes(team) || isNaN(num))
-return ctx.reply("Invalid format. Use A1 or B2");
+  const arg = args[1];
+  const team = arg[0]?.toUpperCase();
+  const num = parseInt(arg.slice(1));
 
-const teamArr = team === "A" ? match.teamA : match.teamB;
+  if (!["A","B"].includes(team) || isNaN(num))
+    return ctx.reply("Invalid format. Use A1 or B2");
 
-if (num < 1 || num > teamArr.length)
-return ctx.reply("Player slot not found.");
+  const teamArr = team === "A" ? match.teamA : match.teamB;
 
-const removed = teamArr.splice(num - 1, 1)[0];
+  if (!teamArr || num < 1 || num > teamArr.length)
+    return ctx.reply("Player slot not found.");
 
-// remove captain if removed
-if (match.captains[team] === removed.id)
-  match.captains[team] = null;
+  const removed = teamArr.splice(num - 1, 1)[0];
 
-// remove from dismissed list
-match.usedBatters = match.usedBatters.filter(id => id !== removed.id);
+  /* remove captain if removed */
+  if (match.captains?.[team] === removed.id)
+    match.captains[team] = null;
 
-ctx.reply(`🚫 ${removed.name} removed from Team ${team}`);
+  /* remove from dismissed / used batters */
+  if (Array.isArray(match.usedBatters))
+    match.usedBatters = match.usedBatters.filter(id => id !== removed.id);
+
+  ctx.reply(`🚫 ${removed.name} removed from Team ${team}`);
 });
+
+
 
 /* ================= START ================= */
 
 bot.command("start", async (ctx) => {
+
   if (ctx.chat.type === "private") return;
-   
-  if (match.phase !== "idle") {
+
+  let match = getMatch(ctx);
+
+  if (match && match.phase && match.phase !== "idle") {
     return ctx.reply("⚠️ A match is already running.");
   }
 
@@ -587,7 +643,8 @@ bot.command("start", async (ctx) => {
     console.error("User save error:", err);
   }
 
-  resetMatch();
+  match = resetMatch(ctx.chat.id); // ✅ important
+
   match.groupId = ctx.chat.id;
   match.phase = "host_select";
 
@@ -597,9 +654,14 @@ bot.command("start", async (ctx) => {
       [Markup.button.callback("Become Host", "select_host")]
     ])
   );
-}); //* ================= END MATCH ================= */
+});
+
+
+/* ================= END MATCH ================= */
 
 bot.command("endmatch", async (ctx) => {
+
+  const match = getMatch(ctx);
 
   if (ctx.chat.type === "private")
     return ctx.reply("❌ Use this in group.");
@@ -610,7 +672,6 @@ bot.command("endmatch", async (ctx) => {
   if (ctx.chat.id !== match.groupId)
     return ctx.reply("⚠️ This match is not running in this group.");
 
-  // ✅ Check if user is group admin
   const member = await ctx.getChatMember(ctx.from.id);
   const isAdmin = ["administrator", "creator"].includes(member.status);
 
@@ -629,13 +690,13 @@ bot.command("endmatch", async (ctx) => {
 });
 
 
-// ================= CONFIRM END =================
+/* ================= CONFIRM END ================= */
+
 bot.action("confirm_end", async (ctx) => {
 
-  if (!match || match.phase === "idle")
-    return ctx.answerCbQuery("No match running.");
+  const match = getMatch(ctx);
+  if (!match) return;
 
-  // ✅ Restrict button press also
   const member = await ctx.getChatMember(ctx.from.id);
   const isAdmin = ["administrator", "creator"].includes(member.status);
 
@@ -645,13 +706,17 @@ bot.action("confirm_end", async (ctx) => {
   await ctx.editMessageReplyMarkup();
   await ctx.reply("🛑 Match Ended Successfully.");
 
-  clearTimers();   // 🔥 important
-  resetMatch();
+  clearTimers(match);
+  matches.delete(match.groupId);
 });
 
 
-// ================= CANCEL =================
+/* ================= CANCEL END ================= */
+
 bot.action("cancel_end", async (ctx) => {
+
+  const match = getMatch(ctx);
+  if (!match) return;
 
   if (ctx.from.id !== match.host)
     return ctx.answerCbQuery("Only host can cancel.");
@@ -659,10 +724,16 @@ bot.action("cancel_end", async (ctx) => {
   await ctx.editMessageReplyMarkup();
   return ctx.answerCbQuery("Cancelled.");
 });
-/* ================= HOST ================= */
 
-bot.action("select_host", async ctx => {
-  if (match.host)
+
+/* ================= HOST SELECT ================= */
+
+bot.action("select_host", async (ctx) => {
+
+  const match = getMatch(ctx);
+  if (!match) return;
+
+  if (match.phase !== "host_select")
     return ctx.answerCbQuery("Host already selected");
 
   match.host = ctx.from.id;
@@ -672,17 +743,18 @@ bot.action("select_host", async ctx => {
   match.teamAName = selected[0];
   match.teamBName = selected[1];
 
-
   await ctx.editMessageReplyMarkup();
 
   ctx.reply(`👑 Host Selected: ${ctx.from.first_name}`);
   ctx.reply("Host use /createteam to create teams.");
 });
 
-// ================= HOSTCHANGE =================
+
+/* ================= HOST CHANGE ================= */
 
 bot.command("changehost", async (ctx) => {
 
+  const match = getMatch(ctx);
   if (!match) return ctx.reply("No active match.");
 
   if (ctx.chat.id !== match.groupId)
@@ -693,12 +765,9 @@ bot.command("changehost", async (ctx) => {
   if (match.hostChange?.active)
     return ctx.reply("⚠️ Host change voting already active.");
 
-  // ✅ Host direct command → instant selection
-  if (userId === match.host) {
-    return showHostSelection();
-  }
+  if (userId === match.host)
+    return showHostSelection(match);
 
-  // ✅ Only playing members can start voting
   const isPlayer =
     match.teamA.some(p => p.id === userId) ||
     match.teamB.some(p => p.id === userId);
@@ -706,14 +775,17 @@ bot.command("changehost", async (ctx) => {
   if (!isPlayer)
     return ctx.reply("❌ Only playing members can request host change.");
 
-  return startHostVoting(ctx);
+  return startHostVoting(match, ctx);
 });
 
 
-async function startHostVoting(ctx) {
+/* ================= HOST VOTING ================= */
+
+async function startHostVoting(match, ctx) {
 
   match.hostChange = {
     active: true,
+    phase: "voting",
     teamVotes: {
       teamA: new Set(),
       teamB: new Set()
@@ -723,7 +795,7 @@ async function startHostVoting(ctx) {
   };
 
   const msg = await ctx.reply(
-    getVoteText(),
+    getVoteText(match),
     {
       reply_markup: {
         inline_keyboard: [
@@ -736,29 +808,30 @@ async function startHostVoting(ctx) {
 
   match.hostChange.messageId = msg.message_id;
 
-  // ⏳ AUTO EXPIRE (60s)
   match.hostChange.timeout = setTimeout(async () => {
 
-    if (!match.hostChange?.active) return;
+    const m = matches.get(match.groupId);
+    if (!m?.hostChange?.active) return;
 
     await bot.telegram.editMessageReplyMarkup(
-      match.groupId,
-      match.hostChange.messageId,
+      m.groupId,
+      m.hostChange.messageId,
       null,
       { inline_keyboard: [] }
     );
 
     await bot.telegram.sendMessage(
-      match.groupId,
+      m.groupId,
       "⏳ Host change voting expired."
     );
 
-    match.hostChange = null;
+    m.hostChange = null;
 
   }, 60000);
 }
 
-function getVoteText() {
+
+function getVoteText(match) {
 
   const aVotes = match.hostChange.teamVotes.teamA.size;
   const bVotes = match.hostChange.teamVotes.teamB.size;
@@ -774,14 +847,17 @@ Voting expires in 60 seconds.
 `;
 }
 
+
+/* ================= VOTE ================= */
+
 bot.action("vote_host_change", async (ctx) => {
 
-  if (!match.hostChange?.active)
+  const match = getMatch(ctx);
+  if (!match?.hostChange?.active)
     return ctx.answerCbQuery("Voting not active.");
 
   const userId = ctx.from.id;
 
-  // Only match players
   const isPlayer =
     match.teamA.some(p => p.id === userId) ||
     match.teamB.some(p => p.id === userId);
@@ -789,16 +865,13 @@ bot.action("vote_host_change", async (ctx) => {
   if (!isPlayer)
     return ctx.answerCbQuery("Only match players can vote.");
 
-  const team = getPlayerTeam(userId);
-
+  const team = getPlayerTeam(match, userId);
   if (!team)
     return ctx.answerCbQuery("Invalid team.");
 
-  // Already voted?
   if (match.hostChange.teamVotes[team].has(userId))
     return ctx.answerCbQuery("You already voted.");
 
-  // Max 2 per team
   if (match.hostChange.teamVotes[team].size >= 2)
     return ctx.answerCbQuery("Your team already has 2 votes.");
 
@@ -806,15 +879,11 @@ bot.action("vote_host_change", async (ctx) => {
 
   ctx.answerCbQuery("Vote counted.");
 
-  const aVotes = match.hostChange.teamVotes.teamA.size;
-  const bVotes = match.hostChange.teamVotes.teamB.size;
-
-  // 🔄 LIVE UPDATE MESSAGE
   await bot.telegram.editMessageText(
     match.groupId,
     match.hostChange.messageId,
     null,
-    getVoteText(),
+    getVoteText(match),
     {
       reply_markup: {
         inline_keyboard: [
@@ -825,26 +894,26 @@ bot.action("vote_host_change", async (ctx) => {
     }
   );
 
-  // ✅ SUCCESS CONDITION
   const requiredA = Math.min(2, match.teamA.length);
   const requiredB = Math.min(2, match.teamB.length);
 
-  if (aVotes >= requiredA && bVotes >= requiredB) {
-
+  if (
+    match.hostChange.teamVotes.teamA.size >= requiredA &&
+    match.hostChange.teamVotes.teamB.size >= requiredB
+  ) {
     clearTimeout(match.hostChange.timeout);
     match.hostChange.active = false;
-    return showHostSelection();
+    return showHostSelection(match);
   }
 });
 
 
-async function showHostSelection() {
+/* ================= HOST SELECTION ================= */
 
-  if (!match.hostChange) {
-    match.hostChange = { phase: "selection" };
-  } else {
-    match.hostChange.phase = "selection";
-  }
+async function showHostSelection(match) {
+
+  match.hostChange.phase = "selection";
+
   if (match.hostChange?.messageId) {
     await bot.telegram.editMessageReplyMarkup(
       match.groupId,
@@ -871,8 +940,11 @@ async function showHostSelection() {
 }
 
 
+/* ================= TAKE HOST ================= */
+
 bot.action("take_host", async (ctx) => {
 
+  const match = getMatch(ctx);
   if (!match?.hostChange || match.hostChange.phase !== "selection")
     return ctx.answerCbQuery("Not allowed.");
 
@@ -907,14 +979,17 @@ bot.action("take_host", async (ctx) => {
   ctx.answerCbQuery("You are now host.");
 });
 
+
+/* ================= CANCEL HOST VOTE ================= */
+
 bot.action("cancel_host_vote", async (ctx) => {
 
+  const match = getMatch(ctx);
   if (!match?.hostChange)
     return ctx.answerCbQuery("No active process.");
 
   const userId = ctx.from.id;
 
-  // During voting → only host
   if (match.hostChange.phase !== "selection" && userId !== match.host)
     return ctx.answerCbQuery("Only host can cancel.");
 
@@ -936,30 +1011,30 @@ bot.action("cancel_host_vote", async (ctx) => {
 });
 
 
+
 /* ================= CREATE TEAM ================= */
 
 bot.command("createteam", (ctx) => {
 
-  if (!isHost(ctx.from.id))
+  const match = getMatch(ctx);
+  if (!match) return ctx.reply("⚠️ No active match.");
+
+  if (!isHost(match, ctx.from.id))
     return ctx.reply("❌ Only host can create teams.");
 
   if (match.phase === "join")
     return ctx.reply("⚠️ Joining already in progress.");
 
-  if (match.phase !== "team_create" &&
-      match.phase !== "captain" &&
-      match.phase !== "join")
+  if (!["team_create", "captain", "join"].includes(match.phase))
     return ctx.reply("⚠️ Cannot create teams at this stage.");
 
-  // ✅ DO NOT RESET if already exists
   if (!match.teamA) match.teamA = [];
   if (!match.teamB) match.teamB = [];
   if (!match.captains) match.captains = { A: null, B: null };
 
-  // Just reopen joining
   match.phase = "join";
 
-ctx.reply(
+  ctx.reply(
 `🏏 Teams Selected!
 
 🔵 ${match.teamAName} (A)
@@ -972,28 +1047,37 @@ Players join using:
 👉 /joinb
 
 ⏳ Joining open for 1 minute`
-);
+  );
 
   setTimeout(() => {
 
-    if (match.phase !== "join") return;
+    const m = matches.get(match.groupId);
+    if (!m || m.phase !== "join") return;
 
-    match.phase = "captain";
+    m.phase = "captain";
 
-    bot.telegram.sendMessage(match.groupId,
+    bot.telegram.sendMessage(m.groupId,
 `🔒 Joining Closed!
 
-Team A: ${match.teamA.length}
-Team B: ${match.teamB.length}
+Team A: ${m.teamA.length}
+Team B: ${m.teamB.length}
 
 Host use /choosecap`
     );
 
   }, 60000);
 });
-/* ================= JOIN ================= */
+
+
+/* ================= JOIN TEAM A ================= */
 
 bot.command("joina", ctx => {
+
+  const match = getMatch(ctx);
+  if (!match) return ctx.reply("⚠️ No active match.");
+
+  if (playerActiveMatch.has(ctx.from.id))
+    return ctx.reply("❌ You are already playing another match.");
 
   if (match.phase !== "join")
     return ctx.reply("⚠️ Joining is not open.");
@@ -1001,10 +1085,10 @@ bot.command("joina", ctx => {
   if (ctx.from.id === match.host)
     return ctx.reply("❌ Host cannot join any team.");
 
-  if (match.teamA.find(p => p.id === ctx.from.id))
+  if (match.teamA.some(p => p.id === ctx.from.id))
     return ctx.reply("⚠️ You are already in Team A.");
 
-  if (match.teamB.find(p => p.id === ctx.from.id))
+  if (match.teamB.some(p => p.id === ctx.from.id))
     return ctx.reply("⚠️ You are already in Team B.");
 
   const player = {
@@ -1015,11 +1099,21 @@ bot.command("joina", ctx => {
   };
 
   match.teamA.push(player);
+  playerActiveMatch.set(ctx.from.id, match.groupId);
 
   ctx.reply(`✅ ${player.name} joined Team A`);
 });
 
+
+/* ================= JOIN TEAM B ================= */
+
 bot.command("joinb", ctx => {
+
+  const match = getMatch(ctx);
+  if (!match) return ctx.reply("⚠️ No active match.");
+
+  if (playerActiveMatch.has(ctx.from.id))
+    return ctx.reply("❌ You are already playing another match.");
 
   if (match.phase !== "join")
     return ctx.reply("⚠️ Joining is not open.");
@@ -1027,10 +1121,10 @@ bot.command("joinb", ctx => {
   if (ctx.from.id === match.host)
     return ctx.reply("❌ Host cannot join any team.");
 
-  if (match.teamB.find(p => p.id === ctx.from.id))
+  if (match.teamB.some(p => p.id === ctx.from.id))
     return ctx.reply("⚠️ You are already in Team B.");
 
-  if (match.teamA.find(p => p.id === ctx.from.id))
+  if (match.teamA.some(p => p.id === ctx.from.id))
     return ctx.reply("⚠️ You are already in Team A.");
 
   const player = {
@@ -1041,23 +1135,26 @@ bot.command("joinb", ctx => {
   };
 
   match.teamB.push(player);
+  playerActiveMatch.set(ctx.from.id, match.groupId);
 
   ctx.reply(`✅ ${player.name} joined Team B`);
 });
 
 
-// ================= CHANGETEAM =================
+/* ================= CHANGE TEAM ================= */
 
+bot.command("changeteam", (ctx) => {
 
-bot.command("changeteam", async (ctx) => {
+  const match = getMatch(ctx);
+  if (!match) return ctx.reply("⚠️ No active match.");
 
-  if (!isHost(ctx.from.id))
+  if (!isHost(match, ctx.from.id))
     return ctx.reply("❌ Only host can change teams.");
 
   if (match.phase === "play" || match.striker !== null)
     return ctx.reply("❌ Cannot change teams after match started.");
 
-  const args = ctx.message.text.split(" ");
+  const args = ctx.message.text.trim().split(/\s+/);
   if (args.length !== 3)
     return ctx.reply("Usage: /changeteam A 1");
 
@@ -1096,7 +1193,11 @@ bot.command("changeteam", async (ctx) => {
     ])
   );
 });
-function showPlayersList() {
+
+
+/* ================= SHOW PLAYERS ================= */
+
+function showPlayersList(match) {
 
   function formatTeam(teamArray, captainId) {
     if (!teamArray.length) return "No players";
@@ -1105,16 +1206,11 @@ function showPlayersList() {
 
     if (captainId) {
       const captain = teamArray.find(p => p.id === captainId);
-      if (captain) {
-        list.push(`1. 👑 ${captain.name} (Captain)`);
-      }
+      if (captain) list.push(`1. 👑 ${captain.name} (Captain)`);
     }
 
     const others = teamArray.filter(p => p.id !== captainId);
-
-    others.forEach(p => {
-      list.push(`${list.length + 1}. ${p.name}`);
-    });
+    others.forEach(p => list.push(`${list.length + 1}. ${p.name}`));
 
     return list.join("\n");
   }
@@ -1135,9 +1231,14 @@ ${teamBList}`
 }
 
 
+/* ================= CONFIRM TEAM CHANGE ================= */
+
 bot.action("confirm_team_change", async (ctx) => {
 
-  if (!isHost(ctx.from.id))
+  const match = getMatch(ctx);
+  if (!match) return;
+
+  if (!isHost(match, ctx.from.id))
     return ctx.answerCbQuery("Only host can confirm.");
 
   if (!match.pendingTeamChange)
@@ -1150,36 +1251,46 @@ bot.action("confirm_team_change", async (ctx) => {
   if (index !== -1) fromTeam.splice(index, 1);
 
   toTeam.push(player);
-
   match.pendingTeamChange = null;
 
   await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
   await ctx.reply(`✅ ${player.name} moved to Team ${targetTeam}`);
 
-  showPlayersList();
+  showPlayersList(match);
 });
 
 
+/* ================= CANCEL TEAM CHANGE ================= */
+
 bot.action("cancel_team_change", async (ctx) => {
-    
-  if (!isHost(ctx.from.id))
+
+  const match = getMatch(ctx);
+  if (!match) return;
+
+  if (!isHost(match, ctx.from.id))
     return ctx.answerCbQuery("Only host can cancel.");
+
   match.pendingTeamChange = null;
 
   await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
-
   ctx.answerCbQuery("Cancelled.");
 });
+
 
 /* ================= CAPTAIN ================= */
 
 bot.command("choosecap", ctx => {
-  if (!isHost(ctx.from.id))
+
+  const match = getMatch(ctx);
+  if (!match) return ctx.reply("⚠️ No active match.");
+
+  if (!isHost(match, ctx.from.id))
     return ctx.reply("❌ Only host can start captain selection.");
 
   match.phase = "captain";
 
-  ctx.reply("🏏 Captain Selection:",
+  ctx.reply(
+    "🏏 Captain Selection:",
     Markup.inlineKeyboard([
       [Markup.button.callback("👑 Choose Captain - Team A", "cap_A")],
       [Markup.button.callback("👑 Choose Captain - Team B", "cap_B")]
@@ -1189,40 +1300,53 @@ bot.command("choosecap", ctx => {
 
 
 bot.action("cap_A", async ctx => {
+
+  const match = getMatch(ctx);
+  if (!match) return;
+
+  if (match.phase !== "captain")
+    return ctx.answerCbQuery("Not allowed now.");
+
   if (match.captains.A)
     return ctx.answerCbQuery("Captain A already selected");
 
-  if (!match.teamA.find(p => p.id === ctx.from.id))
+  if (!match.teamA.some(p => p.id === ctx.from.id))
     return ctx.answerCbQuery("Only Team A players allowed");
 
   match.captains.A = ctx.from.id;
 
   await ctx.answerCbQuery("Captain A Selected");
+  await ctx.reply(`👑 ${getDisplayName(ctx.from)} is Captain of Team A`);
 
-  ctx.reply(`👑 ${getDisplayName(ctx.from)} is Captain of Team A`);
-
-  updateCaptainButtons(ctx);
+  updateCaptainButtons(match, ctx);
 });
 
 
 bot.action("cap_B", async ctx => {
+
+  const match = getMatch(ctx);
+  if (!match) return;
+
+  if (match.phase !== "captain")
+    return ctx.answerCbQuery("Not allowed now.");
+
   if (match.captains.B)
     return ctx.answerCbQuery("Captain B already selected");
 
-  if (!match.teamB.find(p => p.id === ctx.from.id))
+  if (!match.teamB.some(p => p.id === ctx.from.id))
     return ctx.answerCbQuery("Only Team B players allowed");
 
   match.captains.B = ctx.from.id;
 
   await ctx.answerCbQuery("Captain B Selected");
+  await ctx.reply(`👑 ${getDisplayName(ctx.from)} is Captain of Team B`);
 
-  ctx.reply(`👑 ${getDisplayName(ctx.from)} is Captain of Team B`);
-
-  updateCaptainButtons(ctx);
+  updateCaptainButtons(match, ctx);
 });
 
 
-function updateCaptainButtons(ctx) {
+function updateCaptainButtons(match, ctx) {
+
   const buttons = [];
 
   if (!match.captains.A)
@@ -1232,21 +1356,26 @@ function updateCaptainButtons(ctx) {
     buttons.push([Markup.button.callback("👑 Choose Captain - Team B", "cap_B")]);
 
   if (buttons.length === 0) {
+
     ctx.editMessageReplyMarkup({ inline_keyboard: [] });
     match.phase = "toss";
+
     ctx.reply("🎲 Both Captains Selected!\nStarting Toss...");
-    startToss();
+    startToss(match);
+
   } else {
     ctx.editMessageReplyMarkup({ inline_keyboard: buttons });
   }
 }
+
+
 /* ================= PLAYERS LIST ================= */
 
 bot.command("players", (ctx) => {
 
-  if (!match || ctx.chat.id !== match.groupId) {
+  const match = getMatch(ctx);
+  if (!match || ctx.chat.id !== match.groupId)
     return ctx.reply("⚠️ No active match in this group.");
-  }
 
   function formatTeam(teamArray, captainId) {
     if (!teamArray.length) return "No players";
@@ -1255,16 +1384,11 @@ bot.command("players", (ctx) => {
 
     if (captainId) {
       const captain = teamArray.find(p => p.id === captainId);
-      if (captain) {
-        list.push(`1. 👑 ${captain.name} (Captain)`);
-      }
+      if (captain) list.push(`1. 👑 ${captain.name} (Captain)`);
     }
 
     const others = teamArray.filter(p => p.id !== captainId);
-
-    others.forEach(p => {
-      list.push(`${list.length + 1}. ${p.name}`);
-    });
+    others.forEach(p => list.push(`${list.length + 1}. ${p.name}`));
 
     return list.join("\n");
   }
@@ -1273,30 +1397,29 @@ bot.command("players", (ctx) => {
   const teamBList = formatTeam(match.teamB, match.captains.B);
 
   ctx.reply(
-  `👥 PLAYERS LIST
+`👥 PLAYERS LIST
 
-  🔵 ${match.teamAName} (A):
-  ${teamAList}
+🔵 ${match.teamAName} (A):
+${teamAList}
 
-  🔴 ${match.teamBName} (B):
-  ${teamBList}`
+🔴 ${match.teamBName} (B):
+${teamBList}`
   );
 });
 
-// ================= CAPCHANGE =================
+
+/* ================= CAPTAIN CHANGE ================= */
 
 bot.command("capchange", async (ctx) => {
 
-  if (ctx.chat.type === "private") return;
-
-  if (match.phase === "idle")
+  const match = getMatch(ctx);
+  if (!match || match.phase === "idle")
     return ctx.reply("❌ No active match.");
 
   if (ctx.from.id !== match.host)
     return ctx.reply("❌ Only host can change captain.");
 
-  const args = ctx.message.text.split(" ");
-
+  const args = ctx.message.text.trim().split(/\s+/);
   if (args.length !== 3)
     return ctx.reply("Usage:\n/capchange A 2");
 
@@ -1321,31 +1444,30 @@ bot.command("capchange", async (ctx) => {
 
   match.pendingCaptainChange = {
     team: teamLetter,
-    index: number - 1,
     playerId: newCaptainId
   };
 
-  const name = getName(newCaptainId);
+  const name = getName(match, newCaptainId);
 
   await ctx.reply(
-    `⚠️ Confirm Captain Change?
+`⚠️ Confirm Captain Change?
 
 Team ${teamLetter}
 New Captain: ${name}`,
-    {
-      reply_markup: {
-        inline_keyboard: [
-          [
-            { text: "✅ Confirm", callback_data: "confirm_cap_change" },
-            { text: "❌ Cancel", callback_data: "cancel_cap_change" }
-          ]
-        ]
-      }
-    }
+    Markup.inlineKeyboard([
+      [
+        Markup.button.callback("✅ Confirm", "confirm_cap_change"),
+        Markup.button.callback("❌ Cancel", "cancel_cap_change")
+      ]
+    ])
   );
 });
 
+
 bot.action("confirm_cap_change", async (ctx) => {
+
+  const match = getMatch(ctx);
+  if (!match) return;
 
   if (!match.pendingCaptainChange)
     return ctx.answerCbQuery("Expired.");
@@ -1355,24 +1477,24 @@ bot.action("confirm_cap_change", async (ctx) => {
 
   const { team, playerId } = match.pendingCaptainChange;
 
-  if (team === "A")
-    match.captains.A = playerId;
-  else
-    match.captains.B = playerId;
+  if (team === "A") match.captains.A = playerId;
+  else match.captains.B = playerId;
 
   match.pendingCaptainChange = null;
 
-  const mention = `<a href="tg://user?id=${playerId}">${getName(playerId)}</a>`;
+  const mention = `<a href="tg://user?id=${playerId}">${getName(match, playerId)}</a>`;
 
   await ctx.editMessageText(
-    `👑 Captain Updated Successfully!\n\n` +
-    `${mention} is now the new Captain of Team ${team}!`,
+    `👑 Captain Updated Successfully!\n\n${mention} is now the new Captain of Team ${team}!`,
     { parse_mode: "HTML" }
   );
 });
 
 
 bot.action("cancel_cap_change", async (ctx) => {
+
+  const match = getMatch(ctx);
+  if (!match) return;
 
   if (ctx.from.id !== match.host)
     return ctx.answerCbQuery("Only host can cancel.");
@@ -1383,9 +1505,12 @@ bot.action("cancel_cap_change", async (ctx) => {
 });
 
 
+
 /* ================= TOSS ================= */
 
-function startToss() {
+function startToss(match) {
+
+  if (!match) return;
 
   match.phase = "toss";
 
@@ -1400,22 +1525,25 @@ function startToss() {
     ])
   );
 }
-bot.action(["toss_odd", "toss_even"], async ctx => {
 
-  if (match.phase !== "toss") return;
+bot.action(["toss_odd", "toss_even"], async (ctx) => {
+
+  const match = getMatch(ctx);
+  if (!match || match.phase !== "toss") return;
+
+  const captainA = match.captains.A;
+  const captainB = match.captains.B;
+
+  if (![captainA, captainB].includes(ctx.from.id))
+    return ctx.answerCbQuery("Only captains can choose");
 
   const choice = ctx.match[0] === "toss_odd" ? "odd" : "even";
 
   const tossNumber = Math.floor(Math.random() * 6) + 1;
   const result = tossNumber % 2 === 0 ? "even" : "odd";
 
-  const captainA = match.captains.A;
-  const captainB = match.captains.B;
-
-  // The captain who clicked
   const chooser = ctx.from.id;
 
-  // Determine winner
   const tossWinner =
     choice === result
       ? chooser
@@ -1428,8 +1556,7 @@ bot.action(["toss_odd", "toss_even"], async ctx => {
 
   await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
 
-  const winnerTeam =
-    tossWinner === captainA ? "A" : "B";
+  const winnerTeam = tossWinner === captainA ? "A" : "B";
 
   bot.telegram.sendMessage(
     match.groupId,
@@ -1450,9 +1577,11 @@ Choose Bat or Bowl:`,
     ])
   );
 });
-bot.action(["decision_bat", "decision_bowl"], async ctx => {
 
-  if (match.phase !== "batbowl") return;
+bot.action(["decision_bat", "decision_bowl"], async (ctx) => {
+
+  const match = getMatch(ctx);
+  if (!match || match.phase !== "batbowl") return;
 
   if (ctx.from.id !== match.tossWinner)
     return ctx.answerCbQuery("Only toss winner decides");
@@ -1462,7 +1591,8 @@ bot.action(["decision_bat", "decision_bowl"], async ctx => {
 
   const otherTeam = winnerTeam === "A" ? "B" : "A";
 
-  const decision = ctx.match[0] === "decision_bat" ? "bat" : "bowl";
+  const decision =
+    ctx.match[0] === "decision_bat" ? "bat" : "bowl";
 
   if (decision === "bat") {
     match.battingTeam = winnerTeam;
@@ -1505,38 +1635,42 @@ Host set overs:
 
 /* ================= SET OVERS ================= */
 
-bot.command("setovers", ctx => {
+bot.command("setovers", (ctx) => {
 
-  if (!isHost(ctx.from.id)) return;
+  const match = getMatch(ctx);
+  if (!match) return;
+
+  if (!isHost(match, ctx.from.id))
+    return ctx.reply("❌ Only host can set overs.");
 
   const args = ctx.message.text.split(" ");
   const overs = parseInt(args[1]);
 
-  if (isNaN(overs) || overs <= 0)
-    return ctx.reply("Enter valid overs.");
+  if (isNaN(overs) || overs < 1 || overs > 25)
+    return ctx.reply("⚠️ Overs must be between 1 and 25.");
 
   match.totalOvers = overs;
-  match.currentOver = 0;
-  match.currentBall = 0;
-  match.score = 0;
-  match.wickets = 0;
-  match.usedBatters = [];
+  match.maxWickets =
+    (match.battingTeam === "A" ? match.teamA.length : match.teamB.length) - 1;
 
   match.phase = "set_striker";
 
   ctx.reply(
-  `Overs set: ${overs}
+`✅ Overs set to ${overs}
 
-  Send STRIKER in group:
-  /batter 1`
-  ); 
-  
-})
+Set STRIKER:
+/batter number`
+  );
+});
+
 /* ================= SET BATTER ================= */
 
-bot.command("batter", ctx => {
+bot.command("batter", (ctx) => {
 
-  if (!isHost(ctx.from.id)) return;
+  const match = getMatch(ctx);
+  if (!match) return;
+
+  if (!isHost(match, ctx.from.id)) return;
 
   if (ctx.chat.id !== match.groupId)
     return ctx.reply("⚠️ Send batter number in GROUP only.");
@@ -1544,15 +1678,13 @@ bot.command("batter", ctx => {
   const num = parseInt(ctx.message.text.split(" ")[1]);
   if (!num) return ctx.reply("❌ Provide batter number");
 
-  const players = orderedBattingPlayers(); // ✅ USE ORDERED
+  const players = orderedBattingPlayers(match);
 
   if (num < 1 || num > players.length)
     return ctx.reply("❌ Invalid number");
 
   const selected = players[num - 1];
-
-  if (!selected)
-    return ctx.reply("⚠️ Player not found");
+  if (!selected) return ctx.reply("⚠️ Player not found");
 
   if (match.usedBatters.includes(selected.id))
     return ctx.reply("⚠️ Player already batted / dismissed");
@@ -1560,19 +1692,18 @@ bot.command("batter", ctx => {
   const name = selected.name;
   const orderNumber = match.usedBatters.length + 1;
 
-  const ordinal = n => {
+  const ordinal = (n) => {
     const s = ["th","st","nd","rd"];
     const v = n % 100;
     return n + (s[(v-20)%10] || s[v] || s[0]);
   };
 
-  // STRIKER
+  /* STRIKER */
   if (match.phase === "set_striker") {
 
     match.striker = selected.id;
-    if (!match.batterStats[selected.id]) {
-      match.batterStats[selected.id] = { runs: 0, balls: 0 };
-    }
+    match.batterStats[selected.id] = { runs: 0, balls: 0 };
+
     match.usedBatters.push(selected.id);
     match.phase = "set_non_striker";
 
@@ -1583,7 +1714,7 @@ Now send NON-STRIKER:
 /batter number`);
   }
 
-  // NON STRIKER
+  /* NON STRIKER */
   if (match.phase === "set_non_striker") {
 
     if (selected.id === match.striker)
@@ -1592,6 +1723,7 @@ Now send NON-STRIKER:
     match.nonStriker = selected.id;
     match.usedBatters.push(selected.id);
     match.maxWickets = players.length - 1;
+
     match.phase = "set_bowler";
 
     return ctx.reply(
@@ -1601,16 +1733,15 @@ Now send NON-STRIKER:
 /bowler number`);
   }
 
-  // NEW BATTER
+  /* NEW BATTER */
   if (match.phase === "new_batter") {
 
     if (selected.id === match.nonStriker)
       return ctx.reply("⚠️ Choose different player");
 
     match.striker = selected.id;
-    if (!match.batterStats[selected.id]) {
-      match.batterStats[selected.id] = { runs: 0, balls: 0 };
-    }
+    match.batterStats[selected.id] = { runs: 0, balls: 0 };
+
     match.usedBatters.push(selected.id);
     match.phase = "play";
 
@@ -1620,9 +1751,13 @@ Now send NON-STRIKER:
   }
 
 });
+
 /* ================= SET BOWLER ================= */
 
 bot.command("bowler", async (ctx) => {
+
+  const match = getMatch(ctx);
+  if (!match) return;
 
   if (match.phase !== "set_bowler")
     return ctx.reply("⚠️ You can set bowler only when bot asks.");
@@ -1630,29 +1765,22 @@ bot.command("bowler", async (ctx) => {
   if (ctx.chat.id !== match.groupId)
     return ctx.reply("⚠️ This match is not running here.");
 
-  if (!isHost(ctx.from.id))
+  if (!isHost(match, ctx.from.id))
     return ctx.reply("❌ Only host can set bowler.");
 
-  const text = ctx.message.text.split(" ");
-  if (text.length < 2)
-    return ctx.reply("⚠️ Use: /bowler <number>");
-
-  const num = parseInt(text[1]);
+  const num = parseInt(ctx.message.text.split(" ")[1]);
   if (!num) return ctx.reply("Invalid number");
 
-  // ✅ ORDERED BOWLING PLAYERS
-  const players = (() => {
-    const base = bowlingPlayers();
-    const captainId =
-      match.bowlingTeam === "A"
-        ? match.captains.A
-        : match.captains.B;
+  const base = bowlingPlayers(match);
+  const captainId =
+    match.bowlingTeam === "A"
+      ? match.captains.A
+      : match.captains.B;
 
-    return [
-      ...base.filter(p => p.id === captainId),
-      ...base.filter(p => p.id !== captainId)
-    ];
-  })();
+  const players = [
+    ...base.filter(p => p.id === captainId),
+    ...base.filter(p => p.id !== captainId)
+  ];
 
   if (num < 1 || num > players.length)
     return ctx.reply("⚠️ Invalid player number.");
@@ -1662,40 +1790,38 @@ bot.command("bowler", async (ctx) => {
   if (match.lastOverBowler === player.id)
     return ctx.reply("⚠️ Same bowler cannot bowl consecutive overs.");
 
-  // Suspended bowler restriction
-  if (match.suspendedBowlers[player.id] &&
-    match.suspendedBowlers[player.id] >= match.currentOver)
-   return ctx.reply("⚠️ This bowler is suspended for this over.");
+  if (match.suspendedBowlers?.[player.id] >= match.currentOver)
+    return ctx.reply("⚠️ This bowler is suspended for this over.");
 
   match.bowler = player.id;
+  match.lastOverBowler = player.id;
 
   match.overHistory.push({
     over: match.currentOver + 1,
     bowler: match.bowler,
     balls: []
   });
-  match.phase = "play";
 
+  match.phase = "play";
   match.awaitingBat = false;
   match.awaitingBowl = true;
 
-  const botInfo = await bot.telegram.getMe();
-
   await ctx.reply(
-  `🎯 Bowler Selected: ${player.name}
+`🎯 Bowler Selected: ${player.name}
 
-  Ball starting...`
+Ball starting...`
   );
-
-
 
   advanceGame();
 });
 
 
+
 // ================= OVER COMPLETION =================
 
-function handleOverCompletion() {
+function handleOverCompletion(match) {
+
+  if (!match) return false;
 
   if (match.currentBall < 6) return false;
 
@@ -1713,35 +1839,40 @@ function handleOverCompletion() {
 
   // 🔥 Over limit check
   if (match.currentOver >= match.totalOvers) {
-    clearTimers();
+    clearTimers(match);
     endInnings();
     return true;
-}
+  }
+
   match.lastOverBowler = match.bowler;
+
   swapStrike();
 
-  setPhase("set_bowler");
+  match.phase = "set_bowler";
 
   bot.telegram.sendMessage(
     match.groupId,
-    `🔄 Over Completed!
+`🔄 Over Completed!
 Score: ${match.score}/${match.wickets}
+
 🎯 Send new bowler:
 /bowler number`
   );
 
   return true;
 }
+
 /* ================= SCORE ================= */
 
-function getLiveScore() {
+function getLiveScore(match) {
 
   if (!match) return "⚠️ No active match.";
 
   const overs = `${match.currentOver}.${match.currentBall}`;
+
   const ballsBowled = (match.currentOver * 6) + match.currentBall;
   const totalBalls = (match.totalOvers || 0) * 6;
-  const ballsLeft = totalBalls - ballsBowled;
+  const ballsLeft = Math.max(totalBalls - ballsBowled, 0);
 
   const runRate =
     ballsBowled > 0
@@ -1797,11 +1928,17 @@ function getLiveScore() {
       : "0.00";
 
   const dots =
-    match.bowlerStats?.[match.bowler]?.history?.filter(x => x === 0).length || 0;
+    bowlerStats.history?.filter(x => x === 0).length || 0;
 
-  const overHistoryFormatted = match.overHistory
-    .map((o, index) => `${index + 1}: ${o.balls.join(" ")}`)
-    .join(" | ");
+  const overHistoryFormatted =
+    match.overHistory?.length
+      ? match.overHistory
+          .map((o, i) => `${i + 1}: ${o.balls.join(" ")}`)
+          .join(" | ")
+      : "Yet to start";
+
+  const partnershipRuns = match.currentPartnershipRuns || 0;
+  const partnershipBalls = match.currentPartnershipBalls || 0;
 
   return `
 ╔═══════════════════╗
@@ -1833,25 +1970,27 @@ ${match.innings === 2 ? requiredRuns + "\n" : ""}
 ${getName(match.bowler)}
 ${bowlerOvers}-${dots}-${bowlerStats.runs}-${bowlerStats.wickets}  Econ:${economy}
 
-🤝 Partnership: ${match.currentPartnershipRuns} (${match.currentPartnershipBalls})
+🤝 Partnership: ${partnershipRuns} (${partnershipBalls})
 
-📜 Overs: ${overHistoryFormatted || "Yet to start"}
+📜 Overs: ${overHistoryFormatted}
 `;
 }
+
 bot.command("score", (ctx) => {
-  if (!match || !match.groupId)
+
+  const match = getMatch(ctx);
+  if (!match)
     return ctx.reply("⚠️ No active match.");
 
-  ctx.reply(getLiveScore());
+  ctx.reply(getLiveScore(match));
 });
 
 
- /* ================= BALL TIMEOUT ================= */
+/* ================= BALL TIMEOUT ================= */
 
-async function ballTimeout() {
+async function ballTimeout(match) {
 
   if (!match || match.phase === "idle") return;
-
   if (match.phase !== "play") return;
 
   // 🔒 Prevent collision with processBall
@@ -1860,14 +1999,14 @@ async function ballTimeout() {
 
   try {
 
-    clearTimers();
+    clearTimers(match);
 
     /* ================= BOWLER MISSED ================= */
 
     if (match.awaitingBowl) {
 
       match.awaitingBowl = false;
-      match.bowlerMissCount++;
+      match.bowlerMissCount = (match.bowlerMissCount || 0) + 1;
 
       match.score += 6;
 
@@ -1901,9 +2040,9 @@ Host select new bowler:
         return;
       }
 
-      if (handleOverCompletion()) return;
+      if (handleOverCompletion(match)) return;
 
-      advanceGame();
+      advanceGame(match);
       return;
     }
 
@@ -1912,10 +2051,10 @@ Host select new bowler:
     if (match.awaitingBat) {
 
       match.awaitingBat = false;
-      match.batterMissCount++;
+      match.batterMissCount = (match.batterMissCount || 0) + 1;
 
       match.currentBall++;
-      match.score -= 6;
+      match.score -= 6; // ✅ negative score allowed
 
       if (!match.batterStats[match.striker])
         match.batterStats[match.striker] = { runs: 0, balls: 0 };
@@ -1940,7 +2079,7 @@ Host select new bowler:
         );
 
         if (match.wickets >= match.maxWickets) {
-          await endInnings();
+          await endInnings(match);
           return;
         }
 
@@ -1954,9 +2093,9 @@ Host select new bowler:
         return;
       }
 
-      if (handleOverCompletion()) return;
+      if (handleOverCompletion(match)) return;
 
-      advanceGame();
+      advanceGame(match);
       return;
     }
 
@@ -1972,39 +2111,39 @@ Host select new bowler:
     match.bowlNumber = null;
   }
 }
-// ================= ANNOUNCE BALL =================
 
+/* ================= ANNOUNCE BALL ================= */
 
-   async function announceBall() {
+async function announceBall(match) {
 
-     if (!match.bowler || !match.striker) return;
+  if (!match || !match.bowler || !match.striker) return;
 
-    
-     match.batNumber = null;
-     match.bowlNumber = null;
+  match.batNumber = null;
+  match.bowlNumber = null;
 
-  // 🔥 FORCE PING (works even without username)
-     const bowlerPing = `[🎯 ${getName(match.bowler)}](tg://user?id=${match.bowler})`;
+  const bowlerPing =
+    `[🎯 ${getName(match.bowler)}](tg://user?id=${match.bowler})`;
 
-     await bot.telegram.sendMessage(
-       match.groupId,
-       `${bowlerPing}\n\n${randomBowlingPrompt()}`,
-       {
-         parse_mode: "Markdown",
-         ...bowlDMButton()
-       }
-     );
-      // 🔥 Extra DM reminder to bowler (every ball)
-     await bot.telegram.sendMessage(
-       match.bowler,
-       "Send number 1-6 in bot DM."
-     ).catch(() => {});
+  await bot.telegram.sendMessage(
+    match.groupId,
+    `${bowlerPing}\n\n${randomBowlingPrompt()}`,
+    {
+      parse_mode: "Markdown",
+      ...bowlDMButton()
+    }
+  );
+
+  try {
+    await bot.telegram.sendMessage(
+      match.bowler,
+      "Send number 1-6 in bot DM."
+    );
+  } catch (e) {}
 }
-
 
 // ================= TIMER CONTROLLER =================
 
-function startTurnTimer(type) {
+function startTurnTimer(match, type) {
 
   match.warning30 = setTimeout(() => {
     if ((type === "bowl" && match.awaitingBowl) ||
@@ -2028,49 +2167,47 @@ function startTurnTimer(type) {
     }
   }, 50000);
 
-  match.ballTimer = setTimeout(ballTimeout, 60000);
+  match.ballTimer = setTimeout(() => ballTimeout(match), 60000);
 }
 
 
 
 // ================= SAFE PHASE SETTER =================
 
-function setPhase(newPhase) {
+function setPhase(match, newPhase) {
   console.log(`PHASE: ${match.phase} → ${newPhase}`);
   match.phase = newPhase;
 }
 
+
+
 /* ================= START BALL ================= */
 
-async function startBall() {
-  
+async function startBall(match) {
+
+  if (!match) return;
 
   // 🔥 HARD STOPS
   if (match.phase === "switch") return;
   if (match.currentOver >= match.totalOvers) return;
   if (match.wickets >= match.maxWickets) return;
 
-
-
   // ✅ Stop previous timers
-  clearTimers();
+  clearTimers(match);
 
   // Set phase flags
   match.awaitingBowl = true;
   match.awaitingBat = false;
 
   // Announce the ball
-  await announceBall();
+  await announceBall(match);
 
   // Start turn timer
-  startTurnTimer("bowl");
-
-  // ⏱ Unlock at the end of the ball logic
-  // ⚠️ Important: unlock after ball is fully processed
-  // You can do this in your ball result handler:
-  // match.ballLocked = false;
+  startTurnTimer(match, "bowl");
 }
-  
+
+
+
 /* ================= HANDLE INPUT ================= */
 
 bot.on("text", async (ctx, next) => {
@@ -2080,15 +2217,14 @@ bot.on("text", async (ctx, next) => {
     return next();
   }
 
+  const match = getMatch(ctx);
+  if (!match) return;
 
   /* ================= GROUP BATTER INPUT ================= */
 
   if (ctx.chat.type !== "private") {
 
-    if (!match) return;
-
     if (match.phase !== "play") return;
-
     if (!match.awaitingBat) return;
 
     if (ctx.from.id !== match.striker)
@@ -2099,19 +2235,15 @@ bot.on("text", async (ctx, next) => {
     if (!/^[0-6]$/.test(text))
       return ctx.reply("❌ Send number between 0-6.");
 
-   
-
     match.batNumber = Number(text);
     match.awaitingBat = false;
 
-    clearTimers();
+    clearTimers(match);
 
-    return processBall();
+    return processBall(match);
   }
 
   /* ================= PRIVATE BOWLER INPUT ================= */
-
-  if (!match) return;
 
   if (match.phase !== "play") 
     return ctx.reply("⚠️ No active ball.");
@@ -2127,29 +2259,26 @@ bot.on("text", async (ctx, next) => {
   if (!/^[1-6]$/.test(text))
     return ctx.reply("❌ Send number between 1-6.");
 
-
-
   match.bowlNumber = Number(text);
   match.awaitingBowl = false;
   match.awaitingBat = true;
 
-  clearTimers();
+  clearTimers(match);
 
   await ctx.reply("✅ Ball submitted!");
 
-  const batterPing = `[🏏 ${getName(match.striker)}](tg://user?id=${match.striker})`;
+  const batterPing =
+    `[🏏 ${getName(match.striker)}](tg://user?id=${match.striker})`;
 
   const ballNumber = `${match.currentOver}.${match.currentBall + 1}`;
 
   await bot.telegram.sendMessage(
     match.groupId,
     `${batterPing}\n\n${randomBatterPrompt()}\n\n🎱 Ball: ${ballNumber}`,
-    {
-      parse_mode: "Markdown"
-    }
-);
+    { parse_mode: "Markdown" }
+  );
 
-  startTurnTimer("bat");
+  startTurnTimer(match, "bat");
 });
 
 
@@ -2159,15 +2288,17 @@ bot.on("text", async (ctx, next) => {
 async function processBall() {
 
   // 🔒 TRUE ATOMIC LOCK
-  if (match.ballLocked) return;
+  if (!match || match.ballLocked) return;
   match.ballLocked = true;
 
   try {
 
-    clearTimers();
+    clearTimers(match);
 
-    const bat = match.batNumber;
-    const bowl = match.bowlNumber;
+    const bat = Number(match.batNumber);
+    const bowl = Number(match.bowlNumber);
+
+    if (bat === null || bowl === null) return;
 
     // 🔄 Reset misses
     match.bowlerMissCount = 0;
@@ -2184,8 +2315,7 @@ async function processBall() {
 
       match.awaitingBat = true;
       startTurnTimer("bat");
-
-      return; // exit safely (finally will unlock)
+      return;
     }
 
     /* ================= INIT BATTER ================= */
@@ -2219,19 +2349,16 @@ async function processBall() {
       match.bowlerStats[match.bowler].wickets++;
       match.currentBall++;
 
-      match.overHistory[match.overHistory.length - 1]
-        ?.balls.push("W");
-
+      match.overHistory.at(-1)?.balls.push("W");
       match.currentPartnershipBalls++;
 
-      let line = (match.wicketStreak === 3)
-        ? randomLine("hattrick")
-        : randomLine("wicket");
+      const line =
+        match.wicketStreak === 3
+          ? randomLine("hattrick")
+          : randomLine("wicket");
 
-      // Commentary
-      await bot.telegram.sendMessage(match.groupId, `${line}`);
+      await bot.telegram.sendMessage(match.groupId, line);
 
-      // Partnership broken
       await bot.telegram.sendMessage(
         match.groupId,
         `🤝 Partnership Broken!
@@ -2242,13 +2369,11 @@ Balls: ${match.currentPartnershipBalls}`
       match.currentPartnershipRuns = 0;
       match.currentPartnershipBalls = 0;
 
-      // All out
       if (match.wickets >= match.maxWickets) {
         await endInnings();
         return;
       }
 
-      // Over completed?
       if (handleOverCompletion()) return;
 
       match.phase = "new_batter";
@@ -2261,11 +2386,10 @@ Balls: ${match.currentPartnershipBalls}`
       return;
     }
 
-    /* ================= RUNS ================= */
+    /* ================= RUNS (NEGATIVE ALLOWED) ================= */
 
-    match.score += bat;
+    match.score += bat;                 // ✅ negative runs allowed
     match.currentOverRuns += bat;
-
     match.currentPartnershipRuns += bat;
     match.currentPartnershipBalls++;
 
@@ -2273,9 +2397,7 @@ Balls: ${match.currentPartnershipBalls}`
     match.bowlerStats[match.bowler].runs += bat;
 
     match.currentBall++;
-
-    match.overHistory[match.overHistory.length - 1]
-      ?.balls.push(bat);
+    match.overHistory.at(-1)?.balls.push(bat);
 
     match.wicketStreak = 0;
 
@@ -2293,12 +2415,12 @@ Balls: ${match.currentPartnershipBalls}`
 
     await bot.telegram.sendMessage(
       match.groupId,
-      `${randomLine(bat)}`
+      randomLine(bat)
     );
 
     /* ================= STRIKE ROTATION ================= */
 
-    if ([1,3,5].includes(bat)) {
+    if ([1, 3, 5, -1, -3, -5].includes(bat)) { // optional: rotate on negative odd
       swapStrike();
     }
 
@@ -2308,7 +2430,7 @@ Balls: ${match.currentPartnershipBalls}`
       match.innings === 2 &&
       match.score > match.firstInningsScore
     ) {
-      await endMatchWithWinner(match.battingTeam);
+      await endInnings(match);
       return;
     }
 
@@ -2324,32 +2446,31 @@ Balls: ${match.currentPartnershipBalls}`
     console.error("processBall error:", err);
   } finally {
 
-    // 🔓 UNLOCK ONLY AFTER EVERYTHING FINISHES
+    // 🔓 UNLOCK AFTER COMPLETE
     match.ballLocked = false;
 
-    // 🔄 Reset inputs safely
     match.batNumber = null;
     match.bowlNumber = null;
   }
 }
 
+
 /* ================= END INNINGS ================= */
 
-function endInnings() {
+async function endInnings() {
 
- clearTimers();
- match.awaitingBat = false;
- match.awaitingBowl = false;
+  if (!match) return;
 
-  // 🥇 FIRST INNINGS
+  clearTimers(match);
+  match.awaitingBat = false;
+  match.awaitingBowl = false;
+
+  /* 🥇 FIRST INNINGS */
   if (match.innings === 1) {
 
     match.firstInningsScore = match.score;
 
-    // Lock state properly
     match.phase = "switch";
-    match.awaitingBat = false;
-    match.awaitingBowl = false;
     match.ballLocked = false;
 
     return bot.telegram.sendMessage(
@@ -2363,7 +2484,7 @@ Host type:
     );
   }
 
-  // 🥈 SECOND INNINGS RESULT
+  /* 🥈 SECOND INNINGS RESULT */
 
   if (match.score > match.firstInningsScore) {
     return endMatchWithWinner(match.battingTeam);
@@ -2373,88 +2494,88 @@ Host type:
     return endMatchWithWinner(match.bowlingTeam);
   }
 
-  bot.telegram.sendMessage(match.groupId, "🤝 Match Tied!");
+  await bot.telegram.sendMessage(match.groupId, "🤝 Match Tied!");
   return resetMatch();
 }
+
+
 /* ================= INNINGS SWITCH ================= */
 
 bot.command("inningsswitch", async (ctx) => {
 
-  // 🔎 Match exists?
-  if (!match || !match.groupId) {
+  const m = getMatch(ctx); // avoid shadowing global match
+
+  if (!m || !m.groupId) {
     return ctx.reply("⚠️ No active match.");
   }
 
-  // 🔐 Host check (using match.host)
-  if (String(ctx.from.id) !== String(match.host)) {
+  if (String(ctx.from.id) !== String(m.host)) {
     return ctx.reply("❌ Only the match host can switch innings.");
   }
 
-  // 🔄 Phase check
-  if (match.phase !== "switch") {
+  if (m.phase !== "switch") {
     return ctx.reply(
-      `⚠️ Cannot switch innings now.\nCurrent phase: ${match.phase}`
+      `⚠️ Cannot switch innings now.\nCurrent phase: ${m.phase}`
     );
   }
 
-  // 🏏 Move to 2nd innings
-  match.innings = 2;
+  /* 🔄 MOVE TO 2ND INNINGS */
+  m.innings = 2;
 
-  // 🔁 Swap teams
-  const tempTeam = match.battingTeam;
-  match.battingTeam = match.bowlingTeam;
-  match.bowlingTeam = tempTeam;
+  /* 🔁 SWAP TEAMS */
+  [m.battingTeam, m.bowlingTeam] =
+    [m.bowlingTeam, m.battingTeam];
 
-  // 🔁 Reset innings stats
-  match.score = 0;
-  match.wickets = 0;
-  match.currentOver = 0;
-  match.currentBall = 0;
-  match.currentOverNumber = 0;
-  match.currentPartnershipRuns = 0;
-  match.currentPartnershipBalls = 0;
-  match.currentOverRuns = 0;
-  match.wicketStreak = 0;
-  match.bowlerMissCount = 0;
-  match.batterMissCount = 0;
+  /* 🔁 RESET STATS */
+  m.score = 0;
+  m.wickets = 0;
+  m.currentOver = 0;
+  m.currentBall = 0;
+  m.currentOverNumber = 0;
+  m.currentPartnershipRuns = 0;
+  m.currentPartnershipBalls = 0;
+  m.currentOverRuns = 0;
+  m.wicketStreak = 0;
+  m.bowlerMissCount = 0;
+  m.batterMissCount = 0;
 
-  match.usedBatters = [];
-  match.striker = null;
-  match.nonStriker = null;
-  match.bowler = null;
-  match.lastBowler = null;
-  match.suspendedBowlers = {};
-  match.overHistory = [];
-  match.currentOverBalls = [];
-  match.awaitingBat = false;
-  match.awaitingBowl = false;
+  m.usedBatters = [];
+  m.striker = null;
+  m.nonStriker = null;
+  m.bowler = null;
+  m.lastBowler = null;
+  m.suspendedBowlers = {};
+  m.overHistory = [];
+  m.currentOverBalls = [];
+  m.awaitingBat = false;
+  m.awaitingBowl = false;
 
-  // 🟢 Start second innings properly
-  match.phase = "set_striker";
+  m.phase = "set_striker";
 
   return ctx.reply(
 `🔁 Innings Switched Successfully!
 
-🏏 Now Batting: ${match.battingTeam}
-🎯 Target: ${match.firstInningsScore + 1}
+🏏 Now Batting: ${m.battingTeam}
+🎯 Target: ${m.firstInningsScore + 1}
 
 Set STRIKER:
 /batter number`
   );
 });
 
+
 /* ================= DECLARE WINNER ================= */
 
-async function endMatchWithWinner(team) {
+async function endMatchWithWinner(match, team) {
+
+  if (!match) return;
 
   const winnerName =
-    team === "A"
-      ? match.teamAName
-      : match.teamBName;
+    team === "A" ? match.teamAName : match.teamBName;
 
   await bot.telegram.sendMessage(
     match.groupId,
-    `🏆 ${winnerName} Wins!
+`🏆 ${winnerName} Wins!
 
 📊 Final Score:
 Innings 1: ${match.firstInningsScore}
@@ -2462,37 +2583,42 @@ Innings 2: ${match.score}`
   );
 
   try {
-    // 🔹 Collect all players
+
     const teamAIds = match.teamA.map(p => p.id);
     const teamBIds = match.teamB.map(p => p.id);
 
-    // 🔹 Matches played
     const allPlayers = [...teamAIds, ...teamBIds];
 
-    for (const id of allPlayers) {
-      await User.updateOne(
-        { telegramId: id },
-        { $inc: { matchesPlayed: 1 } }
-      );
-    }
+    await Promise.all(
+      allPlayers.map(id =>
+        User.updateOne(
+          { telegramId: id },
+          { $inc: { matchesPlayed: 1 } }
+        )
+      )
+    );
 
-    // 🔹 Matches won
     const winners = team === "A" ? teamAIds : teamBIds;
 
-    for (const id of winners) {
-      await User.updateOne(
-        { telegramId: id },
-        { $inc: { matchesWon: 1 } }
-      );
-    }
+    await Promise.all(
+      winners.map(id =>
+        User.updateOne(
+          { telegramId: id },
+          { $inc: { matchesWon: 1 } }
+        )
+      )
+    );
 
   } catch (err) {
     console.error("Stats update error:", err);
   }
 
-  resetMatch();
-  
+  return resetMatch(match.groupId);;
 }
+
+
+/* ================= BOT SAFETY ================= */
+
 bot.catch((err, ctx) => {
   console.error("🤖 BOT ERROR:");
   console.error("Update Type:", ctx?.updateType);
@@ -2507,6 +2633,9 @@ bot.use(async (ctx, next) => {
   return next();
 });
 
+
+/* ================= START BOT ================= */
+
 (async () => {
   try {
     await bot.launch();
@@ -2516,6 +2645,9 @@ bot.use(async (ctx, next) => {
     process.exit(1);
   }
 })();
+
+
+/* ================= PROCESS HANDLERS ================= */
 
 process.once("SIGINT", () => {
   console.log("🛑 SIGINT received");
