@@ -462,19 +462,31 @@ bot.command("add", async (ctx) => {
 
     if (input.startsWith("@")) {
 
-  input = input.replace("@","").toLowerCase();
+    if (input.startsWith("@")) {
 
-  const user = await User.findOne({ username: input });
+     input = input.replace("@","").toLowerCase();
 
-  if (user) {
-    userId = Number(user.telegramId);
-  }
+     const user = await User.findOne({ username: input });
 
-  if (!userId)
-    return ctx.reply("❌ User not found. Ask them to start bot in DM.");
+     if (user) {
+        userId = Number(user.telegramId);
+     }
 
-  name = `@${input}`;
-}
+     if (!userId) {
+        return ctx.reply("❌ User not found. Ask them to start bot in DM.");
+     }
+
+     name = `@${input}`;
+
+    } else if (!isNaN(input)) {
+
+        userId = Number(input);
+        name = input;
+
+    } else {
+
+         return ctx.reply("❌ Invalid input.");
+    }
 
     if (!userId)
       return ctx.reply("❌ User not found. Ask them to start bot in DM.");
