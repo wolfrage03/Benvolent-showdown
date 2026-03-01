@@ -478,55 +478,36 @@ bot.command("add", async (ctx) => {
   }
 
   /* ========= ✅ USERNAME / ID METHOD ========= */
+else {
 
-  else {
+  if (args.length < 3)
+    return ctx.reply("Usage:\n/add A @username\n/add B userID\nReply + /add A");
 
-    if (args.length < 3)
-      return ctx.reply("Usage:\n/add A @username\n/add B userID\nReply + /add A");
+  let input = args[2];
+  input = input.trim();
 
-    let input = args[2];
+  if (input.startsWith("@")) {
 
+    input = input.replace("@", "").toLowerCase();
 
-    if (input.startsWith("@")) {
+    const user = await User.findOne({ username: input });
 
-     input = input.replace("@","").toLowerCase();
-
-     const user = await User.findOne({ username: input });
-
-     if (user) {
-        userId = Number(user.telegramId);
-     }
-
-     if (!userId) {
-        return ctx.reply("❌ User not found. Ask them to start bot in DM.");
-     }
-
-     name = `@${input}`;
-
-    } else if (!isNaN(input)) {
-
-        userId = Number(input);
-        name = input;
-
-    } else {
-
-         return ctx.reply("❌ Invalid input.");
-    }
-
-    if (!userId)
+    if (!user)
       return ctx.reply("❌ User not found. Ask them to start bot in DM.");
-      name = `@${input}`;
-    }
 
-    else if (!isNaN(input)) {
-      userId = Number(input);
-      name = `User_${input}`;
-    }
+    userId = Number(user.telegramId);
+    name = `@${input}`;
 
-    else {
-      return ctx.reply("❌ Invalid format.");
-    }
+  } else if (!isNaN(input)) {
+
+    userId = Number(input);
+    name = `User_${input}`;
+
+  } else {
+
+    return ctx.reply("❌ Invalid format.");
   }
+}
 
   /* ========= DUPLICATE CHECK ========= */
 
