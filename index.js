@@ -68,7 +68,7 @@ bot.start(async (ctx, next) => {
 
 
 
-let match;
+let match = null;
 
 function resetMatch() {
 
@@ -191,20 +191,23 @@ function getName(id) {
 }
 
 function clearTimers() {
+  if (!match) return;
+
   if (match.warning30) {
     clearTimeout(match.warning30);
     match.warning30 = null;
   }
+
   if (match.warning10) {
     clearTimeout(match.warning10);
     match.warning10 = null;
   }
+
   if (match.ballTimer) {
     clearTimeout(match.ballTimer);
     match.ballTimer = null;
   }
 }
-
 function bowlDMButton() {
   return Markup.inlineKeyboard([
     [
