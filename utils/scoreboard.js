@@ -1,4 +1,5 @@
-const { getMatch } = require("../utils/match");
+const bot = require("../bot");
+const { getMatch } = require("../utils/matchStore"); // 🔥 FIXED PATH
 const { getName } = require("../utils/helpers");
 
 /* ================= LIVE SCORE ================= */
@@ -17,6 +18,7 @@ function getLiveScore(match) {
   const totalBalls = totalOvers * 6;
 
   const ballsLeft =
+   
     Math.max(totalBalls - ballsBowled, 0);
 
   const runRate =
