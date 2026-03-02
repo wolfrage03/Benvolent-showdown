@@ -5,7 +5,7 @@ const { getMatch } = require("../engine/matchEngine");
 const { getRandomTeams, getPlayerTeam, getDisplayName } =
   require("../utils/helpers");
 
-module.exports = function registerHost(bot) {
+function registerHost(bot) {
 
   /* ================= SELECT HOST ================= */
 
