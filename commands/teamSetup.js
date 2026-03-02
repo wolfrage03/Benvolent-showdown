@@ -1,20 +1,14 @@
 const { Markup } = require("telegraf");
 const User = require("../models/User");
+const { getMatch, isHost } = require("../engine/matchEngine");
 
-module.exports = function registerTeamSetup(bot, deps) {
-
-  const {
-    getMatch,
-    isHost,
-    matches,
-    playerActiveMatch
-  } = deps;
+module.exports = function registerTeamSetup(bot) {
 
   /* ================= ADD PLAYER ================= */
 
   bot.command("add", async (ctx) => {
 
-    const match = getMatch(ctx);
+    const match = getMatch(ctx.chat.id);
     if (!match || ctx.chat.id !== match.groupId)
       return ctx.reply("⚠️ No active match.");
 
@@ -22,8 +16,9 @@ module.exports = function registerTeamSetup(bot, deps) {
       return ctx.reply("❌ Only host can add players.");
 
     const args = ctx.message.text.trim().split(/\s+/);
-    if (args.length < 2)
-      return ctx.reply("Usage:\n/add A @username\n/add B userID\nReply + /add A");
+
+    if (args.length < 3)
+      return ctx.reply("Usage:\n/add A @username\n/add B userID\nOr reply to user + /add A");
 
     const team = args[1].toUpperCase();
     if (!["A","B"].includes(team))
@@ -32,14 +27,12 @@ module.exports = function registerTeamSetup(bot, deps) {
     let userId;
     let name;
 
-    /* ===== REPLY METHOD ===== */
-
     if (ctx.message.reply_to_message) {
 
       const repliedUser = ctx.message.reply_to_message.from;
 
       if (repliedUser.is_bot)
-        return ctx.reply("❌ Cannot add a bot.");
+        return ctx.reply("❌ Cannot add bot.");
 
       userId = repliedUser.id;
       name = repliedUser.username
@@ -48,10 +41,7 @@ module.exports = function registerTeamSetup(bot, deps) {
 
     } else {
 
-      if (args.length < 3)
-        return ctx.reply("Usage:\n/add A @username\n/add B userID");
-
-      const input = args[2].trim();
+      const input = args[2];
 
       if (input.startsWith("@")) {
 
@@ -92,7 +82,7 @@ module.exports = function registerTeamSetup(bot, deps) {
 
   bot.command("remove", (ctx) => {
 
-    const match = getMatch(ctx);
+    const match = getMatch(ctx.chat.id);
     if (!match)
       return ctx.reply("⚠️ No active match.");
 
@@ -119,10 +109,6 @@ module.exports = function registerTeamSetup(bot, deps) {
 
     if (match.captains?.[team] === removed.id)
       match.captains[team] = null;
-
-    if (Array.isArray(match.usedBatters))
-      match.usedBatters =
-        match.usedBatters.filter(id => id !== removed.id);
 
     return ctx.reply(`🚫 ${removed.name} removed from Team ${team}`);
   });
