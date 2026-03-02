@@ -1,18 +1,34 @@
 require("dotenv").config();
 
+/* ================= ENV CHECK ================= */
+
 if (!process.env.BOT_TOKEN) {
   console.error("❌ BOT_TOKEN missing in .env");
   process.exit(1);
 }
 
+/* ================= DB ================= */
+
 const connectDB = require("./database");
-connectDB().catch(err => {
-  console.error("❌ Database connection failed:", err);
-  process.exit(1);
-});
+
+connectDB()
+  .then(() => console.log("✅ Database connected"))
+  .catch(err => {
+    console.error("❌ Database connection failed:", err);
+    process.exit(1);
+  });
+
+/* ================= BOT INIT ================= */
 
 const { Telegraf } = require("telegraf");
 const bot = new Telegraf(process.env.BOT_TOKEN);
+
+/* ================= GLOBAL STATE ================= */
+/* 👉 SINGLE SOURCE OF TRUTH */
+
+const match = require("./state/matchState");
+
+/* ================= MODELS ================= */
 
 const User = require("./models/User");
 
@@ -53,6 +69,7 @@ bot.start(async (ctx, next) => {
     );
 
     console.log("✅ DM user saved:", username?.toLowerCase());
+
   } catch (err) {
     console.error("❌ DM user save error:", err);
   }
@@ -63,23 +80,19 @@ bot.start(async (ctx, next) => {
 });
 
 /* ================= REGISTER MODULES ================= */
+/* 👉 Pass bot + match so all files share SAME state */
 
-require("./commands/stats")(bot);
+require("./commands/stats")(bot, match);
 
-const registerLifecycle = require("./commands/lifecycle");
-registerLifecycle(bot);
+require("./commands/lifecycle")(bot, match);
 
-const registerHost = require("./commands/host");
-registerHost(bot);
+require("./commands/host")(bot, match);
 
-const registerTeamSetup = require("./commands/teamSetup");
-registerTeamSetup(bot);
+require("./commands/teamSetup")(bot, match);
 
-const registerToss = require("./commands/toss");
-registerToss(bot);
+require("./commands/toss")(bot, match);
 
-const registerCaptain = require("./commands/captain");
-registerCaptain(bot);
+require("./commands/captain")(bot, match);
 
 /* ================= ERROR HANDLING ================= */
 
@@ -89,6 +102,8 @@ bot.catch((err, ctx) => {
   console.error("From:", ctx?.from?.id);
   console.error("Error:", err);
 });
+
+/* ================= CALLBACK SAFETY ================= */
 
 bot.use(async (ctx, next) => {
   if (ctx.callbackQuery) {
