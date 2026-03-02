@@ -1,27 +1,20 @@
+const { Markup } = require("telegraf");
 const { getMatch } = require("../engine/matchEngine");
 
 module.exports = function registerToss(bot) {
 
+  /* ================= TOSS COMMAND ================= */
+
   bot.command("toss", async (ctx) => {
 
     const match = getMatch(ctx.chat.id);
-    if (!match) return;
-
-    if (ctx.chat.id !== match.groupId)
-      return ctx.reply("⚠️ No active match.");
+    if (!match) return ctx.reply("⚠️ No active match.");
 
     if (match.phase !== "toss")
       return ctx.reply("⚠️ Toss not allowed now.");
 
-  /* ================= START TOSS ================= */
-
-  function startToss(match) {
-
-    if (!match) return;
-
-    match.phase = "toss";
-
-    return bot.telegram.sendMessage(
+    // Ask captains to choose
+    await bot.telegram.sendMessage(
       match.groupId,
       "🎲 Toss Time!\nCaptain choose Odd or Even:",
       Markup.inlineKeyboard([
@@ -31,7 +24,7 @@ module.exports = function registerToss(bot) {
         ]
       ])
     );
-  }
+  });
 
   /* ================= ODD / EVEN ================= */
 
@@ -47,12 +40,18 @@ module.exports = function registerToss(bot) {
     if (![captainA, captainB].includes(ctx.from.id))
       return ctx.answerCbQuery("Only captains can choose.");
 
-    const choice =
-      ctx.callbackQuery.data === "toss_odd" ? "odd" : "even";
+    const choice = ctx.callbackQuery.data === "toss_odd" ? "odd" : "even";
 
-    const tossNumber = Math.floor(Math.random() * 6) + 1;
-    const result =
-      tossNumber % 2 === 0 ? "even" : "odd";
+    await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
+    await ctx.answerCbQuery();
+
+    /* 🎲 TELEGRAM DICE ROLL */
+    const diceMsg = await bot.telegram.sendDice(match.groupId, {
+      emoji: "🎲"
+    });
+
+    const diceValue = diceMsg.dice.value; // 1–6
+    const result = diceValue % 2 === 0 ? "even" : "odd";
 
     const chooser = ctx.from.id;
 
@@ -66,15 +65,12 @@ module.exports = function registerToss(bot) {
     match.tossWinner = tossWinner;
     match.phase = "batbowl";
 
-    await ctx.editMessageReplyMarkup({ inline_keyboard: [] }).catch(() => {});
-    await ctx.answerCbQuery();
-
     const winnerTeam =
       tossWinner === captainA ? "A" : "B";
 
     await bot.telegram.sendMessage(
       match.groupId,
-`🎲 Toss Number: ${tossNumber} (${result})
+`🎲 Dice Roll: ${diceValue} (${result})
 
 🏆 Toss Winner: ${
   winnerTeam === "A"
@@ -92,7 +88,7 @@ Choose Bat or Bowl:`,
     );
   });
 
-  /* ================= BAT / BOWL DECISION ================= */
+  /* ================= BAT / BOWL ================= */
 
   bot.action(["decision_bat", "decision_bowl"], async (ctx) => {
 
@@ -105,15 +101,12 @@ Choose Bat or Bowl:`,
       return ctx.answerCbQuery("Only toss winner decides.");
 
     const decision =
-      ctx.callbackQuery.data === "decision_bat"
-        ? "bat"
-        : "bowl";
+      ctx.callbackQuery.data === "decision_bat" ? "bat" : "bowl";
 
     const tossWinnerTeam =
       ctx.from.id === match.captains.A ? "A" : "B";
 
-    const otherTeam =
-      tossWinnerTeam === "A" ? "B" : "A";
+    const otherTeam = tossWinnerTeam === "A" ? "B" : "A";
 
     if (decision === "bat") {
       match.battingTeam = tossWinnerTeam;
@@ -123,6 +116,7 @@ Choose Bat or Bowl:`,
       match.battingTeam = otherTeam;
     }
 
+    /* reset innings */
     match.innings = 1;
     match.score = 0;
     match.wickets = 0;
@@ -149,5 +143,4 @@ Host set overs:
     );
   });
 
-  return { startToss };
 };
