@@ -5,7 +5,7 @@ const {
   getMatch: getMatchFromStorage,
   resetMatch: resetMatchInStorage,
   clearTimers
-} = require("../storage/matchStorage");
+} = require("../storage/matchStore");
 
 /* ================= GET MATCH ================= */
 
