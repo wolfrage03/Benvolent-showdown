@@ -81,6 +81,7 @@ bot.start(async (ctx, next) => {
 
 /* ================= REGISTER MODULES ================= */
 /* 👉 Pass bot + match so all files share SAME state */
+require("./commands/teamManagement")(bot, match);
 
 require("./commands/stats")(bot, match);
 
