@@ -1,6 +1,5 @@
 // ================= MATCH STORAGE =================
 
-const matches = new Map();              // groupId → match
 const playerActiveMatch = new Map();    // userId → groupId
 
 function getMatch(ctx) {
