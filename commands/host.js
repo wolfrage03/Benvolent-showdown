@@ -1,9 +1,13 @@
-const { getMatch, matches } = require("../utils/match");
-const { getRandomTeams, getPlayerTeam, getDisplayName } = require("../utils/helpers");
+// commands/host.js
 
-/* ================= REGISTER ================= */
+const { Markup } = require("telegraf");
+const { getMatch } = require("../engine/matchEngine");
+const { getRandomTeams, getPlayerTeam, getDisplayName } =
+  require("../utils/helpers");
 
-function registerHost(bot) {
+module.exports = function registerHost(bot) {
+
+  /* ================= SELECT HOST ================= */
 
   bot.action("select_host", (ctx) => selectHost(ctx));
   bot.command("changehost", (ctx) => changeHost(ctx));
