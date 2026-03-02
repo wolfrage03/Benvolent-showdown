@@ -1,8 +1,17 @@
-const { Markup } = require("telegraf");
+const { getMatch } = require("../engine/matchEngine");
 
-module.exports = function registerToss(bot, deps) {
+module.exports = function registerToss(bot) {
 
-  const { getMatch } = deps;
+  bot.command("toss", async (ctx) => {
+
+    const match = getMatch(ctx.chat.id);
+    if (!match) return;
+
+    if (ctx.chat.id !== match.groupId)
+      return ctx.reply("⚠️ No active match.");
+
+    if (match.phase !== "toss")
+      return ctx.reply("⚠️ Toss not allowed now.");
 
   /* ================= START TOSS ================= */
 
