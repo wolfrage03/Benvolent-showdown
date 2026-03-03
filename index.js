@@ -24,24 +24,35 @@ const { Telegraf } = require("telegraf");
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
 /* ================= REGISTER BOT COMMANDS ================= */
-/* 🔥 THIS MAKES COMMANDS APPEAR IN "/" MENU */
 
-(async () => {
+async function registerCommands() {
   try {
-    await bot.telegram.setMyCommands([
-      { command: "createteam", description: "Create teams (Group only)" },
+    const commands = [
+      { command: "startmatch", description: "Start new match (Host only)" },
+      { command: "endmatch", description: "End current match" },
+      { command: "createteam", description: "Create teams" },
       { command: "joina", description: "Join Team A" },
       { command: "joinb", description: "Join Team B" },
       { command: "changeteam", description: "Change player team" },
       { command: "choosecap", description: "Choose captain" },
       { command: "players", description: "View players list" }
-    ]);
+    ];
+
+    // Register globally
+    await bot.telegram.setMyCommands(commands);
+
+    // Register specifically for groups
+    await bot.telegram.setMyCommands(commands, {
+      scope: { type: "all_group_chats" }
+    });
 
     console.log("✅ Bot commands registered");
   } catch (err) {
     console.error("❌ Failed to register commands:", err);
   }
-})();
+}
+
+registerCommands();
 
 /* ================= GLOBAL STATE ================= */
 
@@ -68,7 +79,6 @@ let BOT_USERNAME = null;
 /* ================= PRIVATE START ================= */
 
 bot.start(async (ctx, next) => {
-
   if (ctx.chat.type !== "private") return next();
 
   try {
@@ -88,7 +98,6 @@ bot.start(async (ctx, next) => {
     );
 
     console.log("✅ DM user saved:", username?.toLowerCase());
-
   } catch (err) {
     console.error("❌ DM user save error:", err);
   }
@@ -97,7 +106,6 @@ bot.start(async (ctx, next) => {
     "✅ Bot connected.\n\nUse match commands inside group.\nWhen selected as bowler, send your number (1-6) here."
   );
 });
-
 
 /* ================= REGISTER MODULES ================= */
 

@@ -5,7 +5,7 @@ module.exports = (bot, match) => {
   /* ================= HELPERS ================= */
 
   function getMatch(ctx) {
-    return match.matches.get(ctx.chat.id);
+    return match.matches.get(ctx.chat.id.toString());
   }
 
   function isHost(matchData, userId) {
@@ -18,6 +18,9 @@ module.exports = (bot, match) => {
 
   bot.command("createteam", (ctx) => {
 
+    if (ctx.chat.type === "private")
+      return ctx.reply("❌ Use this command in group.");
+
     const m = getMatch(ctx);
     if (!m) return ctx.reply("⚠️ No active match.");
 
@@ -27,17 +30,17 @@ module.exports = (bot, match) => {
     if (!["team_create", "captain", "join"].includes(m.phase))
       return ctx.reply("⚠️ Cannot create teams at this stage.");
 
-    if (!m.teamA) m.teamA = [];
-    if (!m.teamB) m.teamB = [];
-    if (!m.captains) m.captains = { A: null, B: null };
+    m.teamA ??= [];
+    m.teamB ??= [];
+    m.captains ??= { A: null, B: null };
 
     m.phase = "join";
 
     ctx.reply(
 `🏏 Teams Selected!
 
-🔵 ${m.teamAName} (A)
-🔴 ${m.teamBName} (B)
+🔵 ${m.teamAName || "Team A"} (A)
+🔴 ${m.teamBName || "Team B"} (B)
 
 Players join using:
 👉 /joina
@@ -64,7 +67,6 @@ Host use /choosecap`
 
     }, 60000);
   });
-
 
   /* ================= JOIN TEAM A ================= */
 
@@ -101,7 +103,6 @@ Host use /choosecap`
     ctx.reply(`✅ ${player.name} joined Team A`);
   });
 
-
   /* ================= JOIN TEAM B ================= */
 
   bot.command("joinb", ctx => {
@@ -136,7 +137,6 @@ Host use /choosecap`
 
     ctx.reply(`✅ ${player.name} joined Team B`);
   });
-
 
   /* ================= CHANGE TEAM ================= */
 
@@ -186,7 +186,6 @@ Host use /choosecap`
     );
   });
 
-
   /* ================= CONFIRM TEAM CHANGE ================= */
 
   bot.action("confirm_team_change", async (ctx) => {
@@ -208,7 +207,6 @@ Host use /choosecap`
     await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
     await ctx.reply(`✅ ${player.name} moved to Team ${targetTeam}`);
   });
-
 
   /* ================= CANCEL TEAM CHANGE ================= */
 
