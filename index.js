@@ -98,31 +98,6 @@ bot.start(async (ctx, next) => {
   );
 });
 
-/* ================= GROUP SAFETY MIDDLEWARE ================= */
-/* 🔥 Block match commands in private */
-
-bot.use(async (ctx, next) => {
-
-  const groupOnlyCommands = [
-    "createteam",
-    "joina",
-    "joinb",
-    "changeteam",
-    "choosecap",
-    "players"
-  ];
-
-  if (ctx.message?.text?.startsWith("/")) {
-
-    const cmd = ctx.message.text.split(" ")[0].replace("/", "").split("@")[0];
-
-    if (groupOnlyCommands.includes(cmd) && ctx.chat.type === "private") {
-      return ctx.reply("❌ Use this command inside the match group.");
-    }
-  }
-
-  return next();
-});
 
 /* ================= REGISTER MODULES ================= */
 
