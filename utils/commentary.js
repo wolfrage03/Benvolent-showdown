@@ -1,6 +1,10 @@
-/* ================= COMMENTARY ENGINE ================= */
+
+
+// ================= COMMENTARY DATA =================
+
 
 const commentary = {
+
   0: [
     "Tight as a drum! No run.",
     "Beaten! Nothing off that delivery.",
@@ -8,6 +12,7 @@ const commentary = {
     "Pressure building… dot ball!",
     "Right on the money, no scoring opportunity."
   ],
+
   1: [
     "Just a gentle push for one.",
     "Quick single taken!",
@@ -15,6 +20,7 @@ const commentary = {
     "Rotating the strike nicely.",
     "Smart cricket — keeps the scoreboard ticking."
   ],
+
   2: [
     "Placed beautifully — they’ll come back for two!",
     "Good running between the wickets.",
@@ -22,6 +28,7 @@ const commentary = {
     "Excellent awareness — two more added.",
     "They hustle back for the second!"
   ],
+
   3: [
     "Into the deep — they’ll get three!",
     "Superb running, that’s three all the way.",
@@ -29,6 +36,7 @@ const commentary = {
     "Great placement and even better running!",
     "Turning ones into threes — brilliant effort."
   ],
+
   4: [
     "Cracked away! That’s four!",
     "Beautifully timed — races to the boundary!",
@@ -36,6 +44,7 @@ const commentary = {
     "Threaded the gap perfectly!",
     "Pure class — boundary!"
   ],
+
   5: [
     "Overthrows! That’s five runs gifted!",
     "Misfield and they’ll get five!",
@@ -43,6 +52,7 @@ const commentary = {
     "That’s costly — five to the total!",
     "Extra runs courtesy of an overthrow!"
   ],
+
   6: [
     "That’s massive! SIX!",
     "High and handsome — out of the park!",
@@ -50,6 +60,7 @@ const commentary = {
     "What a strike! Maximum!",
     "That’s gone into the stands!"
   ],
+
   wicket: [
     "Cleaned him up!",
     "Gone! Big breakthrough!",
@@ -57,6 +68,7 @@ const commentary = {
     "What a delivery — timber!",
     "That’s a huge wicket at this stage!"
   ],
+
   hattrick: [
     "Three in three! Unbelievable!",
     "That’s a hattrick! Magical spell!",
@@ -64,6 +76,7 @@ const commentary = {
     "What a moment — hattrick hero!",
     "Hattrick ball… and he’s done it!"
   ],
+
   maiden: [
     "Maiden over! Absolute control.",
     "Six balls, no runs — brilliant bowling.",
@@ -73,15 +86,8 @@ const commentary = {
   ]
 };
 
-/* ================= RANDOM LINE ================= */
 
-function randomLine(type) {
-  const list = commentary[type];
-  if (!list) return "";
-  return list[Math.floor(Math.random() * list.length)];
-}
-
-/* ================= PROMPTS ================= */
+// ================= PROMPTS =================
 
 const bowlingPrompts = [
   "🎯 Bowl now!\nType a number between 1 and 6.",
@@ -100,11 +106,6 @@ const bowlingPrompts = [
   "🧨 Let’s see if you can explode the stumps!\nEnter your number."
 ];
 
-function randomBowlingPrompt() {
-  return bowlingPrompts[
-    Math.floor(Math.random() * bowlingPrompts.length)
-  ];
-}
 
 const batterPrompts = [
   "🏏 Batter’s Turn!\nSend your number (0–6) now!",
@@ -123,14 +124,89 @@ const batterPrompts = [
   "⚔️ Battle in progress!\nBatter, send 0–6."
 ];
 
+
+// ================= TEAM NAMES =================
+
+const teams = [
+  "Mumbai Indians",
+  "Chennai Super Kings",
+  "Royal Challengers Bengaluru",
+  "Kolkata Knight Riders",
+  "Rajasthan Royals",
+  "Delhi Capitals",
+  "Sunrisers Hyderabad",
+  "Gujarat Titans",
+  "Sydney Sixers",
+  "Perth Scorchers",
+  "Melbourne Stars",
+  "Brisbane Heat",
+  "Oval Invincibles",
+  "Southern Brave",
+  "Manchester Originals",
+  "London Spirit",
+  "Paarl Royals",
+  "Guyana Amazon Warriors",
+  "Barbados Royals",
+  "Seattle Orcas",
+  "San Francisco Unicorns",
+  "Cursed Spirits",
+  "Gojo Infinity",
+  "Straw Hat Raiders",
+  "Red Hair Pirates",
+  "Hidden Leaf Legends",
+  "Akatsuki Storm",
+  "Demon Slayers XI",
+  "Hashira Hurricanes",
+  "Saiyan Warriors",
+  "Z Fighters XI",
+  "Blade Breakers",
+  "Dragon Emperor XI",
+  "Phantom Troupe",
+  "Nen Masters",
+  "State Alchemists",
+  "Elric Brothers XI",
+  "Titan Shifters",
+  "Survey Corps Strikers",
+  "Soul Reapers XI",
+  "Gotei 13 Warriors",
+  "Hero Academia United",
+  "Plus Ultra Strikers",
+  "Blue Lock Strikers",
+  "Egoist XI",
+  "Hero Association",
+  "Kira Dominion",
+  "Shinigami Reign",
+  "Karasuno Crows",
+  "Nekoma Cats"
+];
+
+// ================= HELPERS =================
+
+function randomLine(type) {
+  const list = commentary[type];
+  return list[Math.floor(Math.random() * list.length)];
+}
+
+function randomBowlingPrompt() {
+  return bowlingPrompts[
+    Math.floor(Math.random() * bowlingPrompts.length)
+  ];
+}
+
 function randomBatterPrompt() {
   return batterPrompts[
     Math.floor(Math.random() * batterPrompts.length)
   ];
 }
 
+function getRandomTeams() {
+  const shuffled = [...teams].sort(() => 0.5 - Math.random());
+  return shuffled.slice(0, 2);
+}
+
 module.exports = {
   randomLine,
   randomBowlingPrompt,
-  randomBatterPrompt
+  randomBatterPrompt,
+  getRandomTeams
 };

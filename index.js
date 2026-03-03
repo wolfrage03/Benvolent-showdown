@@ -1,161 +1,79 @@
 require("dotenv").config();
 
-/* ================= ENV CHECK ================= */
-
 if (!process.env.BOT_TOKEN) {
   console.error("❌ BOT_TOKEN missing in .env");
   process.exit(1);
 }
 
-/* ================= DB ================= */
-
+// ================= DATABASE =================
 const connectDB = require("./database");
+connectDB().catch(err => {
+  console.error("❌ Database connection failed:", err);
+  process.exit(1);
+});
 
-connectDB()
-  .then(() => console.log("✅ Database connected"))
-  .catch(err => {
-    console.error("❌ Database connection failed:", err);
-    process.exit(1);
-  });
+// ================= BOT INIT =================
+const bot = require("./config/bot");
 
-/* ================= BOT INIT ================= */
+// ================= HELPERS / FEATURES =================
+const engine = require("./features/game/engine");
+const announcer = require("./features/game/announcer");
+const helpers = require("./utils/helpers");
 
-const { Telegraf } = require("telegraf");
-const bot = new Telegraf(process.env.BOT_TOKEN);
+// Active matches store (can be an in-memory object or loaded from DB)
+const matches = require("./features/game/matchData"); 
 
-/* ================= REGISTER BOT COMMANDS ================= */
+// ================= REGISTER COMMANDS =================
+require("./features/team/teamCommands")(bot, matches, announcer, helpers);
+require("./features/match/matchCommands")(bot, matches, announcer, helpers, engine);
+require("./features/game/gameCommands")(bot, matches, announcer, helpers, engine);
 
-async function registerCommands() {
-  try {
-    const commands = [
-      { command: "startmatch", description: "Start new match (Host only)" },
-      { command: "endmatch", description: "End current match" },
-      { command: "createteam", description: "Create teams" },
-      { command: "joina", description: "Join Team A" },
-      { command: "joinb", description: "Join Team B" },
-      { command: "changeteam", description: "Change player team" },
-      { command: "choosecap", description: "Choose captain" },
-      { command: "players", description: "View players list" }
-    ];
+// ================= BALL PROCESSING / ANNOUNCEMENTS =================
+// This should run inside game logic, not on global scope.
+// Example: when a player submits a ball
+async function handleBall(matchId, batNumber, bowlNumber) {
+  const match = matches[matchId];
+  if (!match) return;
 
-    // Register globally
-    await bot.telegram.setMyCommands(commands);
+  // Process ball
+  const result = engine.processBall(match, batNumber, bowlNumber);
 
-    // Register specifically for groups
-    await bot.telegram.setMyCommands(commands, {
-      scope: { type: "all_group_chats" }
-    });
+  // Announce result
+  await announcer.announceScore(bot, match, helpers);
 
-    console.log("✅ Bot commands registered");
-  } catch (err) {
-    console.error("❌ Failed to register commands:", err);
+  // Check for innings switch
+  if (match.phase === "switch") {
+    await announcer.announceInningsSwitch(bot, match);
   }
+
+  // Check for game end
+  if (match.phase === "end") {
+    await announcer.announceWinner(bot, match);
+  }
+
+  return result;
 }
 
-registerCommands();
+// ================= LAUNCH BOT =================
+bot.launch()
+  .then(() => console.log("🚀 Bot started"))
+  .catch(err => console.error("❌ Bot failed:", err));
 
-/* ================= GLOBAL STATE ================= */
-
-const match = require("./state/matchState");
-
-/* ================= MODELS ================= */
-
-const User = require("./models/User");
-
-/* ================= BOT USERNAME ================= */
-
-let BOT_USERNAME = null;
-
-(async () => {
-  try {
-    const me = await bot.telegram.getMe();
-    BOT_USERNAME = me.username;
-    console.log("🤖 Bot username:", BOT_USERNAME);
-  } catch (err) {
-    console.error("❌ Failed to fetch bot username:", err);
-  }
-})();
-
-/* ================= PRIVATE START ================= */
-
-bot.start(async (ctx, next) => {
-  if (ctx.chat.type !== "private") return next();
-
-  try {
-    const { id, username, first_name, last_name } = ctx.from;
-
-    await User.updateOne(
-      { telegramId: String(id) },
-      {
-        $set: {
-          telegramId: String(id),
-          username: username?.toLowerCase(),
-          firstName: first_name,
-          lastName: last_name
-        }
-      },
-      { upsert: true }
-    );
-
-    console.log("✅ DM user saved:", username?.toLowerCase());
-  } catch (err) {
-    console.error("❌ DM user save error:", err);
-  }
-
-  await ctx.reply(
-    "✅ Bot connected.\n\nUse match commands inside group.\nWhen selected as bowler, send your number (1-6) here."
-  );
+// ================= PROCESS HANDLERS =================
+process.once("SIGINT", () => {
+  console.log("🛑 SIGINT received");
+  bot.stop("SIGINT");
 });
 
-/* ================= REGISTER MODULES ================= */
-
-require("./commands/teamManagement")(bot, match);
-require("./commands/stats")(bot, match);
-require("./commands/lifecycle")(bot, match);
-require("./commands/host")(bot, match);
-require("./commands/teamSetup")(bot, match);
-require("./commands/toss")(bot, match);
-require("./commands/captain")(bot, match);
-
-/* ================= CALLBACK SAFETY ================= */
-
-bot.use(async (ctx, next) => {
-  if (ctx.callbackQuery) {
-    try { await ctx.answerCbQuery(); } catch {}
-  }
-  return next();
+process.once("SIGTERM", () => {
+  console.log("🛑 SIGTERM received");
+  bot.stop("SIGTERM");
 });
 
-/* ================= ERROR HANDLING ================= */
-
-bot.catch((err, ctx) => {
-  console.error("🤖 BOT ERROR:");
-  console.error("Update Type:", ctx?.updateType);
-  console.error("From:", ctx?.from?.id);
-  console.error("Error:", err);
-});
-
-/* ================= START BOT ================= */
-
-(async () => {
-  try {
-    await bot.launch();
-    console.log("🚀 Bot started successfully");
-  } catch (err) {
-    console.error("❌ Bot failed to start:", err);
-    process.exit(1);
-  }
-})();
-
-/* ================= PROCESS HANDLERS ================= */
-
-process.once("SIGINT", () => bot.stop("SIGINT"));
-process.once("SIGTERM", () => bot.stop("SIGTERM"));
-
-process.on("unhandledRejection", err => {
+process.on("unhandledRejection", (err) => {
   console.error("❌ UNHANDLED REJECTION:", err);
 });
 
-process.on("uncaughtException", err => {
+process.on("uncaughtException", (err) => {
   console.error("❌ UNCAUGHT EXCEPTION:", err);
 });
