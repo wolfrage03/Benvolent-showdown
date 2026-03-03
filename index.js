@@ -127,7 +127,6 @@ bot.use(async (ctx, next) => {
 /* ================= REGISTER MODULES ================= */
 
 require("./commands/teamManagement")(bot, match);
-require("./team")(bot, match);
 require("./commands/stats")(bot, match);
 require("./commands/lifecycle")(bot, match);
 require("./commands/host")(bot, match);
