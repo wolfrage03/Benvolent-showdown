@@ -15,44 +15,68 @@ connectDB().catch(err => {
 // ================= BOT INIT =================
 const bot = require("./config/bot");
 
-// ================= HELPERS / FEATURES =================
-const engine = require("./features/game/engine");
-const announcer = require("./features/game/announcer");
-const helpers = require("./utils/helpers");
+// ================= CORE =================
+const engine = require("./core/engine");                     // core game logic
+const matchManager = require("./core/matchManager");         // optional
+const timerManager = require("./core/timerManager");         // optional
 
-// Active matches store (can be an in-memory object or loaded from DB)
-const matches = require("./features/game/matchData"); 
+// ================= FEATURES =================
+// Game
+const announcer = require("./features/game/announcer");     // announcer functions
+const gameService = require("./features/game/gameService"); // game services / logic
+
+// Team & Match
+const teamCommands = require("./features/team/teamCommands");
+const matchCommands = require("./features/match/matchCommands");
+const gameCommands = require("./features/game/gameCommands");
+
+// Stats
+const statsCommands = require("./features/stats/stats");    // stats commands if any
+
+// ================= MODELS =================
+const PlayerStats = require("./models/PlayerStats");
+const User = require("./models/User");
+
+// ================= UTILS =================
+const helpers = require("./utils/formatters");               // formatters / helper functions
+const validators = require("./utils/validators");           // validators if needed
+const commentary = require("./utils/commentary");           // commentary lines
+const statsCalculator = require("./utils/statsCalculator"); // batting/bowling calculations
+
+// ================= STATE =================
+const matches = require("./state/inMemoryStore");           // in-memory matches store
 
 // ================= REGISTER COMMANDS =================
-require("./features/team/teamCommands")(bot, matches, announcer, helpers);
-require("./features/match/matchCommands")(bot, matches, announcer, helpers, engine);
-require("./features/game/gameCommands")(bot, matches, announcer, helpers, engine);
+teamCommands(bot, matches, announcer, helpers);
+matchCommands(bot, matches, announcer, helpers, engine);
+gameCommands(bot, matches, announcer, helpers, engine);
 
 // ================= BALL PROCESSING / ANNOUNCEMENTS =================
-// This should run inside game logic, not on global scope.
-// Example: when a player submits a ball
 async function handleBall(matchId, batNumber, bowlNumber) {
   const match = matches[matchId];
   if (!match) return;
 
-  // Process ball
+  // Process the ball
   const result = engine.processBall(match, batNumber, bowlNumber);
 
-  // Announce result
+  // Announce current score
   await announcer.announceScore(bot, match, helpers);
 
-  // Check for innings switch
+  // Announce innings switch
   if (match.phase === "switch") {
     await announcer.announceInningsSwitch(bot, match);
   }
 
-  // Check for game end
+  // Announce winner
   if (match.phase === "end") {
     await announcer.announceWinner(bot, match);
   }
 
   return result;
 }
+
+// Expose handleBall for commands
+module.exports.handleBall = handleBall;
 
 // ================= LAUNCH BOT =================
 bot.launch()
