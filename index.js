@@ -23,8 +23,27 @@ connectDB()
 const { Telegraf } = require("telegraf");
 const bot = new Telegraf(process.env.BOT_TOKEN);
 
+/* ================= REGISTER BOT COMMANDS ================= */
+/* 🔥 THIS MAKES COMMANDS APPEAR IN "/" MENU */
+
+(async () => {
+  try {
+    await bot.telegram.setMyCommands([
+      { command: "createteam", description: "Create teams (Group only)" },
+      { command: "joina", description: "Join Team A" },
+      { command: "joinb", description: "Join Team B" },
+      { command: "changeteam", description: "Change player team" },
+      { command: "choosecap", description: "Choose captain" },
+      { command: "players", description: "View players list" }
+    ]);
+
+    console.log("✅ Bot commands registered");
+  } catch (err) {
+    console.error("❌ Failed to register commands:", err);
+  }
+})();
+
 /* ================= GLOBAL STATE ================= */
-/* 👉 SINGLE SOURCE OF TRUTH */
 
 const match = require("./state/matchState");
 
@@ -75,34 +94,46 @@ bot.start(async (ctx, next) => {
   }
 
   await ctx.reply(
-    "✅ Bot connected.\n\nWhen selected as bowler, send your number (1-6) here."
+    "✅ Bot connected.\n\nUse match commands inside group.\nWhen selected as bowler, send your number (1-6) here."
   );
 });
 
-/* ================= REGISTER MODULES ================= */
-/* 👉 Pass bot + match so all files share SAME state */
-require("./commands/teamManagement")(bot, match);
+/* ================= GROUP SAFETY MIDDLEWARE ================= */
+/* 🔥 Block match commands in private */
 
-require("./commands/stats")(bot, match);
+bot.use(async (ctx, next) => {
 
-require("./commands/lifecycle")(bot, match);
+  const groupOnlyCommands = [
+    "createteam",
+    "joina",
+    "joinb",
+    "changeteam",
+    "choosecap",
+    "players"
+  ];
 
-require("./commands/host")(bot, match);
+  if (ctx.message?.text?.startsWith("/")) {
 
-require("./commands/teamSetup")(bot, match);
+    const cmd = ctx.message.text.split(" ")[0].replace("/", "").split("@")[0];
 
-require("./commands/toss")(bot, match);
+    if (groupOnlyCommands.includes(cmd) && ctx.chat.type === "private") {
+      return ctx.reply("❌ Use this command inside the match group.");
+    }
+  }
 
-require("./commands/captain")(bot, match);
-
-/* ================= ERROR HANDLING ================= */
-
-bot.catch((err, ctx) => {
-  console.error("🤖 BOT ERROR:");
-  console.error("Update Type:", ctx?.updateType);
-  console.error("From:", ctx?.from?.id);
-  console.error("Error:", err);
+  return next();
 });
+
+/* ================= REGISTER MODULES ================= */
+
+require("./commands/teamManagement")(bot, match);
+require("./team")(bot, match);
+require("./commands/stats")(bot, match);
+require("./commands/lifecycle")(bot, match);
+require("./commands/host")(bot, match);
+require("./commands/teamSetup")(bot, match);
+require("./commands/toss")(bot, match);
+require("./commands/captain")(bot, match);
 
 /* ================= CALLBACK SAFETY ================= */
 
@@ -111,6 +142,15 @@ bot.use(async (ctx, next) => {
     try { await ctx.answerCbQuery(); } catch {}
   }
   return next();
+});
+
+/* ================= ERROR HANDLING ================= */
+
+bot.catch((err, ctx) => {
+  console.error("🤖 BOT ERROR:");
+  console.error("Update Type:", ctx?.updateType);
+  console.error("From:", ctx?.from?.id);
+  console.error("Error:", err);
 });
 
 /* ================= START BOT ================= */
