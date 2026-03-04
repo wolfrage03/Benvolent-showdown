@@ -7,18 +7,6 @@ const { bot, initializeBot } = require("./config/bot");
 const registerStartHandler = require("./handlers/startHandler");
 const registerStatsHandler = require("./handlers/statsHandler");
 
-(async () => {
-
-  await initializeApp();
-  await initializeBot();
-
-  registerStartHandler(bot);
-  registerStatsHandler(bot);
-
-  await bot.launch();
-  console.log("🚀 Bot started successfully");
-
-})();
 
 
 
@@ -2298,6 +2286,19 @@ Both teams scored ${match.score}`
   clearTimers(match);
   matches.delete(match.groupId);
 }
+
+(async () => {
+
+  await initializeApp();
+  await initializeBot();
+
+  registerStartHandler(bot);
+  registerStatsHandler(bot);
+
+  await bot.launch();
+  console.log("🚀 Bot started successfully");
+
+})();
 
 
 /* ================= BOT SAFETY ================= */
