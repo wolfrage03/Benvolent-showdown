@@ -250,6 +250,9 @@ bot.command("add", async (ctx) => {
   if (team === "A") match.teamA.push(player);
   else match.teamB.push(player);
 
+  // 🔥 IMPORTANT FIX
+  playerActiveMatch.set(userId, match.groupId);
+
   ctx.reply(`✅ ${name} added to Team ${team}`);
 });
 

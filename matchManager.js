@@ -6,18 +6,19 @@ const playerActiveMatch = new Map(); // userId → groupId
 
 function getMatch(ctx) {
 
-  // If private chat → find match by playerActiveMatch
+  // Private chat (DM)
   if (ctx.chat.type === "private") {
 
     const groupId = playerActiveMatch.get(ctx.from.id);
     if (!groupId) return null;
 
-    return matches.get(groupId);
+    return matches.get(groupId) || null;
   }
 
-  // If group chat
-  return matches.get(ctx.chat.id);
+  // Group chat
+  return matches.get(ctx.chat.id) || null;
 }
+
 
 
 function deleteMatch(groupId) {
