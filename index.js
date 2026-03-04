@@ -5,10 +5,6 @@ const { Telegraf, Markup } = require("telegraf");
 const initializeApp = require("./config/appInit");
 const { bot, initializeBot } = require("./config/bot");
 
-bot.use((ctx, next) => {
-  console.log("UPDATE:", ctx.updateType, ctx.message?.text);
-  return next();
-});
 
 const registerStartHandler = require("./handlers/startHandler");
 const registerStatsHandler = require("./handlers/statsHandler");
@@ -1649,11 +1645,11 @@ ${match.innings === 2 ? requiredRuns + "\n" : ""}
 
 ━━━━━━━━━━━━━━━━━━
 🏏 Batters
-⭐ ${getName(match.striker)}*  ${strikerStats.runs}(${strikerStats.balls})  SR:${strikerSR}
-   ${getName(match.nonStriker)}  ${nonStrikerStats.runs}(${nonStrikerStats.balls})  SR:${nonStrikerSR}
+⭐ ${getName(match, match.striker)}*  ${strikerStats.runs}(${strikerStats.balls})  SR:${strikerSR}
+   ${getName(match, match.nonStriker)}  ${nonStrikerStats.runs}(${nonStrikerStats.balls})  SR:${nonStrikerSR}
 
 🎯 Bowler
-${getName(match.bowler)}
+${getName(match, match.bowler)}
 ${bowlerOvers}-${dots}-${bowlerStats.runs}-${bowlerStats.wickets}  Econ:${economy}
 
 🤝 Partnership: ${partnershipRuns} (${partnershipBalls})
@@ -1662,16 +1658,16 @@ ${bowlerOvers}-${dots}-${bowlerStats.runs}-${bowlerStats.wickets}  Econ:${econom
 `;
 }
 
+/* ================= COMMAND ================= */
+
 bot.command("score", async (ctx) => {
 
   const match = getMatch(ctx);
   if (!match)
     return ctx.reply("⚠️ No active match.");
 
-  ctx.reply(getLiveScore(match));
+  await ctx.reply(getLiveScore(match));
 });
-
-
 /* ================= BALL TIMEOUT ================= */
 
 async function ballTimeout(match) {
