@@ -282,9 +282,9 @@ bot.command("remove", ctx => {
 
 /* ================= START ================= */
 
-bot.command("start", async (ctx) => {
+bot.command("start", async (ctx, next) => {
 
-  if (ctx.chat.type === "private") return;
+  if (ctx.chat.type === "private") return next();
 
   let match = getMatch(ctx);
 
