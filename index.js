@@ -1,77 +1,24 @@
 
-require("dotenv").config();
+const initializeApp = require("./config/appInit");
+const { bot, initializeBot } = require("./config/bot");
 
-if (!process.env.BOT_TOKEN) {
-  console.error("❌ BOT_TOKEN missing in .env");
-  process.exit(1);
-}
-
-const connectDB = require("./database");
+const registerStartHandler = require("./handlers/startHandler");
+const registerStatsHandler = require("./handlers/statsHandler");
 
 (async () => {
-  try {
-    await connectDB();
-  } catch (err) {
-    console.error("❌ Database connection failed:", err);
-    process.exit(1);
-  }
-})();
 
-const User = require("./User");
+  await initializeApp();
+  await initializeBot();
 
-const { Telegraf, Markup } = require("telegraf");
+  registerStartHandler(bot);
+  registerStatsHandler(bot);
 
-const bot = new Telegraf(process.env.BOT_TOKEN);
+  await bot.launch();
+  console.log("🚀 Bot started successfully");
 
-let BOT_USERNAME = null;
-
-(async () => {
-  try {
-    const me = await bot.telegram.getMe();
-    BOT_USERNAME = me.username;
-    console.log("🤖 Bot username:", BOT_USERNAME);
-  } catch (err) {
-    console.error("❌ Failed to fetch bot username:", err);
-  }
 })();
 
 
-bot.start(async (ctx, next) => {
-
-  if (ctx.chat.type !== "private") return next();
-
-  try {
-    const { id, username, first_name, last_name } = ctx.from;
-
-    await User.updateOne(
-      { telegramId: String(id) },
-      {
-        $set: {
-          telegramId: String(id),
-          username: username?.toLowerCase(),
-          firstName: first_name,
-          lastName: last_name
-        }
-      },
-      { upsert: true }
-    );
-
-    console.log(
-      "✅ DM user saved:",
-      username?.toLowerCase(),
-      "| telegramId:",
-      id
-    );
-
-  } catch (err) {
-    console.error("❌ DM user save error:", err);
-  }
-
-  await ctx.reply(
-    "✅ Bot connected.\n\nWhen you are selected as bowler, send your number (1-6) here."
-  );
-
-});
 
 const {
   randomLine,
@@ -200,102 +147,6 @@ function advanceGame(match) {
 
   startBall(match);
 }
-
-
-const PlayerStats = require("./models/PlayerStats");
-const { calculateBatting, calculateBowling } = require("./utils/statsCalculator");
-
-bot.command("mystats", async (ctx) => {
-
-  if (ctx.chat.type !== "private")
-    return ctx.reply("❌ Use this in private chat.");
-
-  const stats = await PlayerStats.findOne({
-    userId: String(ctx.from.id)
-  });
-
-  if (!stats)
-    return ctx.reply("📊 No stats found yet.");
-
-  const bat = calculateBatting(stats);
-  const bowl = calculateBowling(stats);
-
-  ctx.reply(`
-📊 YOUR CAREER STATS
-
-👤 ${ctx.from.first_name}
-🆔 ${ctx.from.id}
-📅 Joined: ${stats.createdAt.toDateString()}
-
-━━━━━━━━━━━━━━
-🏏 BATTING
-
-Matches: ${stats.matches}
-Innings: ${stats.inningsBatting}
-
-Runs/Balls: ${stats.runs}/${stats.balls}
-Avg/SR: ${bat.average} / ${bat.strikeRate}
-
-4s/6s/5s: ${stats.fours}/${stats.sixes}/${stats.fives}
-Ducks: ${stats.ducks}
-50s/100s: ${stats.fifties}/${stats.hundreds}
-Best: ${stats.bestScore}
-
-━━━━━━━━━━━━━━
-🎯 BOWLING
-
-Innings: ${stats.inningsBowling}
-Wickets: ${stats.wickets}
-
-Balls: ${stats.ballsBowled}
-Runs: ${stats.runsConceded}
-
-Econ/SR: ${bowl.economy} / ${bowl.strikeRate}
-Avg: ${bowl.average}
-
-Maidens: ${stats.maidens}
-3w/5w: ${stats.threeW}/${stats.fiveW}
-BBM: ${stats.bestBowlingWickets}/${stats.bestBowlingRuns}
-`);
-});
-
-
-bot.command("stats", async (ctx) => {
-
-  const parts = ctx.message.text.trim().split(/\s+/);
-
-  if (parts.length < 2 || !parts[1].startsWith("@"))
-    return ctx.reply("Usage: /stats @username");
-
-  const username = parts[1].replace("@","").toLowerCase();
-
-  const user = await User.findOne({ username });
-  if (!user)
-    return ctx.reply("User not found.");
-
-  const stats = await PlayerStats.findOne({
-    userId: user.telegramId
-  });
-
-  if (!stats)
-    return ctx.reply("No stats found.");
-
-  const bat = calculateBatting(stats);
-  const bowl = calculateBowling(stats);
-
-  ctx.reply(`
-📊 PLAYER STATS
-
-👤 @${username}
-
-🏏 ${stats.runs} runs
-🎯 ${stats.wickets} wickets
-
-Avg: ${bat.average}
-SR: ${bat.strikeRate}
-Econ: ${bowl.economy}
-`);
-});
 
 
 
