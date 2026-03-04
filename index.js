@@ -2296,17 +2296,6 @@ bot.use(async (ctx, next) => {
 });
 
 
-/* ================= START BOT ================= */
-
-(async () => {
-  try {
-    await bot.launch();
-    console.log("🚀 Bot started successfully");
-  } catch (err) {
-    console.error("❌ Bot failed to start:", err);
-    process.exit(1);
-  }
-})();
 
 
 /* ================= PROCESS HANDLERS ================= */
