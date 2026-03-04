@@ -1668,6 +1668,17 @@ ${bowlerOvers}-${dots}-${bowlerStats.runs}-${bowlerStats.wickets}  Econ:${econom
 `;
 }
 
+bot.on("text", async (ctx, next) => {
+  if (ctx.message.text.startsWith("/")) {
+    return next();
+  }
+
+  const match = getMatch(ctx);
+  if (!match) return;
+
+  // game logic here
+});
+
 bot.command("score", async (ctx) => {
 
   const match = getMatch(ctx);
