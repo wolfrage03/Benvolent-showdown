@@ -1668,15 +1668,15 @@ ${bowlerOvers}-${dots}-${bowlerStats.runs}-${bowlerStats.wickets}  Econ:${econom
 `;
 }
 
-bot.command("score", (ctx) => {
+bot.command("score", async (ctx) => {
 
   const match = getMatch(ctx);
   if (!match)
-    return ctx.reply("⚠️ No active match.");
+    return ctx.answerCbQuery("No active match.");
 
-  ctx.reply(getLiveScore(match));
+  await ctx.answerCbQuery();
+  await ctx.reply(getLiveScore(match));
 });
-
 
 /* ================= BALL TIMEOUT ================= */
 
