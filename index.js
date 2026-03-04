@@ -1894,13 +1894,16 @@ async function startBall(match) {
 
 bot.on("text", async (ctx, next) => {
 
-  // 🔥 Let commands pass through
   if (ctx.message.text.startsWith("/")) {
     return next();
   }
 
   const match = getMatch(ctx);
   if (!match) return;
+
+  if (match.phase !== "play") return;
+
+
 
   /* ================= GROUP BATTER INPUT ================= */
 
