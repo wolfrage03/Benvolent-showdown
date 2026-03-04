@@ -131,7 +131,20 @@ function getOverHistory(match) {
     .join("\n");
 }
 
-
+function bowlDMButton() {
+  return {
+    reply_markup: {
+      inline_keyboard: [
+        [
+          {
+            text: "🎯 Send Ball in DM",
+            url: "https://t.me/Benevolent_Cricket_bot"
+          }
+        ]
+      ]
+    }
+  };
+}
 // ✅ Pure flow control
 function advanceGame(match) {
   if (!match) return;
