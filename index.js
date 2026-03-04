@@ -1797,7 +1797,7 @@ async function announceBall(match) {
   match.bowlNumber = null;
 
   const bowlerPing =
-    `[🎯 ${getName(match.bowler)}](tg://user?id=${match.bowler})`;
+    `[🎯 ${getName(match, match.bowler)}](tg://user?id=${match.bowler})`;
 
   await bot.telegram.sendMessage(
     match.groupId,
@@ -1947,7 +1947,7 @@ bot.on("text", async (ctx, next) => {
   await ctx.reply("✅ Ball submitted!");
 
   const batterPing =
-    `[🏏 ${getName(match.striker)}](tg://user?id=${match.striker})`;
+    `[🏏 ${getName(match, match.striker)}](tg://user?id=${match.striker})`;
 
   const ballNumber = `${match.currentOver}.${match.currentBall + 1}`;
 
