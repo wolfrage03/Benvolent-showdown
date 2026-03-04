@@ -398,14 +398,18 @@ bot.action("cancel_end", async (ctx) => {
 
 
 /* ================= HOST SELECT ================= */
-
 bot.action("select_host", async (ctx) => {
 
   const match = getMatch(ctx);
-  if (!match) return;
+  if (!match) {
+    return ctx.answerCbQuery("Match not found.");
+  }
 
-  if (match.phase !== "host_select")
+  if (match.phase !== "host_select") {
     return ctx.answerCbQuery("Host already selected");
+  }
+
+  await ctx.answerCbQuery("You are now the host 👑"); // ✅ IMPORTANT
 
   match.host = ctx.from.id;
   match.phase = "team_create";
@@ -414,10 +418,10 @@ bot.action("select_host", async (ctx) => {
   match.teamAName = selected[0];
   match.teamBName = selected[1];
 
-  await ctx.editMessageReplyMarkup();
+  await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
 
-  ctx.reply(`👑 Host Selected: ${ctx.from.first_name}`);
-  ctx.reply("Host use /createteam to create teams.");
+  await ctx.reply(`👑 Host Selected: ${ctx.from.first_name}`);
+  await ctx.reply("Host use /createteam to create teams.");
 });
 
 

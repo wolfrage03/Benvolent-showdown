@@ -3,8 +3,10 @@
 const matches = new Map();           // groupId → match
 const playerActiveMatch = new Map(); // userId → groupId
 
-function getMatch(groupId) {
-  return matches.get(groupId) || null;
+function getMatch(ctx) {
+  if (!ctx || !ctx.chat) return null;
+  return matches.get(ctx.chat.id) || null;
+
 }
 
 function deleteMatch(groupId) {
