@@ -8,10 +8,14 @@ if (!process.env.BOT_TOKEN) {
 
 const connectDB = require("./database");
 
-connectDB().catch(err => {
-  console.error("❌ Database connection failed:", err);
-  process.exit(1);
-});
+(async () => {
+  try {
+    await connectDB();
+  } catch (err) {
+    console.error("❌ Database connection failed:", err);
+    process.exit(1);
+  }
+})();
 
 const User = require("./User");
 
@@ -352,10 +356,12 @@ BBM: ${stats.bestBowlingWickets}/${stats.bestBowlingRuns}
 
 bot.command("stats", async (ctx) => {
 
-  if (!ctx.message.text.includes("@"))
+  const parts = ctx.message.text.trim().split(/\s+/);
+
+  if (parts.length < 2 || !parts[1].startsWith("@"))
     return ctx.reply("Usage: /stats @username");
 
-  const username = ctx.message.text.split(" ")[1].replace("@","").toLowerCase();
+  const username = parts[1].replace("@","").toLowerCase();
 
   const user = await User.findOne({ username });
   if (!user)
@@ -384,7 +390,6 @@ SR: ${bat.strikeRate}
 Econ: ${bowl.economy}
 `);
 });
-
 
 
 
@@ -2198,7 +2203,6 @@ bot.on("text", async (ctx, next) => {
 
 async function processBall(match) {
 
-  // 🔒 TRUE ATOMIC LOCK
   if (!match || match.ballLocked) return;
   match.ballLocked = true;
 
@@ -2206,15 +2210,17 @@ async function processBall(match) {
 
     clearTimers(match);
 
-   if (match.batNumber === null || match.bowlNumber === null) return;
+    if (match.batNumber === null || match.bowlNumber === null) {
+      return;
+    }
 
-   const bat = Number(match.batNumber);
-   const bowl = Number(match.bowlNumber);
+    const bat = Number(match.batNumber);
+    const bowl = Number(match.bowlNumber);
 
-    // 🔄 Reset misses
     match.bowlerMissCount = 0;
     match.batterMissCount = 0;
 
+   
     /* ================= HATTRICK BLOCK ================= */
 
     if (match.wicketStreak === 2 && bat === 0) {
@@ -2353,15 +2359,13 @@ Balls: ${match.currentPartnershipBalls}`
 
     advanceGame(match);
 
-  } catch (err) {
+    } catch (err) {
     console.error("processBall error:", err);
   } finally {
-
-    // 🔓 UNLOCK AFTER COMPLETE
     match.ballLocked = false;
-
     match.batNumber = null;
     match.bowlNumber = null;
+  
   }
 }
 
