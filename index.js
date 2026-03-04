@@ -1,5 +1,5 @@
 
-const User = require("./models/User"); 
+const User = require("./User"); 
 const { Telegraf, Markup } = require("telegraf");
 const initializeApp = require("./config/appInit");
 const { bot, initializeBot } = require("./config/bot");
