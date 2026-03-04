@@ -1,4 +1,9 @@
 
+bot.use((ctx, next) => {
+  console.log("UPDATE:", ctx.updateType, ctx.message?.text);
+  return next();
+});
+
 const User = require("./User"); 
 const { Telegraf, Markup } = require("telegraf");
 const initializeApp = require("./config/appInit");
@@ -2271,7 +2276,7 @@ async function endMatchWithWinner(match, winningTeam) {
     match.groupId,
 `🏆 MATCH RESULT
 
-🎉 Winner: ${teamName}
+${teamName} WON THE MATCH!
 
 Final Score:
 ${match.score}/${match.wickets}`
@@ -2280,9 +2285,6 @@ ${match.score}/${match.wickets}`
   clearTimers(match);
   matches.delete(match.groupId);
 }
-
-
-/* ================= MATCH TIE ================= */
 
 async function endMatchTie(match) {
 
