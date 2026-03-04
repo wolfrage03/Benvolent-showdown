@@ -1503,7 +1503,7 @@ function handleOverCompletion(match) {
   if (match.currentOverRuns === 0) {
     bot.telegram.sendMessage(
       match.groupId,
-      `🎯 ${getName(match.bowler)}\n${randomLine("maiden")}`
+      `🎯 ${getName(match, match.bowler)}\n${randomLine("maiden")}`
     );
   }
 
