@@ -5,7 +5,7 @@ if (!process.env.BOT_TOKEN) {
   console.error("❌ BOT_TOKEN missing in .env");
   process.exit(1);
 }
-const { handleMatchEnd } = require("./commands/match");
+
 const connectDB = require("./database");
 
 connectDB().catch(err => {
