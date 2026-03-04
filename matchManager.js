@@ -3,11 +3,22 @@
 const matches = new Map();           // groupId → match
 const playerActiveMatch = new Map(); // userId → groupId
 
-function getMatch(ctx) {
-  if (!ctx || !ctx.chat) return null;
-  return matches.get(ctx.chat.id) || null;
 
+function getMatch(ctx) {
+
+  // If private chat → find match by playerActiveMatch
+  if (ctx.chat.type === "private") {
+
+    const groupId = playerActiveMatch.get(ctx.from.id);
+    if (!groupId) return null;
+
+    return matches.get(groupId);
+  }
+
+  // If group chat
+  return matches.get(ctx.chat.id);
 }
+
 
 function deleteMatch(groupId) {
   matches.delete(groupId);
