@@ -69,12 +69,12 @@ bot.start(async (ctx, next) => {
 
 });
 
-import {
+const {
   randomLine,
   randomBowlingPrompt,
   randomBatterPrompt,
   getRandomTeams
-} from './commentary.js';
+} = require("./commentary");
 
 // ================= MATCH STORAGE =================
 
