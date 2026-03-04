@@ -13,7 +13,7 @@ connectDB().catch(err => {
   process.exit(1);
 });
 
-const User = require("./models/User");
+const User = require("./User");
 
 const { Telegraf, Markup } = require("telegraf");
 
