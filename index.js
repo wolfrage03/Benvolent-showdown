@@ -1572,7 +1572,7 @@ Set STRIKER:
 
 /* ================= SET BATTER ================= */
 
-bot.command("batter", (ctx) => {
+bot.command("batter", async (ctx) => {
 
   const match = getMatch(ctx);
   if (!match) return;
