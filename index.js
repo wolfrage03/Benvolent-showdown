@@ -1658,7 +1658,7 @@ ${bowlerOvers}-${dots}-${bowlerStats.runs}-${bowlerStats.wickets}  Econ:${econom
 
 bot.command("score", async (ctx) => {
 
-  const match = getMatch(ctx);
+  const match = getMatch(ctx.chat.id);
   if (!match)
     return ctx.reply("⚠️ No active match.");
 
