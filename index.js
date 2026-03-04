@@ -2476,7 +2476,6 @@ Set STRIKER:
   );
 });
 
-
 /* ================= MATCH RESULT ================= */
 
 async function endMatchWithWinner(match, winningTeam) {
@@ -2514,14 +2513,6 @@ Both teams scored ${match.score}`
 
   clearTimers(match);
   matches.delete(match.groupId);
-};
-    
-
-  } catch (err) {
-    console.error("Stats update error:", err);
-  }
-
-  return resetMatch(match.groupId);;
 }
 
 
@@ -2536,7 +2527,9 @@ bot.catch((err, ctx) => {
 
 bot.use(async (ctx, next) => {
   if (ctx.callbackQuery) {
-    try { await ctx.answerCbQuery(); } catch {}
+    try { 
+      await ctx.answerCbQuery(); 
+    } catch {}
   }
   return next();
 });
