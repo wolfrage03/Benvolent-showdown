@@ -1894,6 +1894,7 @@ async function startBall(match) {
 
 bot.on("text", async (ctx, next) => {
 
+  // 🔥 Always allow commands first
   if (ctx.message.text.startsWith("/")) {
     return next();
   }
@@ -1901,7 +1902,13 @@ bot.on("text", async (ctx, next) => {
   const match = getMatch(ctx);
   if (!match) return;
 
+  // Only allow numbers during play
   if (match.phase !== "play") return;
+
+  const number = parseInt(ctx.message.text);
+
+  if (isNaN(number) || number < 0 || number > 6) return;
+
 
 
 
