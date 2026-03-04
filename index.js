@@ -1,13 +1,14 @@
 
-bot.use((ctx, next) => {
-  console.log("UPDATE:", ctx.updateType, ctx.message?.text);
-  return next();
-});
 
 const User = require("./User"); 
 const { Telegraf, Markup } = require("telegraf");
 const initializeApp = require("./config/appInit");
 const { bot, initializeBot } = require("./config/bot");
+
+bot.use((ctx, next) => {
+  console.log("UPDATE:", ctx.updateType, ctx.message?.text);
+  return next();
+});
 
 const registerStartHandler = require("./handlers/startHandler");
 const registerStatsHandler = require("./handlers/statsHandler");
