@@ -8,8 +8,9 @@ function registerStatsHandler(bot) {
 
   bot.command("mystats", async (ctx) => {
 
-    if (ctx.chat.type !== "private")
-      return ctx.reply("❌ Use this in private chat.");
+    // ❌ Block private chat
+    if (ctx.chat.type === "private")
+      return ctx.reply("❌ Use this command in the group.");
 
     const stats = await PlayerStats.findOne({
       userId: String(ctx.from.id)
@@ -25,8 +26,6 @@ function registerStatsHandler(bot) {
 📊 YOUR CAREER STATS
 
 👤 ${ctx.from.first_name}
-🆔 ${ctx.from.id}
-📅 Joined: ${stats.createdAt.toDateString()}
 
 ━━━━━━━━━━━━━━
 🏏 BATTING
@@ -65,6 +64,9 @@ BBM: ${stats.bestBowlingWickets}/${stats.bestBowlingRuns}
 
   bot.command("stats", async (ctx) => {
 
+    if (ctx.chat.type === "private")
+      return ctx.reply("❌ Use this command in the group.");
+
     const parts = ctx.message.text.trim().split(/\s+/);
 
     if (parts.length < 2 || !parts[1].startsWith("@"))
@@ -91,8 +93,8 @@ BBM: ${stats.bestBowlingWickets}/${stats.bestBowlingRuns}
 
 👤 @${username}
 
-🏏 ${stats.runs} runs
-🎯 ${stats.wickets} wickets
+🏏 Runs: ${stats.runs}
+🎯 Wickets: ${stats.wickets}
 
 Avg: ${bat.average}
 SR: ${bat.strikeRate}

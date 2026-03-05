@@ -8,8 +8,8 @@ const { bot, initializeBot } = require("./config/bot");
 
 const registerStartHandler = require("./handlers/startHandler");
 const registerStatsHandler = require("./handlers/statsHandler");
-
-
+const updatePlayerStats = require("./utils/updateStats");
+const PlayerStats = require("./models/PlayerStats");
 
 
 const {
@@ -40,31 +40,58 @@ const battingPlayers = (match) =>
 const bowlingPlayers = (match) =>
   match.bowlingTeam === "A" ? match.teamA : match.teamB;
 
-// ✅ Pass match as param
+
+
 function orderedBattingPlayers(match) {
+
   if (!match) return [];
 
-  const players = battingPlayers(match);
+  const players = battingPlayers(match) || [];
+
   const captainId =
-    match.battingTeam === "A" ? match.captains.A : match.captains.B;
+    match.battingTeam === "A"
+      ? match.captains?.A
+      : match.captains?.B;
 
   return [
     ...players.filter(p => p.id === captainId),
     ...players.filter(p => p.id !== captainId)
   ];
 }
+/* ================= CLEAR ACTIVE PLAYERS ================= */
 
-// ✅ Return consistent team keys (A / B)
-function getPlayerTeam(match, userId) {
-  if (!match) return null;
-  if (match.teamA.some(p => p.id === userId)) return "A";
-  if (match.teamB.some(p => p.id === userId)) return "B";
-  return null;
+function clearActiveMatchPlayers(match) {
+
+  if (!match) return;
+
+  const allPlayers = [
+    ...(match.teamA || []),
+    ...(match.teamB || [])
+  ];
+
+  for (const player of allPlayers) {
+
+    if (player?.id)
+      playerActiveMatch.delete(player.id);
+
+  }
 }
 
-// ✅ Strike swap with guard
+function getPlayerTeam(match, userId) {
+
+  if (!match) return null;
+
+  if ((match.teamA || []).some(p => p.id === userId)) return "A";
+
+  if ((match.teamB || []).some(p => p.id === userId)) return "B";
+
+  return null;
+}
+}
+
 function swapStrike(match) {
-  if (!match) return;
+  if (!match || !match.striker || !match.nonStriker) return;
+
   const t = match.striker;
   match.striker = match.nonStriker;
   match.nonStriker = t;
@@ -81,11 +108,16 @@ function getDisplayName(user) {
   return "Player";
 }
 
-// ✅ Pass match
 function getName(match, id) {
   if (!match) return "Player";
-  const all = [...match.teamA, ...match.teamB];
+
+  const all = [
+    ...(match.teamA || []),
+    ...(match.teamB || [])
+  ];
+
   const p = all.find(x => x.id === id);
+
   return p ? p.name : "Player";
 }
 
@@ -108,9 +140,9 @@ function clearTimers(match) {
   }
 }
 
-// ✅ Pass match
 function getOverHistory(match) {
-  if (!match || !match.overHistory.length)
+
+  if (!match || !match.overHistory || !match.overHistory.length)
     return "No overs completed yet.";
 
   return match.overHistory
@@ -276,6 +308,9 @@ bot.command("remove", ctx => {
 
   const removed = teamArr.splice(num - 1, 1)[0];
 
+  if (!removed)
+    return ctx.reply("Player not found.");
+
   /* remove captain if removed */
   if (match.captains?.[team] === removed.id)
     match.captains[team] = null;
@@ -283,6 +318,9 @@ bot.command("remove", ctx => {
   /* remove from dismissed / used batters */
   if (Array.isArray(match.usedBatters))
     match.usedBatters = match.usedBatters.filter(id => id !== removed.id);
+
+  /* 🔥 IMPORTANT FIX */
+  playerActiveMatch.delete(removed.id);
 
   ctx.reply(`🚫 ${removed.name} removed from Team ${team}`);
 });
@@ -321,7 +359,9 @@ bot.command("start", async (ctx, next) => {
     console.error("User save error:", err);
   }
 
-  match = resetMatch(ctx.chat.id); // ✅ important
+  match = resetMatch(ctx.chat.id);
+
+  clearActiveMatchPlayers(match);
 
   match.groupId = ctx.chat.id;
   match.phase = "host_select";
@@ -368,6 +408,7 @@ bot.command("endmatch", async (ctx) => {
 });
 
 
+
 /* ================= CONFIRM END ================= */
 
 bot.action("confirm_end", async (ctx) => {
@@ -385,9 +426,11 @@ bot.action("confirm_end", async (ctx) => {
   await ctx.reply("🛑 Match Ended Successfully.");
 
   clearTimers(match);
-  matches.delete(match.groupId);
-});
+  clearActiveMatchPlayers(match);
 
+  matches.delete(match.groupId);
+
+});
 
 /* ================= CANCEL END ================= */
 
@@ -962,6 +1005,10 @@ bot.action("cancel_team_change", async (ctx) => {
 /* ================= CAPTAIN ================= */
 
 bot.command("choosecap", ctx => {
+
+
+  if (!match.captains)
+    match.captains = { A: null, B: null };
 
   const match = getMatch(ctx);
   if (!match) return ctx.reply("⚠️ No active match.");
@@ -2180,7 +2227,33 @@ Host type:
     );
   }
 
-  /* 🥈 SECOND INNINGS RESULT */
+  /* ================= SAVE PLAYER STATS ================= */
+
+  try {
+
+    const players = [
+      match.playerA,
+      match.playerB
+    ];
+
+    for (const id of players) {
+
+      let stats = await PlayerStats.findOne({ userId: String(id) });
+
+      if (!stats) {
+        stats = new PlayerStats({ userId: String(id) });
+      }
+
+      stats.matches += 1;
+
+      await stats.save();
+    }
+
+  } catch (err) {
+    console.error("Stats update error:", err);
+  }
+
+  /* ================= MATCH RESULT ================= */
 
   // 🏆 Batting team wins
   if (match.score > match.firstInningsScore) {
@@ -2194,6 +2267,9 @@ Host type:
 
   // 🤝 Tie
   return endMatchTie(match);
+  
+  clearActiveMatchPlayers(match);
+  matches.delete(match.groupId);
 }
 
 /* ================= INNINGS SWITCH ================= */
