@@ -87,7 +87,6 @@ function getPlayerTeam(match, userId) {
 
   return null;
 }
-}
 
 function swapStrike(match) {
   if (!match || !match.striker || !match.nonStriker) return;
@@ -1006,12 +1005,11 @@ bot.action("cancel_team_change", async (ctx) => {
 
 bot.command("choosecap", ctx => {
 
+  const match = getMatch(ctx);
+  if (!match) return ctx.reply("⚠️ No active match.");
 
   if (!match.captains)
     match.captains = { A: null, B: null };
-
-  const match = getMatch(ctx);
-  if (!match) return ctx.reply("⚠️ No active match.");
 
   if (!isHost(match, ctx.from.id))
     return ctx.reply("❌ Only host can start captain selection.");
