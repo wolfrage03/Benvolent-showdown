@@ -2227,29 +2227,49 @@ Host type:
 
   /* ================= SAVE PLAYER STATS ================= */
 
-  try {
+try {
 
-    const players = [
-      match.playerA,
-      match.playerB
-    ];
+  // 🏏 Save batting stats
+  for (const playerId in match.batterStats) {
 
-    for (const id of players) {
+    const b = match.batterStats[playerId];
 
-      let stats = await PlayerStats.findOne({ userId: String(id) });
+    await updatePlayerStats(playerId, {
+      runs: b.runs,
+      balls: b.balls,
+      inningsBatting: 1
+    });
 
-      if (!stats) {
-        stats = new PlayerStats({ userId: String(id) });
-      }
-
-      stats.matches += 1;
-
-      await stats.save();
-    }
-
-  } catch (err) {
-    console.error("Stats update error:", err);
   }
+
+  // 🎯 Save bowling stats
+  for (const playerId in match.bowlerStats) {
+
+    const b = match.bowlerStats[playerId];
+
+    await updatePlayerStats(playerId, {
+      wickets: b.wickets,
+      ballsBowled: b.balls,
+      runsConceded: b.runs,
+      inningsBowling: 1
+    });
+
+  }
+
+  // 🎮 Match count
+  const players = [match.playerA, match.playerB];
+
+  for (const id of players) {
+
+    await updatePlayerStats(id, {
+      matches: 1
+    });
+
+  }
+
+} catch (err) {
+  console.error("Stats update error:", err);
+}
 
   /* ================= MATCH RESULT ================= */
 
