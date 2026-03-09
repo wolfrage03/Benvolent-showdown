@@ -1,5 +1,7 @@
 function generateScorecard(match){
 
+if (!match) return "⚠️ Scorecard unavailable."
+
 let text = ""
 
 text += `📊 Scorecard\n`
