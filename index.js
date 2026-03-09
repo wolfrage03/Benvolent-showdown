@@ -70,21 +70,17 @@ function orderedBattingPlayers(match) {
 
   if (!match) return [];
 
-  let players = orderedBattingPlayers(match);
+  let players = battingPlayers(match); // ✅ correct source
 
-  // safety fallback
-  if (!players || players.length === 0)
-    players = battingPlayers(match);
-
-  // During striker selection → show all
+  // During striker selection → show all players
   if (match.phase === "set_striker")
     return players;
 
-  // During non-striker selection → exclude striker
+  // During non-striker → exclude striker
   if (match.phase === "set_non_striker")
     return players.filter(p => p.id !== match.striker);
 
-  // During new batter → exclude used batters
+  // During new batter → exclude already used batters
   if (match.phase === "new_batter")
     return players.filter(p => !match.usedBatters.includes(p.id));
 
