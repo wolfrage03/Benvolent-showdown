@@ -1482,6 +1482,8 @@ if (match.phase === "set_non_striker") {
 
   match.nonStriker = selected.id;
 
+  match.batterStats[selected.id] = { runs: 0, balls: 0 }; // ✅ FIX
+
   if (!match.battingOrder.includes(selected.id))
     match.battingOrder.push(selected.id);
 
@@ -1496,7 +1498,6 @@ if (match.phase === "set_non_striker") {
 🎯 Send bowler:
 /bowler number`);
 }
-
 
 
  /* NEW BATTER */
