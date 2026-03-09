@@ -75,6 +75,7 @@ function resetMatch(groupId) {
     score: 0,
     wickets: 0,
     maxWickets: 0,
+    dotBalls: 0,
 
     innings: 1,
     firstInningsScore: 0,
@@ -94,6 +95,8 @@ function resetMatch(groupId) {
 
     batterStats: {},
     bowlerStats: {},
+    target: null,
+    bowlerOvers: {},
 
     lastCommandTime: 0,
     phaseBeforeSwitch: null,
@@ -105,11 +108,18 @@ function resetMatch(groupId) {
     wicketStreak: 0,
     currentOverRuns: 0,
 
+    firstInningsScorecard: null,
+    secondInningsScorecard: null,
+   
     currentPartnershipRuns: 0,
     currentPartnershipBalls: 0,
-
+    scorecardMessageId: null,
     overHistory: [],
-    currentOverBalls: []
+    currentOverBalls: [],
+    battingOrder: [],
+    fallOfWickets: [],
+    matchEnded: false
+
   };
 
   matches.set(groupId, match);

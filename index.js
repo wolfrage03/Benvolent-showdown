@@ -10,7 +10,7 @@ const registerStartHandler = require("./handlers/startHandler");
 const registerStatsHandler = require("./handlers/statsHandler");
 const updatePlayerStats = require("./utils/updateStats");
 const PlayerStats = require("./models/PlayerStats");
-
+const generateScorecard = require("./utils/scorecard");
 
 const {
   randomLine,
@@ -41,22 +41,44 @@ const bowlingPlayers = (match) =>
   match.bowlingTeam === "A" ? match.teamA : match.teamB;
 
 
+function isPlayer(match, userId) {
+  return (
+    match.teamA?.some(p => p.id === userId) ||
+    match.teamB?.some(p => p.id === userId)
+  );
+}
+
+function sendOverScorecard(match) {
+
+  if (!match || !match.groupId) return;
+
+  const scorecard = generateScorecard(match);
+
+  if (!scorecard) return;
+
+  try {
+    bot.telegram.sendMessage(match.groupId, scorecard, {
+      parse_mode: "HTML",
+      disable_web_page_preview: true
+    });
+  } catch (err) {
+    console.error("Scorecard send error:", err);
+  }
+}
 
 function orderedBattingPlayers(match) {
 
   if (!match) return [];
 
-  const players = battingPlayers(match) || [];
+  if (match.battingOrder && match.battingOrder.length)
+    return match.battingOrder
+      .map(id => {
+        const all = [...match.teamA, ...match.teamB];
+        return all.find(p => p.id === id);
+      })
+      .filter(Boolean);
 
-  const captainId =
-    match.battingTeam === "A"
-      ? match.captains?.A
-      : match.captains?.B;
-
-  return [
-    ...players.filter(p => p.id === captainId),
-    ...players.filter(p => p.id !== captainId)
-  ];
+  return battingPlayers(match) || [];
 }
 /* ================= CLEAR ACTIVE PLAYERS ================= */
 
@@ -89,11 +111,13 @@ function getPlayerTeam(match, userId) {
 }
 
 function swapStrike(match) {
-  if (!match || !match.striker || !match.nonStriker) return;
 
-  const t = match.striker;
+  if (!match || !match.striker || !match.nonStriker)
+    return;
+
+  const temp = match.striker;
   match.striker = match.nonStriker;
-  match.nonStriker = t;
+  match.nonStriker = temp;
 }
 
 function getDisplayName(user) {
@@ -137,7 +161,10 @@ function clearTimers(match) {
     clearTimeout(match.ballTimer);
     match.ballTimer = null;
   }
+
+  match.ballLocked = false;
 }
+
 
 function getOverHistory(match) {
 
@@ -260,11 +287,12 @@ bot.command("add", async (ctx) => {
 
   /* ========= DUPLICATE CHECK ========= */
 
-  if (
-    match.teamA?.some(p => p.id === userId) ||
-    match.teamB?.some(p => p.id === userId)
-  )
-    return ctx.reply("⚠️ Player already added.");
+ const alreadyExists =
+  [...(match.teamA || []), ...(match.teamB || [])]
+  .some(p => p.id === userId);
+
+if (alreadyExists)
+  return ctx.reply("⚠️ Player already added.");
 
   const player = { id: userId, name };
 
@@ -1426,56 +1454,70 @@ bot.command("batter", async (ctx) => {
   };
 
   /* STRIKER */
-  if (match.phase === "set_striker") {
+if (match.phase === "set_striker") {
 
-    match.striker = selected.id;
-    match.batterStats[selected.id] = { runs: 0, balls: 0 };
+  match.striker = selected.id;
+  match.batterStats[selected.id] = { runs: 0, balls: 0 };
 
-    match.usedBatters.push(selected.id);
-    match.phase = "set_non_striker";
+  if (!match.battingOrder.includes(selected.id))
+    match.battingOrder.push(selected.id);
 
-    return ctx.reply(
+  match.usedBatters.push(selected.id);
+  match.phase = "set_non_striker";
+
+  return ctx.reply(
 `🏏 ${name} is ${ordinal(orderNumber)} batter at STRIKER end
 
 Now send NON-STRIKER:
 /batter number`);
-  }
+}
 
-  /* NON STRIKER */
-  if (match.phase === "set_non_striker") {
 
-    if (selected.id === match.striker)
-      return ctx.reply("⚠️ Choose different player");
 
-    match.nonStriker = selected.id;
-    match.usedBatters.push(selected.id);
-    match.maxWickets = players.length - 1;
+/* NON STRIKER */
+if (match.phase === "set_non_striker") {
 
-    match.phase = "set_bowler";
+  if (selected.id === match.striker)
+    return ctx.reply("⚠️ Choose different player");
 
-    return ctx.reply(
+  match.nonStriker = selected.id;
+
+  if (!match.battingOrder.includes(selected.id))
+    match.battingOrder.push(selected.id);
+
+  match.usedBatters.push(selected.id);
+  match.maxWickets = players.length - 1;
+
+  match.phase = "set_bowler";
+
+  return ctx.reply(
 `🏏 ${name} is ${ordinal(orderNumber)} batter at NON-STRIKER end
 
 🎯 Send bowler:
 /bowler number`);
-  }
+}
 
-  /* NEW BATTER */
-  if (match.phase === "new_batter") {
 
-    if (selected.id === match.nonStriker)
-      return ctx.reply("⚠️ Choose different player");
 
-    match.striker = selected.id;
-    match.batterStats[selected.id] = { runs: 0, balls: 0 };
+ /* NEW BATTER */
+if (match.phase === "new_batter") {
 
-    match.usedBatters.push(selected.id);
-    match.phase = "play";
+  if (selected.id === match.nonStriker)
+    return ctx.reply("⚠️ Choose different player");
 
-    await ctx.reply(`🏏 ${name} is ${ordinal(orderNumber)} batter`);
+  match.striker = selected.id;
+  match.batterStats[selected.id] = { runs: 0, balls: 0 };
 
-    return startBall(match);
-  }
+  if (!match.battingOrder.includes(selected.id))
+    match.battingOrder.push(selected.id);
+
+  match.usedBatters.push(selected.id);
+  match.phase = "play";
+
+  await ctx.reply(`🏏 ${name} is ${ordinal(orderNumber)} batter`);
+
+  return startBall(match);
+}
 
 });
 
@@ -1549,7 +1591,6 @@ Ball starting...`
 function handleOverCompletion(match) {
 
   if (!match) return false;
-
   if (match.currentBall < 6) return false;
 
   if (match.currentOverRuns === 0) {
@@ -1559,12 +1600,17 @@ function handleOverCompletion(match) {
     );
   }
 
+  // 🔥 Update over FIRST
   match.currentOver++;
   match.currentBall = 0;
   match.currentOverRuns = 0;
   match.wicketStreak = 0;
 
-  // 🔥 Over limit check
+  // 🔥 NOW generate scorecard
+  const scorecard = generateScorecard(match);
+
+  bot.telegram.sendMessage(match.groupId, scorecard);
+
   if (match.currentOver >= match.totalOvers) {
     clearTimers(match);
     endInnings(match);
@@ -2210,18 +2256,23 @@ async function endInnings(match) {
   if (match.innings === 1) {
 
     match.firstInningsScore = match.score;
+    match.firstInningsCard = generateScorecard(match)
 
+    await bot.telegram.sendMessage(
+    match.groupId,
+    "📊 Innings Scorecard\n\n" + match.firstInningsCard
+    )
     match.phase = "switch";
     match.ballLocked = false;
 
     return bot.telegram.sendMessage(
-      match.groupId,
-`🏁 First Innings Completed
+       match.groupId,
+    `🏁 First Innings Completed
 
-Score: ${match.score}/${match.wickets}
+    Score: ${match.score}/${match.wickets}
 
-Host type:
-/inningsswitch`
+    Host type:
+    /inningsswitch`
     );
   }
 
@@ -2271,6 +2322,13 @@ try {
   console.error("Stats update error:", err);
 }
 
+ clearActiveMatchPlayers(match);
+  matches.delete(match.groupId);
+  match.currentOverBalls = [];
+  match.overHistory = [];
+  match.battingOrder = [];
+  match.fallOfWickets = [];
+
   /* ================= MATCH RESULT ================= */
 
   // 🏆 Batting team wins
@@ -2286,8 +2344,8 @@ try {
   // 🤝 Tie
   return endMatchTie(match);
   
-  clearActiveMatchPlayers(match);
-  matches.delete(match.groupId);
+ 
+
 }
 
 /* ================= INNINGS SWITCH ================= */
@@ -2357,6 +2415,17 @@ Set STRIKER:
 /* ================= MATCH RESULT ================= */
 
 async function endMatchWithWinner(match, winningTeam) {
+
+  const secondCard = generateScorecard(match)
+
+  await bot.telegram.sendMessage(
+    match.groupId,
+    "📊 Final Scorecards\n\n" +
+    "1️⃣ First Innings\n\n" +
+    match.firstInningsCard +
+    "\n\n2️⃣ Second Innings\n\n" +
+    secondCard
+  )
 
   const teamName =
     winningTeam === "A"
