@@ -70,15 +70,25 @@ function orderedBattingPlayers(match) {
 
   if (!match) return [];
 
-  if (match.battingOrder && match.battingOrder.length)
-    return match.battingOrder
-      .map(id => {
-        const all = [...match.teamA, ...match.teamB];
-        return all.find(p => p.id === id);
-      })
-      .filter(Boolean);
+  let players = orderedBattingPlayers(match);
 
-  return battingPlayers(match) || [];
+  // safety fallback
+  if (!players || players.length === 0)
+    players = battingPlayers(match);
+
+  // During striker selection → show all
+  if (match.phase === "set_striker")
+    return players;
+
+  // During non-striker selection → exclude striker
+  if (match.phase === "set_non_striker")
+    return players.filter(p => p.id !== match.striker);
+
+  // During new batter → exclude used batters
+  if (match.phase === "new_batter")
+    return players.filter(p => !match.usedBatters.includes(p.id));
+
+  return players;
 }
 /* ================= CLEAR ACTIVE PLAYERS ================= */
 
@@ -1491,7 +1501,7 @@ if (match.phase === "set_non_striker") {
     match.battingOrder.push(selected.id);
 
   match.usedBatters.push(selected.id);
-  match.maxWickets = players.length - 1;
+  match.maxWickets = battingPlayers(match).length - 1;
 
   match.phase = "set_bowler";
 
