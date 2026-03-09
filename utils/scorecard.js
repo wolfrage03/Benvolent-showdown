@@ -16,8 +16,7 @@ text += `🏏 Batters\n`
 for(const playerId of (match.battingOrder || [])){
 
 const stats = match.batterStats[playerId] || {runs:0,balls:0}
-
-const player = match.battingTeam.find(p=>p.id===playerId)
+const player = match.battingTeam.find(p => p.id === playerId) || { name: "Unknown Player" }
 
 let marker=""
 
@@ -25,7 +24,6 @@ if(playerId===match.striker) marker="⭐"
 else if(playerId===match.nonStriker) marker="(NS)"
 
 text += `${marker} ${player.name} ${stats.runs}(${stats.balls})\n`
-
 }
 
 text += `\n🎯 ${match.bowlingTeamName} Bowling\n\n`
@@ -33,27 +31,22 @@ text += `\n🎯 ${match.bowlingTeamName} Bowling\n\n`
 for(const bowlerId in (match.bowlerStats || {})){
 
 const b = match.bowlerStats[bowlerId]
-
-const bowler = match.bowlingTeam.find(p=>p.id===bowlerId)
+const bowler = match.bowlingTeam.find(p => p.id === bowlerId) || { name: "Unknown Bowler" }
 
 const overs = Math.floor(b.balls/6)+"."+(b.balls%6)
 
 text += `${bowler.name} (${overs}-${b.dots}-${b.runs}-${b.wickets})\n`
 
-match.overHistory
+(match.overHistory || [])
 .filter(o=>o.bowler===bowlerId)
 .forEach(o=>{
-
 text += `${o.over} over (${o.balls.join(",")})\n`
-
 })
 
 text += `\n`
-
 }
 
 return text
-
 }
 
 module.exports = generateScorecard
