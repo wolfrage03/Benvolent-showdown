@@ -1430,13 +1430,16 @@ bot.command("batter", async (ctx) => {
   if (ctx.chat.id !== match.groupId)
     return ctx.reply("⚠️ Send batter number in GROUP only.");
 
-  const num = parseInt(ctx.message.text.split(" ")[1]);
-  if (!num) return ctx.reply("❌ Provide batter number");
+  const args = ctx.message.text.trim().split(/\s+/);
+  const num = parseInt(args[1], 10);
 
   const players = orderedBattingPlayers(match);
 
+  if (isNaN(num))
+    return ctx.reply("❌ Send batter number like: /batter 2");
+
   if (num < 1 || num > players.length)
-    return ctx.reply("❌ Invalid number");
+    return ctx.reply(`❌ Invalid number. Choose between 1 and ${players.length}`);
 
   const selected = players[num - 1];
   if (!selected) return ctx.reply("⚠️ Player not found");
