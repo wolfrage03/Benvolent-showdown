@@ -13,7 +13,7 @@ text += `Score: ${match.score}/${match.wickets}\n\n`
 
 text += `🏏 Batters\n`
 
-for(const playerId of match.battingOrder){
+for(const playerId of (match.battingOrder || [])){
 
 const stats = match.batterStats[playerId] || {runs:0,balls:0}
 
@@ -30,7 +30,7 @@ text += `${marker} ${player.name} ${stats.runs}(${stats.balls})\n`
 
 text += `\n🎯 ${match.bowlingTeamName} Bowling\n\n`
 
-for(const bowlerId in match.bowlerStats){
+for(const bowlerId in (match.bowlerStats || {})){
 
 const b = match.bowlerStats[bowlerId]
 
