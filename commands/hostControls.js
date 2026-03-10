@@ -1,4 +1,4 @@
-```javascript
+
 const { getMatch, matches } = require("../matchManager");
 const { getRandomTeams } = require("../commentary");
 
@@ -315,4 +315,3 @@ bot.action("cancel_host_vote", async (ctx) => {
 
 
 };
-```

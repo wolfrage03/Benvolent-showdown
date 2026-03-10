@@ -1,4 +1,4 @@
-```javascript
+
 const { Markup } = require("telegraf")
 const User = require("../models/User")
 
@@ -138,4 +138,3 @@ bot.action("cancel_end", async (ctx)=>{
 })
 
 }
-```

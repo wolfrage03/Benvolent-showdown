@@ -1,4 +1,4 @@
-```javascript
+
 const { Markup } = require("telegraf");
 const { getMatch, matches, playerActiveMatch } = require("../matchManager");
 
