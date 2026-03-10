@@ -2247,150 +2247,164 @@ async function endInnings(match) {
   match.awaitingBat = false;
   match.awaitingBowl = false;
 
-  /* 🥇 FIRST INNINGS */
+  /* ================= FIRST INNINGS ================= */
+
   if (match.innings === 1) {
 
     match.firstInningsScore = match.score;
-    match.firstInningsCard = generateScorecard(match)
+
+    // ensure overs display correctly
+    match.currentOver = match.currentOverNumber;
+
+    match.firstInningsCard = generateScorecard(match);
 
     await bot.telegram.sendMessage(
-    match.groupId,
-    "📊 Innings Scorecard\n\n" + match.firstInningsCard
-    )
+      match.groupId,
+      "📊 First Innings Scorecard\n\n" + match.firstInningsCard
+    );
+
     match.phase = "switch";
     match.ballLocked = false;
 
     return bot.telegram.sendMessage(
-       match.groupId,
-    `🏁 First Innings Completed
+      match.groupId,
+`🏁 First Innings Completed
 
-    Score: ${match.score}/${match.wickets}
+Score: ${match.score}/${match.wickets}
+Target: ${match.score + 1}
 
-    Host type:
-    /inningsswitch`
+Host type:
+/inningsswitch`
     );
   }
 
+  /* ================= SECOND INNINGS END ================= */
+
+  match.secondInningsCard = generateScorecard(match);
+
+  await bot.telegram.sendMessage(
+    match.groupId,
+    "📊 Second Innings Scorecard\n\n" + match.secondInningsCard
+  );
+
   /* ================= SAVE PLAYER STATS ================= */
 
-try {
+  try {
 
-  // 🏏 Save batting stats
-  for (const playerId in match.batterStats) {
+    for (const playerId in match.batterStats) {
 
-    const b = match.batterStats[playerId];
+      const b = match.batterStats[playerId];
 
-    await updatePlayerStats(playerId, {
-      runs: b.runs,
-      balls: b.balls,
-      inningsBatting: 1
-    });
+      await updatePlayerStats(playerId, {
+        runs: b.runs,
+        balls: b.balls,
+        inningsBatting: 1
+      });
 
+    }
+
+    for (const playerId in match.bowlerStats) {
+
+      const b = match.bowlerStats[playerId];
+
+      await updatePlayerStats(playerId, {
+        wickets: b.wickets,
+        ballsBowled: b.balls,
+        runsConceded: b.runs,
+        inningsBowling: 1
+      });
+
+    }
+
+    const players = [...match.teamA, ...match.teamB];
+
+    for (const p of players) {
+      await updatePlayerStats(p.id, { matches: 1 });
+    }
+
+  } catch (err) {
+    console.error("Stats update error:", err);
   }
 
-  // 🎯 Save bowling stats
-  for (const playerId in match.bowlerStats) {
-
-    const b = match.bowlerStats[playerId];
-
-    await updatePlayerStats(playerId, {
-      wickets: b.wickets,
-      ballsBowled: b.balls,
-      runsConceded: b.runs,
-      inningsBowling: 1
-    });
-
-  }
-
-  // 🎮 Match count
-  const players = [match.playerA, match.playerB];
-
-  for (const id of players) {
-
-    await updatePlayerStats(id, {
-      matches: 1
-    });
-
-  }
-
-} catch (err) {
-  console.error("Stats update error:", err);
-}
-
- clearActiveMatchPlayers(match);
+  clearActiveMatchPlayers(match);
   matches.delete(match.groupId);
-  match.currentOverBalls = [];
-  match.overHistory = [];
-  match.battingOrder = [];
-  match.fallOfWickets = [];
 
   /* ================= MATCH RESULT ================= */
 
-  // 🏆 Batting team wins
   if (match.score > match.firstInningsScore) {
     return endMatchWithWinner(match, match.battingTeam);
   }
 
-  // 🏆 Bowling team wins
   if (match.score < match.firstInningsScore) {
     return endMatchWithWinner(match, match.bowlingTeam);
   }
 
-  // 🤝 Tie
   return endMatchTie(match);
-  
- 
-
 }
 
 /* ================= INNINGS SWITCH ================= */
 
 bot.command("inningsswitch", async (ctx) => {
 
-  const m = getMatch(ctx); // avoid shadowing global match
+  const m = getMatch(ctx);
 
-  if (!m || !m.groupId) {
+  if (!m || !m.groupId)
     return ctx.reply("⚠️ No active match.");
-  }
 
-  if (String(ctx.from.id) !== String(m.host)) {
+  if (String(ctx.from.id) !== String(m.host))
     return ctx.reply("❌ Only the match host can switch innings.");
-  }
 
-  if (m.phase !== "switch") {
+  if (m.phase !== "switch")
     return ctx.reply(
-      `⚠️ Cannot switch innings now.\nCurrent phase: ${m.phase}`
+`⚠️ Cannot switch innings now.
+Current phase: ${m.phase}`
     );
-  }
 
-  /* 🔄 MOVE TO 2ND INNINGS */
+  /* ================= MOVE TO 2ND INNINGS ================= */
+
   m.innings = 2;
 
-  /* 🔁 SWAP TEAMS */
-  [m.battingTeam, m.bowlingTeam] =
-    [m.bowlingTeam, m.battingTeam];
+  /* ================= SWAP TEAMS ================= */
 
-  /* 🔁 RESET STATS */
+  [m.battingTeam, m.bowlingTeam] =
+  [m.bowlingTeam, m.battingTeam];
+
+  [m.battingTeamName, m.bowlingTeamName] =
+  [m.bowlingTeamName, m.battingTeamName];
+
+  /* ================= RESET MATCH STATE ================= */
+
   m.score = 0;
   m.wickets = 0;
+
   m.currentOver = 0;
   m.currentBall = 0;
   m.currentOverNumber = 0;
+
   m.currentPartnershipRuns = 0;
   m.currentPartnershipBalls = 0;
+
   m.currentOverRuns = 0;
   m.wicketStreak = 0;
+
   m.bowlerMissCount = 0;
   m.batterMissCount = 0;
 
   m.usedBatters = [];
+  m.battingOrder = [];
+  m.batterStats = {};
+  m.bowlerStats = {};
+
   m.striker = null;
   m.nonStriker = null;
   m.bowler = null;
   m.lastBowler = null;
+
   m.suspendedBowlers = {};
+
   m.overHistory = [];
   m.currentOverBalls = [];
+
   m.awaitingBat = false;
   m.awaitingBowl = false;
 
@@ -2399,14 +2413,14 @@ bot.command("inningsswitch", async (ctx) => {
   return ctx.reply(
 `🔁 Innings Switched Successfully!
 
-🏏 Now Batting: ${m.battingTeam}
+🏏 Now Batting: ${m.battingTeamName}
 🎯 Target: ${m.firstInningsScore + 1}
 
 Set STRIKER:
 /batter number`
   );
-});
 
+});
 /* ================= MATCH RESULT ================= */
 
 async function endMatchWithWinner(match, winningTeam) {
