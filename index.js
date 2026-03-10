@@ -1582,7 +1582,7 @@ Ball starting...`
 
 // ================= OVER COMPLETION =================
 
-async function handleOverCompletion(match)
+async function handleOverCompletion(match) {
 
   if (!match) return false;
   if (match.currentBall < 6) return false;
