@@ -10,7 +10,6 @@ const registerStartHandler = require("./handlers/startHandler");
 const registerStatsHandler = require("./handlers/statsHandler");
 const updatePlayerStats = require("./utils/updateStats");
 const PlayerStats = require("./models/PlayerStats");
-const generateScorecard = require("./utils/scorecard");
 
 const {
   randomLine,
@@ -48,23 +47,7 @@ function isPlayer(match, userId) {
   );
 }
 
-function sendOverScorecard(match) {
 
-  if (!match || !match.groupId) return;
-
-  const scorecard = generateScorecard(match);
-
-  if (!scorecard) return;
-
-  try {
-    bot.telegram.sendMessage(match.groupId, scorecard, {
-      parse_mode: "HTML",
-      disable_web_page_preview: true
-    });
-  } catch (err) {
-    console.error("Scorecard send error:", err);
-  }
-}
 
 function orderedBattingPlayers(match) {
   if (!match) return [];
@@ -1582,32 +1565,20 @@ Ball starting...`
 
 // ================= OVER COMPLETION =================
 
-async function handleOverCompletion(match) {
+function handleOverCompletion(match) {
 
   if (!match) return false;
+
   if (match.currentBall < 6) return false;
 
-  if (match.currentOverRuns === 0) {
-    bot.telegram.sendMessage(
-      match.groupId,
-      `🎯 ${getName(match, match.bowler)}\n${randomLine("maiden")}`
-    );
-  }
-
-  // 🔥 Update over FIRST
   match.currentOver++;
   match.currentBall = 0;
   match.currentOverRuns = 0;
   match.wicketStreak = 0;
 
-  // 🔥 NOW generate scorecard
-  const scorecard = generateScorecard(match);
-
-  bot.telegram.sendMessage(match.groupId, scorecard);
-
   if (match.currentOver >= match.totalOvers) {
     clearTimers(match);
-    await endInnings(match);
+    endInnings(match);
     return true;
   }
 
@@ -1620,7 +1591,6 @@ async function handleOverCompletion(match) {
   bot.telegram.sendMessage(
     match.groupId,
 `🔄 Over Completed!
-Score: ${match.score}/${match.wickets}
 
 🎯 Send new bowler:
 /bowler number`
@@ -1628,7 +1598,6 @@ Score: ${match.score}/${match.wickets}
 
   return true;
 }
-
 /* ================= SCORE ================= */
 
 function getLiveScore(match) {
@@ -2249,13 +2218,6 @@ async function endInnings(match) {
 
     match.firstInningsScore = match.score;
 
-    match.firstInningsCard = generateScorecard(match);
-
-    await bot.telegram.sendMessage(
-      match.groupId,
-      "📊 First Innings Scorecard\n\n" + match.firstInningsCard
-    );
-
     match.phase = "switch";
 
     return bot.telegram.sendMessage(
@@ -2270,14 +2232,6 @@ Host type:
     );
   }
 
-  /* ================= SECOND INNINGS ================= */
-
-  match.secondInningsCard = generateScorecard(match);
-
-  await bot.telegram.sendMessage(
-    match.groupId,
-    "📊 Second Innings Scorecard\n\n" + match.secondInningsCard
-  );
 
   /* ================= SAVE PLAYER STATS ================= */
 
@@ -2359,8 +2313,7 @@ bot.command("inningsswitch", async (ctx) => {
   [m.battingTeam, m.bowlingTeam] =
   [m.bowlingTeam, m.battingTeam];
 
-  [m.battingTeamName, m.bowlingTeamName] =
-  [m.bowlingTeamName, m.battingTeamName];
+ 
 
   /* ================= RESET MATCH STATE ================= */
 
@@ -2415,16 +2368,6 @@ Set STRIKER:
 
 async function endMatchWithWinner(match, winningTeam) {
 
-  const secondCard = generateScorecard(match)
-
-  await bot.telegram.sendMessage(
-    match.groupId,
-    "📊 Final Scorecards\n\n" +
-    "1️⃣ First Innings\n\n" +
-    match.firstInningsCard +
-    "\n\n2️⃣ Second Innings\n\n" +
-    secondCard
-  )
 
   const teamName =
     winningTeam === "A"
