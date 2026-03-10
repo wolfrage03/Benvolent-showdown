@@ -1483,7 +1483,7 @@ Now send NON-STRIKER:
 
     match.nonStriker = selected.id;
     match.usedBatters.push(selected.id);
-    match.maxWickets = players.length - 1;
+    match.maxWickets = battingPlayers(match).length - 1;
 
     match.phase = "set_bowler";
 
