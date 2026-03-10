@@ -210,10 +210,13 @@ bot.command("add", async (ctx) => {
       const user = await User.findOne({ username });
 
       if (!user)
-        return ctx.reply("❌ User not found. Ask them to start bot in DM.");
+         return ctx.reply("❌ User not found. Ask them to start bot in DM.");
 
       userId = Number(user.telegramId);
-      name = `@${username}`;
+
+      name = user.firstName
+        ? `${user.firstName}${user.lastName ? " " + user.lastName : ""}`
+        : `@${username}`;
 
     }
     else if (!isNaN(input)) {
