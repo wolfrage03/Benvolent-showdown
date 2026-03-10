@@ -2348,11 +2348,8 @@ bot.command("inningsswitch", async (ctx) => {
   if (String(ctx.from.id) !== String(m.host))
     return ctx.reply("❌ Only the match host can switch innings.");
 
-  if (m.phase !== "switch")
-    return ctx.reply(
-`⚠️ Cannot switch innings now.
-Current phase: ${m.phase}`
-    );
+  if (m.innings !== 1)
+    return ctx.reply("⚠️ Innings already switched.");
 
   /* ================= MOVE TO 2ND INNINGS ================= */
 
