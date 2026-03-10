@@ -192,24 +192,23 @@ function bowlDMButton() {
   };
 }
 // ✅ Pure flow control
-function advanceGame(match) {
+async function advanceGame(match) {
   if (!match) return;
 
   if (match.phase === "switch") return;
 
   if (match.wickets >= match.maxWickets) {
-    endInnings(match);
+    await endInnings(match);
     return;
   }
 
   if (match.currentOver >= match.totalOvers) {
-    endInnings(match);
+    await endInnings(match);
     return;
   }
 
   startBall(match);
 }
-
 
 
 /* ================= MANUAL ADD PLAYER (USERNAME / ID / REPLY) ================= */
@@ -1583,7 +1582,7 @@ Ball starting...`
 
 // ================= OVER COMPLETION =================
 
-function handleOverCompletion(match) {
+async function handleOverCompletion(match)
 
   if (!match) return false;
   if (match.currentBall < 6) return false;
@@ -1608,7 +1607,7 @@ function handleOverCompletion(match) {
 
   if (match.currentOver >= match.totalOvers) {
     clearTimers(match);
-    endInnings(match);
+    await endInnings(match);
     return true;
   }
 
