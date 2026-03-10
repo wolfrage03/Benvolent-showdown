@@ -126,4 +126,6 @@ BBM: ${stats.bestBowlingWickets}/${stats.bestBowlingRuns}
 `);
 });
 
+}
+
 module.exports = registerStatsHandler;
