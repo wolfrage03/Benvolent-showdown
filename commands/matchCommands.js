@@ -1,6 +1,6 @@
 
 const { Markup } = require("telegraf")
-const User = require("../models/User")
+const User = require("../User")
 
 const {
   getMatch,
