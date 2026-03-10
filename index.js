@@ -2236,9 +2236,6 @@ Balls: ${match.currentPartnershipBalls}`
 }
 
 
-
-/* ================= END INNINGS ================= */
-
 async function endInnings(match) {
 
   if (!match) return;
@@ -2253,9 +2250,6 @@ async function endInnings(match) {
 
     match.firstInningsScore = match.score;
 
-    // ensure overs display correctly
-    match.currentOver = match.currentOverNumber;
-
     match.firstInningsCard = generateScorecard(match);
 
     await bot.telegram.sendMessage(
@@ -2264,7 +2258,6 @@ async function endInnings(match) {
     );
 
     match.phase = "switch";
-    match.ballLocked = false;
 
     return bot.telegram.sendMessage(
       match.groupId,
@@ -2278,7 +2271,7 @@ Host type:
     );
   }
 
-  /* ================= SECOND INNINGS END ================= */
+  /* ================= SECOND INNINGS ================= */
 
   match.secondInningsCard = generateScorecard(match);
 
@@ -2326,22 +2319,23 @@ Host type:
     console.error("Stats update error:", err);
   }
 
-  clearActiveMatchPlayers(match);
-  matches.delete(match.groupId);
-
   /* ================= MATCH RESULT ================= */
 
   if (match.score > match.firstInningsScore) {
-    return endMatchWithWinner(match, match.battingTeam);
+    await endMatchWithWinner(match, match.battingTeam);
+  }
+  else if (match.score < match.firstInningsScore) {
+    await endMatchWithWinner(match, match.bowlingTeam);
+  }
+  else {
+    await endMatchTie(match);
   }
 
-  if (match.score < match.firstInningsScore) {
-    return endMatchWithWinner(match, match.bowlingTeam);
-  }
+  /* ================= CLEANUP ================= */
 
-  return endMatchTie(match);
+  clearActiveMatchPlayers(match);
+  matches.delete(match.groupId);
 }
-
 /* ================= INNINGS SWITCH ================= */
 
 bot.command("inningsswitch", async (ctx) => {
