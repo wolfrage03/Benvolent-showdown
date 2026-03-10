@@ -11,13 +11,8 @@ const registerStatsHandler = require("./handlers/statsHandler");
 const updatePlayerStats = require("./utils/updateStats");
 const PlayerStats = require("./models/PlayerStats");
 
-const helpers = require("./helpers");
 
-require("./commands/matchCommands")(bot, helpers);
-require("./commands/hostControls")(bot, helpers);
-require("./commands/teamCommands")(bot, helpers);
-require("./commands/captainCommands")(bot, helpers);
-require("./commands/tossCommands")(bot, helpers);
+
 
 const {
   randomLine,
@@ -200,6 +195,23 @@ async function advanceGame(match) {
 
   startBall(match);
 }
+
+
+const helpers = {
+  isHost,
+  getDisplayName,
+  getName,
+  getPlayerTeam,
+  clearTimers,
+  clearActiveMatchPlayers
+};
+
+
+require("./commands/matchCommands")(bot, helpers);
+require("./commands/hostControls")(bot, helpers);
+require("./commands/teamCommands")(bot, helpers);
+require("./commands/captainCommands")(bot, helpers);
+require("./commands/tossCommands")(bot, helpers);
 
 
 /* ================= SET BATTER ================= */
