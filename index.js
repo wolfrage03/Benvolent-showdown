@@ -67,24 +67,16 @@ function sendOverScorecard(match) {
 }
 
 function orderedBattingPlayers(match) {
-
   if (!match) return [];
 
-  let players = battingPlayers(match); // ✅ correct source
+  const players = battingPlayers(match);
+  const captainId =
+    match.battingTeam === "A" ? match.captains.A : match.captains.B;
 
-  // During striker selection → show all players
-  if (match.phase === "set_striker")
-    return players;
-
-  // During non-striker → exclude striker
-  if (match.phase === "set_non_striker")
-    return players.filter(p => p.id !== match.striker);
-
-  // During new batter → exclude already used batters
-  if (match.phase === "new_batter")
-    return players.filter(p => !match.usedBatters.includes(p.id));
-
-  return players;
+  return [
+    ...players.filter(p => p.id === captainId),
+    ...players.filter(p => p.id !== captainId)
+  ];
 }
 /* ================= CLEAR ACTIVE PLAYERS ================= */
 
@@ -1483,31 +1475,24 @@ Now send NON-STRIKER:
 
 
 
-/* NON STRIKER */
-if (match.phase === "set_non_striker") {
+  /* NON STRIKER */
+  if (match.phase === "set_non_striker") {
 
-  if (selected.id === match.striker)
-    return ctx.reply("⚠️ Choose different player");
+    if (selected.id === match.striker)
+      return ctx.reply("⚠️ Choose different player");
 
-  match.nonStriker = selected.id;
+    match.nonStriker = selected.id;
+    match.usedBatters.push(selected.id);
+    match.maxWickets = players.length - 1;
 
-  match.batterStats[selected.id] = { runs: 0, balls: 0 }; // ✅ FIX
+    match.phase = "set_bowler";
 
-  if (!match.battingOrder.includes(selected.id))
-    match.battingOrder.push(selected.id);
-
-  match.usedBatters.push(selected.id);
-  match.maxWickets = battingPlayers(match).length - 1;
-
-  match.phase = "set_bowler";
-
-  return ctx.reply(
+    return ctx.reply(
 `🏏 ${name} is ${ordinal(orderNumber)} batter at NON-STRIKER end
 
 🎯 Send bowler:
 /bowler number`);
-}
-
+  }
 
  /* NEW BATTER */
 if (match.phase === "new_batter") {
