@@ -1807,7 +1807,7 @@ Host select new bowler:
         return;
       }
 
-      if (handleOverCompletion(match)) return;
+      if (await handleOverCompletion(match)) return;
 
       advanceGame(match);
       return;
@@ -1860,7 +1860,7 @@ Host select new bowler:
         return;
       }
 
-      if (handleOverCompletion(match)) return;
+      if (await handleOverCompletion(match)) return;
 
       advanceGame(match);
       return;
@@ -2156,7 +2156,7 @@ Balls: ${match.currentPartnershipBalls}`
         return;
       }
 
-      if (handleOverCompletion(match)) return;
+      if (await handleOverCompletion(match)) return;
 
       match.phase = "new_batter";
 
@@ -2388,7 +2388,7 @@ bot.command("inningsswitch", async (ctx) => {
   m.striker = null;
   m.nonStriker = null;
   m.bowler = null;
-  m.lastBowler = null;
+  m.lastOverBowler = null;
 
   m.suspendedBowlers = {};
 
