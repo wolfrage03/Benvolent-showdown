@@ -1,4 +1,4 @@
-```javascript
+
 const { Markup } = require("telegraf");
 const { getMatch, matches, playerActiveMatch } = require("../matchManager");
 
@@ -317,4 +317,3 @@ bot.action("cancel_team_change",async(ctx)=>{
 });
 
 };
-```
