@@ -10,7 +10,7 @@ const registerStartHandler = require("./handlers/startHandler");
 const registerStatsHandler = require("./handlers/statsHandler");
 const updatePlayerStats = require("./utils/updateStats");
 const PlayerStats = require("./models/PlayerStats");
-
+const generateScorecard = require("./utils/scorecardGenerator");
 
 
 
@@ -213,6 +213,8 @@ require("./commands/teamCommands")(bot, helpers);
 require("./commands/captainCommands")(bot, helpers);
 require("./commands/tossCommands")(bot, helpers);
 
+module.exports = { getName };
+
 
 /* ================= SET BATTER ================= */
 
@@ -381,7 +383,7 @@ Ball starting...`
 
 // ================= OVER COMPLETION =================
 
-function handleOverCompletion(match) {
+async function handleOverCompletion(match) {
 
   if (!match) return false;
 
@@ -404,12 +406,18 @@ function handleOverCompletion(match) {
 
   match.phase = "set_bowler";
 
+  /* SCORECARD AFTER OVER */
+  await bot.telegram.sendMessage(
+    match.groupId,
+    generateScorecard(match)
+  );
+
   bot.telegram.sendMessage(
     match.groupId,
-`🔄 Over Completed!
+  `🔄 Over Completed!
 
-🎯 Send new bowler:
-/bowler number`
+  🎯 Send new bowler:
+  /bowler number`
   );
 
   return true;
@@ -1020,6 +1028,8 @@ Balls: ${match.currentPartnershipBalls}`
 }
 
 
+/* ================= END INNINGS ================= */
+
 async function endInnings(match) {
 
   if (!match) return;
@@ -1034,11 +1044,22 @@ async function endInnings(match) {
 
     match.firstInningsScore = match.score;
 
+    match.firstInningsData = {
+      ...JSON.parse(JSON.stringify(match)),
+      striker: match.striker,
+      nonStriker: match.nonStriker
+    };
+
     match.phase = "switch";
 
-    return bot.telegram.sendMessage(
-      match.groupId,
-`🏁 First Innings Completed
+   await bot.telegram.sendMessage(
+     match.groupId,
+     generateScorecard(match)
+   );
+
+   return bot.telegram.sendMessage(
+     match.groupId,
+   `🏁 First Innings Completed
 
 Score: ${match.score}/${match.wickets}
 Target: ${match.score + 1}
@@ -1087,7 +1108,27 @@ Host type:
   } catch (err) {
     console.error("Stats update error:", err);
   }
+  
 
+  await bot.telegram.sendMessage(
+    match.groupId,
+    "📊 First Innings Scorecard"
+  );
+
+  await bot.telegram.sendMessage(
+    match.groupId,
+    generateScorecard(match.firstInningsData)
+  );
+
+  await bot.telegram.sendMessage(
+    match.groupId,
+    "📊 Second Innings Scorecard"
+  );
+
+  await bot.telegram.sendMessage(
+    match.groupId,
+    generateScorecard(match)
+  );
   /* ================= MATCH RESULT ================= */
 
   if (match.score > match.firstInningsScore) {
@@ -1172,7 +1213,11 @@ bot.command("inningsswitch", async (ctx) => {
   return ctx.reply(
 `🔁 Innings Switched Successfully!
 
-🏏 Now Batting: ${m.battingTeamName}
+🏏 Now Batting: ${
+  m.battingTeam === "A"
+    ? m.teamAName
+    : m.teamBName
+}
 🎯 Target: ${m.firstInningsScore + 1}
 
 Set STRIKER:
