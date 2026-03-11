@@ -834,11 +834,13 @@ bot.on("text", async (ctx, next) => {
   if (!/^[1-6]$/.test(text))
     return ctx.reply("❌ Send number between 1-6.");
 
+  clearTimers(match);
+
   match.bowlNumber = Number(text);
   match.awaitingBowl = false;
   match.awaitingBat = true;
 
-  clearTimers(match);
+  
 
   await ctx.reply("✅ Ball submitted!");
 
@@ -862,7 +864,10 @@ bot.on("text", async (ctx, next) => {
 
 async function processBall(match) {
 
+
   if (!match || match.ballLocked) return;
+
+  clearTimers(match);   // 🔥 stop timers immediately
   match.ballLocked = true;
 
   try {
@@ -925,7 +930,8 @@ async function processBall(match) {
       match.bowlerStats[match.bowler].wickets++;
       match.currentBall++;
 
-      match.overHistory.at(-1)?.balls.push("W");
+      const lastOver = match.overHistory[match.overHistory.length - 1];
+      if (lastOver) lastOver.balls.push("W");
       match.currentPartnershipBalls++;
 
       const line =
@@ -973,8 +979,8 @@ Balls: ${match.currentPartnershipBalls}`
     match.bowlerStats[match.bowler].runs += bat;
 
     match.currentBall++;
-    match.overHistory.at(-1)?.balls.push(bat);
-
+    const lastOver = match.overHistory[match.overHistory.length - 1];
+    if (lastOver) lastOver.balls.push(bat);
     match.wicketStreak = 0;
 
     /* ================= PARTNERSHIP MILESTONES ================= */
