@@ -1,6 +1,6 @@
 const { Markup } = require("telegraf");
 const { getMatch, matches, playerActiveMatch } = require("../matchManager");
-const User = require("../models/User");
+const User = require("../User");
 
 module.exports = function (bot, helpers) {
 
