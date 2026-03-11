@@ -131,7 +131,7 @@ bot.command("add", async (ctx) => {
   const args = ctx.message.text.trim().split(/\s+/);
 
   if (args.length < 2)
-    return ctx.reply("Usage:\n/add A 123456789\nReply + /add A");
+    return ctx.reply("Usage:\n/add A @user\n/add B 123456789\nReply + /add A");
 
   const team = args[1].toUpperCase();
 
@@ -157,12 +157,26 @@ bot.command("add", async (ctx) => {
 
   }
 
-  /* ===== ID METHOD ===== */
+  /* ===== USERNAME METHOD ===== */
 
-  else {
+  else if (args[2] && args[2].startsWith("@")) {
 
-    if (args.length < 3)
-      return ctx.reply("Usage:\n/add A userID\nReply + /add A");
+    const username = args[2].replace("@","");
+
+    const user = await User.findOne({ username: username });
+
+    if (!user)
+      return ctx.reply("❌ User not found in database.");
+
+    userId = user.telegramId;
+    name = user.name || username;
+    mention = `<a href="tg://user?id=${userId}">${name}</a>`;
+
+  }
+
+  /* ===== USER ID METHOD ===== */
+
+  else if (args[2]) {
 
     if (isNaN(args[2]))
       return ctx.reply("❌ Must provide Telegram user ID.");
@@ -170,6 +184,11 @@ bot.command("add", async (ctx) => {
     userId = Number(args[2]);
     name = "Player";
     mention = `<a href="tg://user?id=${userId}">${name}</a>`;
+
+  }
+
+  else {
+    return ctx.reply("Usage:\n/add A @user\n/add B 123456789\nReply + /add A");
   }
 
   if (userId === match.host)
@@ -195,7 +214,6 @@ bot.command("add", async (ctx) => {
   ctx.reply(`✅ ${mention} added to Team ${team}`, { parse_mode:"HTML" });
 
 });
-
 
 /* ================= REMOVE PLAYER ================= */
 
