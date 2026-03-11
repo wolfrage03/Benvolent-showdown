@@ -4,7 +4,7 @@ const { getMatch } = require("../matchManager");
 
 module.exports = function (bot, helpers) {
 
-const { isHost, getDisplayName, getName, startToss } = helpers;
+const { isHost, getDisplayName, getName } = helpers;
 
 
 /* ================= CAPTAIN ================= */
@@ -104,10 +104,9 @@ function updateCaptainButtons(match, ctx) {
 
     ctx.reply("🎲 Both Captains Selected!\nStarting Toss...");
 
-    if (startToss) {
-      startToss(match);
-    }
-
+    if (helpers.startToss) {
+     helpers.startToss(match);
+  }
   } else {
 
     try {

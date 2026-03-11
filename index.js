@@ -203,7 +203,8 @@ const helpers = {
   getName,
   getPlayerTeam,
   clearTimers,
-  clearActiveMatchPlayers
+  clearActiveMatchPlayers,
+  startToss: null
 };
 
 

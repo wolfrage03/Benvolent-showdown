@@ -31,7 +31,9 @@ async function startToss(match) {
 
 bot.action(["toss_odd", "toss_even"], async (ctx) => {
 
-  const match = getMatch(ctx.chat?.id || ctx.callbackQuery.message.chat.id);
+  await ctx.answerCbQuery();
+
+  const match = getMatch(ctx);
   if (!match || match.phase !== "toss") return;
 
   const captainA = match.captains.A;
@@ -40,7 +42,8 @@ bot.action(["toss_odd", "toss_even"], async (ctx) => {
   if (![captainA, captainB].includes(ctx.from.id))
     return ctx.answerCbQuery("Only captains can choose");
 
-  const choice = ctx.match[0] === "toss_odd" ? "odd" : "even";
+  const choice =
+    ctx.callbackQuery.data === "toss_odd" ? "odd" : "even";
 
   const tossNumber = Math.floor(Math.random() * 6) + 1;
   const result = tossNumber % 2 === 0 ? "even" : "odd";
@@ -61,7 +64,7 @@ bot.action(["toss_odd", "toss_even"], async (ctx) => {
 
   const winnerTeam = tossWinner === captainA ? "A" : "B";
 
-  bot.telegram.sendMessage(
+  await bot.telegram.sendMessage(
     match.groupId,
 `🎲 Toss Number: ${tossNumber} (${result})
 
@@ -86,7 +89,9 @@ Choose Bat or Bowl:`,
 
 bot.action(["decision_bat", "decision_bowl"], async (ctx) => {
 
-  const match = getMatch(ctx.chat?.id || ctx.callbackQuery.message.chat.id);
+  await ctx.answerCbQuery();
+
+  const match = getMatch(ctx);
   if (!match || match.phase !== "batbowl") return;
 
   if (ctx.from.id !== match.tossWinner)
@@ -98,7 +103,7 @@ bot.action(["decision_bat", "decision_bowl"], async (ctx) => {
   const otherTeam = winnerTeam === "A" ? "B" : "A";
 
   const decision =
-    ctx.match[0] === "decision_bat" ? "bat" : "bowl";
+    ctx.callbackQuery.data === "decision_bat" ? "bat" : "bowl";
 
   if (decision === "bat") {
     match.battingTeam = winnerTeam;
@@ -118,7 +123,7 @@ bot.action(["decision_bat", "decision_bowl"], async (ctx) => {
 
   await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
 
-  bot.telegram.sendMessage(
+  await bot.telegram.sendMessage(
     match.groupId,
 `📢 Toss Decision Confirmed
 
@@ -144,7 +149,7 @@ Host set overs:
 
 bot.command("setovers", (ctx) => {
 
-  const match = getMatch(ctx.chat?.id || ctx.callbackQuery.message.chat.id);
+  const match = getMatch(ctx);
   if (!match) return;
 
   if (!isHost(match, ctx.from.id))
