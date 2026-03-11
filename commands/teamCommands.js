@@ -1,6 +1,6 @@
-
 const { Markup } = require("telegraf");
 const { getMatch, matches, playerActiveMatch } = require("../matchManager");
+const User = require("../models/User");
 
 module.exports = function (bot, helpers) {
 
@@ -62,16 +62,16 @@ bot.command("joina",(ctx)=>{
   const player = {
     id: ctx.from.id,
     name: name,
-    mention: '<a href="tg://user?id='+ctx.from.id+'">'+name+'</a>'
+    mention: `<a href="tg://user?id=${ctx.from.id}">${name}</a>`
   };
 
   match.teamA.push(player);
   playerActiveMatch.set(ctx.from.id, match.groupId);
 
   ctx.reply(
-    "✅ "+player.mention+" joined 🔵 "+match.teamAName+"\n\n"+
-    "Team A: "+match.teamA.length+"\n"+
-    "Team B: "+match.teamB.length,
+    `✅ ${player.mention} joined 🔵 ${match.teamAName}\n\n`+
+    `Team A: ${match.teamA.length}\n`+
+    `Team B: ${match.teamB.length}`,
     { parse_mode:"HTML" }
   );
 
@@ -102,36 +102,36 @@ bot.command("joinb",(ctx)=>{
   const player = {
     id: ctx.from.id,
     name: name,
-    mention: '<a href="tg://user?id='+ctx.from.id+'">'+name+'</a>'
+    mention: `<a href="tg://user?id=${ctx.from.id}">${name}</a>`
   };
 
   match.teamB.push(player);
   playerActiveMatch.set(ctx.from.id, match.groupId);
 
   ctx.reply(
-    "✅ "+player.mention+" joined 🔴 "+match.teamBName+"\n\n"+
-    "Team A: "+match.teamA.length+"\n"+
-    "Team B: "+match.teamB.length,
+    `✅ ${player.mention} joined 🔴 ${match.teamBName}\n\n`+
+    `Team A: ${match.teamA.length}\n`+
+    `Team B: ${match.teamB.length}`,
     { parse_mode:"HTML" }
   );
 
 });
 
 
-/* ================= MANUAL ADD PLAYER (USERNAME / ID / REPLY) ================= */
+/* ================= MANUAL ADD PLAYER ================= */
 
 bot.command("add", async (ctx) => {
 
   const match = getMatch(ctx);
-  if (!match || ctx.chat.id !== match.groupId)
-    return ctx.reply("⚠️ No active match.");
+  if (!match) return ctx.reply("⚠️ No active match.");
 
   if (!isHost(match, ctx.from.id))
     return ctx.reply("❌ Only host can add players.");
 
   const args = ctx.message.text.trim().split(/\s+/);
+
   if (args.length < 2)
-    return ctx.reply("Usage:\n/add A @username\n/add B userID\nReply + /add A");
+    return ctx.reply("Usage:\n/add A 123456789\nReply + /add A");
 
   const team = args[1].toUpperCase();
 
@@ -140,69 +140,60 @@ bot.command("add", async (ctx) => {
 
   let userId;
   let name;
+  let mention;
 
-  /* ========= ✅ REPLY METHOD ========= */
+  /* ===== REPLY METHOD ===== */
 
   if (ctx.message.reply_to_message) {
 
-    const repliedUser = ctx.message.reply_to_message.from;
+    const user = ctx.message.reply_to_message.from;
 
-    if (repliedUser.is_bot)
-      return ctx.reply("❌ Cannot add a bot as player.");
+    if (user.is_bot)
+      return ctx.reply("❌ Cannot add bot.");
 
-    userId = repliedUser.id;
-    name = repliedUser.username
-      ? `@${repliedUser.username}`
-      : repliedUser.first_name;
+    userId = user.id;
+    name = user.first_name || "Player";
+    mention = `<a href="tg://user?id=${userId}">${name}</a>`;
 
   }
 
-  /* ========= ✅ USERNAME / ID METHOD ========= */
+  /* ===== ID METHOD ===== */
+
   else {
 
     if (args.length < 3)
-      return ctx.reply("Usage:\n/add A @username\n/add B userID\nReply + /add A");
+      return ctx.reply("Usage:\n/add A userID\nReply + /add A");
 
-    let input = args[2].trim();
+    if (isNaN(args[2]))
+      return ctx.reply("❌ Must provide Telegram user ID.");
 
-    if (input.startsWith("@")) {
-
-      const username = input.replace("@", "").toLowerCase();
-
-      const user = await User.findOne({ username });
-
-      if (!user)
-        return ctx.reply("❌ User not found. Ask them to start bot in DM.");
-
-      userId = Number(user.telegramId);
-      name = `@${username}`;
-
-    } 
-    else if (!isNaN(input)) {
-
-      userId = Number(input);
-      name = `User_${input}`;
-
-    } 
-    else {
-      return ctx.reply("❌ Invalid format.");
-    }
+    userId = Number(args[2]);
+    name = "Player";
+    mention = `<a href="tg://user?id=${userId}">${name}</a>`;
   }
 
-  /* ========= DUPLICATE CHECK ========= */
+  if (userId === match.host)
+    return ctx.reply("❌ Host cannot be added.");
 
   if (
-    match.teamA?.some(p => p.id === userId) ||
-    match.teamB?.some(p => p.id === userId)
+    match.teamA.some(p => p.id === userId) ||
+    match.teamB.some(p => p.id === userId)
   )
     return ctx.reply("⚠️ Player already added.");
 
-  const player = { id: userId, name };
+  const player = {
+    id: userId,
+    name: name,
+    mention: mention
+  };
 
   if (team === "A") match.teamA.push(player);
   else match.teamB.push(player);
 
-  ctx.reply(`✅ ${name} added to Team ${team}`);
+  playerActiveMatch.set(userId, match.groupId);
+
+  ctx.reply(`✅ ${mention} added to Team ${team}`, { parse_mode:"HTML" });
+
 });
 
 
@@ -218,11 +209,12 @@ bot.command("remove", ctx => {
     return ctx.reply("❌ Only host can remove players.");
 
   const args = ctx.message.text.trim().split(/\s+/);
+
   if (args.length < 2)
     return ctx.reply("Usage: /remove A1 or B2");
 
-  const arg = args[1];
-  const team = arg[0]?.toUpperCase();
+  const arg = args[1].toUpperCase();
+  const team = arg[0];
   const num = parseInt(arg.slice(1));
 
   if (!["A","B"].includes(team) || isNaN(num))
@@ -235,17 +227,20 @@ bot.command("remove", ctx => {
 
   const removed = teamArr.splice(num - 1, 1)[0];
 
-  /* remove captain if removed */
+  playerActiveMatch.delete(removed.id);
+
   if (match.captains?.[team] === removed.id)
     match.captains[team] = null;
 
-  /* remove from dismissed / used batters */
   if (Array.isArray(match.usedBatters))
     match.usedBatters = match.usedBatters.filter(id => id !== removed.id);
 
   ctx.reply(`🚫 ${removed.name} removed from Team ${team}`);
+
 });
 
+
+};
 
 /* ================= CHANGE TEAM ================= */
 
