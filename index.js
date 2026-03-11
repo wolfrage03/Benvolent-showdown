@@ -1012,7 +1012,7 @@ Balls: ${match.currentPartnershipBalls}`
 
     /* ================= OVER COMPLETION ================= */
 
-    if (handleOverCompletion(match)) return;
+    if (await handleOverCompletion(match)) return;
 
     /* ================= NEXT BALL ================= */
 
