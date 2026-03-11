@@ -31,7 +31,7 @@ async function startToss(match) {
 
 bot.action(["toss_odd", "toss_even"], async (ctx) => {
 
-  const match = getMatch(ctx);
+  const match = getMatch(ctx.chat?.id || ctx.callbackQuery.message.chat.id);
   if (!match || match.phase !== "toss") return;
 
   const captainA = match.captains.A;
@@ -86,7 +86,7 @@ Choose Bat or Bowl:`,
 
 bot.action(["decision_bat", "decision_bowl"], async (ctx) => {
 
-  const match = getMatch(ctx);
+  const match = getMatch(ctx.chat?.id || ctx.callbackQuery.message.chat.id);
   if (!match || match.phase !== "batbowl") return;
 
   if (ctx.from.id !== match.tossWinner)
@@ -144,7 +144,7 @@ Host set overs:
 
 bot.command("setovers", (ctx) => {
 
-  const match = getMatch(ctx);
+  const match = getMatch(ctx.chat?.id || ctx.callbackQuery.message.chat.id);
   if (!match) return;
 
   if (!isHost(match, ctx.from.id))
