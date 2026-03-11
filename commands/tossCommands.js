@@ -8,13 +8,13 @@ const { isHost } = helpers;
 
 /* ================= START TOSS ================= */
 
-function startToss(match) {
+async function startToss(match) {
 
   if (!match) return;
 
   match.phase = "toss";
 
-  bot.telegram.sendMessage(
+  await bot.telegram.sendMessage(
     match.groupId,
     "🎲 Toss Time!\nCaptain choose Odd or Even:",
     Markup.inlineKeyboard([
