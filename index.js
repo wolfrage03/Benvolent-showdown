@@ -147,16 +147,22 @@ function clearTimers(match) {
   }
 }
 
-
 function getOverHistory(match) {
 
-  if (!match || !match.overHistory || !match.overHistory.length)
+  if (!match?.overHistory?.length)
     return "No overs completed yet.";
 
   return match.overHistory
     .map(o => {
-      const balls = o.balls.join(",");
-      return `Over ${o.over} - ${getName(match, o.bowler)} = (${balls})`;
+
+      const balls = Array.isArray(o.balls)
+        ? o.balls.join(" ")
+        : "";
+
+      const bowler = getName(match, o.bowler);
+
+      return `Over ${o.over} - ${bowler}: ${balls}`;
+
     })
     .join("\n");
 }
@@ -192,8 +198,8 @@ async function advanceGame(match) {
     return;
   }
 
-  if (match.phase === "play") {
-    startBall(match);
+  if (match.phase === "play" && match.bowler) {
+    await startBall(match);
   }
 }
 
@@ -755,23 +761,19 @@ function setPhase(match, newPhase) {
 async function startBall(match) {
 
   if (!match) return;
+  if (match.ballLocked) return;
 
-  // 🔥 HARD STOPS
   if (match.phase === "switch") return;
   if (match.currentOver >= match.totalOvers) return;
   if (match.wickets >= match.maxWickets) return;
 
-  // ✅ Stop previous timers
   clearTimers(match);
 
-  // Set phase flags
   match.awaitingBowl = true;
   match.awaitingBat = false;
 
-  // Announce the ball
   await announceBall(match);
 
-  // Start turn timer
   startTurnTimer(match, "bowl");
 }
 
@@ -865,20 +867,16 @@ bot.on("text", async (ctx, next) => {
 });
 
 
-
 /* ================= PROCESS BALL ================= */
 
 async function processBall(match) {
 
-
   if (!match || match.ballLocked) return;
 
-  clearTimers(match);   // 🔥 stop timers immediately
+  clearTimers(match); // stop timers immediately
   match.ballLocked = true;
 
   try {
-
-    
 
     if (match.batNumber === null || match.bowlNumber === null) {
       return;
@@ -890,7 +888,6 @@ async function processBall(match) {
     match.bowlerMissCount = 0;
     match.batterMissCount = 0;
 
-   
     /* ================= HATTRICK BLOCK ================= */
 
     if (match.wicketStreak === 2 && bat === 0) {
@@ -936,8 +933,9 @@ async function processBall(match) {
       match.bowlerStats[match.bowler].wickets++;
       match.currentBall++;
 
-      const lastOver = match.overHistory[match.overHistory.length - 1];
+      const lastOver = match.overHistory?.[match.overHistory.length - 1];
       if (lastOver) lastOver.balls.push("W");
+
       match.currentPartnershipBalls++;
 
       const line =
@@ -964,6 +962,7 @@ Balls: ${match.currentPartnershipBalls}`
 
       const overEnded = await handleOverCompletion(match);
       if (overEnded) return;
+
       match.phase = "new_batter";
 
       await bot.telegram.sendMessage(
@@ -976,7 +975,7 @@ Balls: ${match.currentPartnershipBalls}`
 
     /* ================= RUNS (NEGATIVE ALLOWED) ================= */
 
-    match.score += bat;                 // ✅ negative runs allowed
+    match.score += bat;
     match.currentOverRuns += bat;
     match.currentPartnershipRuns += bat;
     match.currentPartnershipBalls++;
@@ -985,8 +984,10 @@ Balls: ${match.currentPartnershipBalls}`
     match.bowlerStats[match.bowler].runs += bat;
 
     match.currentBall++;
-    const lastOver = match.overHistory[match.overHistory.length - 1];
+
+    const lastOver = match.overHistory?.[match.overHistory.length - 1];
     if (lastOver) lastOver.balls.push(bat);
+
     match.wicketStreak = 0;
 
     /* ================= PARTNERSHIP MILESTONES ================= */
@@ -1008,7 +1009,7 @@ Balls: ${match.currentPartnershipBalls}`
 
     /* ================= STRIKE ROTATION ================= */
 
-    if ([1, 3, 5, -1, -3, -5].includes(bat)) { // optional: rotate on negative odd
+    if ([1, 3, 5, -1, -3, -5].includes(bat)) {
       swapStrike(match);
     }
 
@@ -1016,7 +1017,7 @@ Balls: ${match.currentPartnershipBalls}`
 
     if (
       match.innings === 2 &&
-      match.score >= match.firstInningsScore + 1
+      match.score > match.firstInningsScore
     ) {
       await endInnings(match);
       return;
@@ -1031,13 +1032,16 @@ Balls: ${match.currentPartnershipBalls}`
 
     advanceGame(match);
 
-    } catch (err) {
+  } catch (err) {
+
     console.error("processBall error:", err);
+
   } finally {
+
     match.ballLocked = false;
     match.batNumber = null;
     match.bowlNumber = null;
-  
+
   }
 }
 
