@@ -145,8 +145,6 @@ function clearTimers(match) {
     clearTimeout(match.ballTimer);
     match.ballTimer = null;
   }
-
-  match.ballLocked = false;
 }
 
 
@@ -177,7 +175,8 @@ function bowlDMButton() {
     }
   };
 }
-// ✅ Pure flow control
+
+
 async function advanceGame(match) {
   if (!match) return;
 
@@ -193,9 +192,10 @@ async function advanceGame(match) {
     return;
   }
 
-  startBall(match);
+  if (match.phase === "play") {
+    startBall(match);
+  }
 }
-
 
 const helpers = {
   isHost,
@@ -361,6 +361,8 @@ bot.command("bowler", async (ctx) => {
   match.bowler = player.id;
   match.lastOverBowler = player.id;
 
+  if (!match.overHistory) match.overHistory = [];
+
   match.overHistory.push({
     over: match.currentOver + 1,
     bowler: match.bowler,
@@ -395,30 +397,33 @@ async function handleOverCompletion(match) {
   match.currentOverRuns = 0;
   match.wicketStreak = 0;
 
+  // innings finished
   if (match.currentOver >= match.totalOvers) {
     clearTimers(match);
-    endInnings(match);
+    await endInnings(match);
     return true;
   }
 
+  // prevent same bowler
   match.lastOverBowler = match.bowler;
 
+  // rotate strike
   swapStrike(match);
 
+  // 🔴 SET PHASE BEFORE MESSAGE
   match.phase = "set_bowler";
 
-  /* SCORECARD AFTER OVER */
   await bot.telegram.sendMessage(
     match.groupId,
     generateScorecard(match)
   );
 
-  bot.telegram.sendMessage(
+  await bot.telegram.sendMessage(
     match.groupId,
-  `🔄 Over Completed!
+`🔄 Over ${match.currentOver} Completed!
 
-  🎯 Send new bowler:
-  /bowler number`
+🎯 Host choose new bowler
+/bowler number`
   );
 
   return true;
@@ -547,6 +552,7 @@ bot.command("score", async (ctx) => {
 
   await ctx.reply(getLiveScore(match));
 });
+
 /* ================= BALL TIMEOUT ================= */
 
 async function ballTimeout(match) {
@@ -872,7 +878,7 @@ async function processBall(match) {
 
   try {
 
-    clearTimers(match);
+    
 
     if (match.batNumber === null || match.bowlNumber === null) {
       return;
@@ -956,8 +962,8 @@ Balls: ${match.currentPartnershipBalls}`
         return;
       }
 
-      if (await handleOverCompletion(match)) return;
-
+      const overEnded = await handleOverCompletion(match);
+      if (overEnded) return;
       match.phase = "new_batter";
 
       await bot.telegram.sendMessage(
@@ -1010,7 +1016,7 @@ Balls: ${match.currentPartnershipBalls}`
 
     if (
       match.innings === 2 &&
-      match.score > match.firstInningsScore
+      match.score >= match.firstInningsScore + 1
     ) {
       await endInnings(match);
       return;
@@ -1018,7 +1024,8 @@ Balls: ${match.currentPartnershipBalls}`
 
     /* ================= OVER COMPLETION ================= */
 
-    if (await handleOverCompletion(match)) return;
+    const overEnded = await handleOverCompletion(match);
+    if (overEnded) return;
 
     /* ================= NEXT BALL ================= */
 
@@ -1309,7 +1316,7 @@ bot.use(async (ctx, next) => {
 process.once("SIGINT", () => {
   console.log("🛑 SIGINT received");
   bot.stop("SIGINT");
-});
+})                                                                                                                 
 
 process.once("SIGTERM", () => {
   console.log("🛑 SIGTERM received");
