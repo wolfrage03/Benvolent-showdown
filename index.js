@@ -145,24 +145,20 @@ function clearTimers(match) {
     clearTimeout(match.ballTimer);
     match.ballTimer = null;
   }
+
+  match.ballLocked = false;
 }
+
 
 function getOverHistory(match) {
 
-  if (!match?.overHistory?.length)
+  if (!match || !match.overHistory || !match.overHistory.length)
     return "No overs completed yet.";
 
   return match.overHistory
     .map(o => {
-
-      const balls = Array.isArray(o.balls)
-        ? o.balls.join(" ")
-        : "";
-
-      const bowler = getName(match, o.bowler);
-
-      return `Over ${o.over} - ${bowler}: ${balls}`;
-
+      const balls = o.balls.join(",");
+      return `Over ${o.over} - ${getName(match, o.bowler)} = (${balls})`;
     })
     .join("\n");
 }
@@ -198,8 +194,8 @@ async function advanceGame(match) {
     return;
   }
 
-  if (match.phase === "play" && match.bowler) {
-    await startBall(match);
+  if (match.phase === "play") {
+    startBall(match);
   }
 }
 
@@ -597,7 +593,7 @@ async function ballTimeout(match) {
           match.suspendedBowlers = {};
 
         match.suspendedBowlers[match.bowler] =
-          match.currentOver + 1;
+          match.currentOver + 2;
 
         match.phase = "set_bowler";
 
@@ -761,19 +757,23 @@ function setPhase(match, newPhase) {
 async function startBall(match) {
 
   if (!match) return;
-  if (match.ballLocked) return;
 
+  // 🔥 HARD STOPS
   if (match.phase === "switch") return;
   if (match.currentOver >= match.totalOvers) return;
   if (match.wickets >= match.maxWickets) return;
 
+  // ✅ Stop previous timers
   clearTimers(match);
 
+  // Set phase flags
   match.awaitingBowl = true;
   match.awaitingBat = false;
 
+  // Announce the ball
   await announceBall(match);
 
+  // Start turn timer
   startTurnTimer(match, "bowl");
 }
 
@@ -867,16 +867,20 @@ bot.on("text", async (ctx, next) => {
 });
 
 
+
 /* ================= PROCESS BALL ================= */
 
 async function processBall(match) {
 
+
   if (!match || match.ballLocked) return;
 
-  clearTimers(match); // stop timers immediately
+  clearTimers(match);   // 🔥 stop timers immediately
   match.ballLocked = true;
 
   try {
+
+    
 
     if (match.batNumber === null || match.bowlNumber === null) {
       return;
@@ -888,6 +892,7 @@ async function processBall(match) {
     match.bowlerMissCount = 0;
     match.batterMissCount = 0;
 
+   
     /* ================= HATTRICK BLOCK ================= */
 
     if (match.wicketStreak === 2 && bat === 0) {
@@ -933,49 +938,33 @@ async function processBall(match) {
       match.bowlerStats[match.bowler].wickets++;
       match.currentBall++;
 
-      const lastOver = match.overHistory?.[match.overHistory.length - 1];
+      const lastOver = match.overHistory[match.overHistory.length - 1];
       if (lastOver) lastOver.balls.push("W");
 
       match.currentPartnershipBalls++;
-
-      const line =
-        match.wicketStreak === 3
-          ? randomLine("hattrick")
-          : randomLine("wicket");
-
-      await bot.telegram.sendMessage(match.groupId, line);
-
-      await bot.telegram.sendMessage(
-        match.groupId,
-        `🤝 Partnership Broken!
-Runs: ${match.currentPartnershipRuns}
-Balls: ${match.currentPartnershipBalls}`
-      );
-
-      match.currentPartnershipRuns = 0;
-      match.currentPartnershipBalls = 0;
 
       if (match.wickets >= match.maxWickets) {
         await endInnings(match);
         return;
       }
 
-      const overEnded = await handleOverCompletion(match);
-      if (overEnded) return;
+      /* CHECK OVER END */
+    const overEnded = await handleOverCompletion(match);
+    if (overEnded) return;
 
+      /* ONLY ASK BATTER IF OVER NOT ENDED */
       match.phase = "new_batter";
 
       await bot.telegram.sendMessage(
-        match.groupId,
-        "📢 Send new batter:\n/batter number"
+         match.groupId,
+         "📢 Send new batter:\n/batter number"
       );
-
       return;
     }
 
     /* ================= RUNS (NEGATIVE ALLOWED) ================= */
 
-    match.score += bat;
+    match.score += bat;                 // ✅ negative runs allowed
     match.currentOverRuns += bat;
     match.currentPartnershipRuns += bat;
     match.currentPartnershipBalls++;
@@ -984,10 +973,8 @@ Balls: ${match.currentPartnershipBalls}`
     match.bowlerStats[match.bowler].runs += bat;
 
     match.currentBall++;
-
-    const lastOver = match.overHistory?.[match.overHistory.length - 1];
+    const lastOver = match.overHistory[match.overHistory.length - 1];
     if (lastOver) lastOver.balls.push(bat);
-
     match.wicketStreak = 0;
 
     /* ================= PARTNERSHIP MILESTONES ================= */
@@ -1009,7 +996,7 @@ Balls: ${match.currentPartnershipBalls}`
 
     /* ================= STRIKE ROTATION ================= */
 
-    if ([1, 3, 5, -1, -3, -5].includes(bat)) {
+    if ([1, 3, 5, -1, -3, -5].includes(bat)) { // optional: rotate on negative odd
       swapStrike(match);
     }
 
@@ -1017,7 +1004,7 @@ Balls: ${match.currentPartnershipBalls}`
 
     if (
       match.innings === 2 &&
-      match.score > match.firstInningsScore
+      match.score >= match.firstInningsScore + 1
     ) {
       await endInnings(match);
       return;
@@ -1032,16 +1019,13 @@ Balls: ${match.currentPartnershipBalls}`
 
     advanceGame(match);
 
-  } catch (err) {
-
+    } catch (err) {
     console.error("processBall error:", err);
-
   } finally {
-
     match.ballLocked = false;
     match.batNumber = null;
     match.bowlNumber = null;
-
+  
   }
 }
 
