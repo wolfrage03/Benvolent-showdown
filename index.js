@@ -184,6 +184,9 @@ async function advanceGame(match) {
 
   if (match.phase === "switch") return;
 
+  // 🛑 STOP if waiting for bowler
+  if (match.phase === "set_bowler") return;
+
   if (match.wickets >= match.maxWickets) {
     await endInnings(match);
     return;
@@ -402,21 +405,17 @@ async function handleOverCompletion(match) {
   match.awaitingBat = false;
   match.awaitingBowl = false;
 
-  // innings finished
   if (match.currentOver >= match.totalOvers) {
     clearTimers(match);
     await endInnings(match);
     return true;
   }
 
-  // prevent same bowler
   match.lastOverBowler = match.bowler;
   match.bowler = null;
 
-  // rotate strike
   swapStrike(match);
 
-  // phase change
   match.phase = "set_bowler";
 
   await bot.telegram.sendMessage(
