@@ -11,7 +11,7 @@ const registerStatsHandler = require("./handlers/statsHandler");
 const updatePlayerStats = require("./utils/updateStats");
 const PlayerStats = require("./models/PlayerStats");
 const generateScorecard = require("./utils/scorecardGenerator");
-
+const { sendAndPinPlayerList } = require("./commands/captainCommands");
 
 
 const {
@@ -244,10 +244,11 @@ async function checkOverEnd(match) {
   try {
     await bot.telegram.sendMessage(
       match.groupId,
-`🔄 Over ${match.currentOver} Completed!
+`[ OVER ${match.currentOver} DONE ]
 
-🎯 Host choose new bowler
-/bowler number`
+Score  ${match.score} / ${match.wickets}
+━━━━━━━━━━━━━━
+Host: /bowler number`
     );
     console.log("Over message sent, phase:", match.phase);
   } catch(e) {
@@ -328,10 +329,14 @@ if (match.phase === "set_striker") {
   match.usedBatters.push(selected.id);
   match.phase = "set_non_striker";
 
-  return ctx.reply(
-`🏏 ${name} is ${ordinal(orderNumber)} batter at STRIKER end
+  await sendAndPinPlayerList(match, ctx.telegram);
 
-Now send NON-STRIKER:
+  return ctx.reply(
+`[ STRIKER SET ]
+
+🏏 ${name}  (${ordinal(orderNumber)})
+
+Set non-striker:
 /batter number`);
 }
 
@@ -348,11 +353,14 @@ Now send NON-STRIKER:
     match.maxWickets = battingPlayers(match).length - 1;
 
     match.phase = "set_bowler";
+    await sendAndPinPlayerList(match, ctx.telegram);
 
     return ctx.reply(
-`🏏 ${name} is ${ordinal(orderNumber)} batter at NON-STRIKER end
+`[ NON-STRIKER SET ]
 
-🎯 Send bowler:
+🏏 ${name}  (${ordinal(orderNumber)})
+
+Set bowler:
 /bowler number`);
   }
 
@@ -369,9 +377,11 @@ if (match.phase === "new_batter") {
     match.battingOrder.push(selected.id);
 
   match.usedBatters.push(selected.id);
+  await sendAndPinPlayerList(match, ctx.telegram);
+
   match.phase = "play";
 
-  await ctx.reply(`🏏 ${name} is ${ordinal(orderNumber)} batter`);
+  await ctx.reply(`[ NEW BATTER ]  ${name}  (${ordinal(orderNumber)})`);
 
   return startBall(match);
 }
@@ -426,7 +436,7 @@ bot.command("bowler", async (ctx) => {
   match.awaitingBowl = true;
 
   await ctx.reply(
-`🎯 Bowler Selected: ${player.name}
+`[ BOWLER SET ]  ${player.name}
 
 Ball starting...`
   );
@@ -585,10 +595,12 @@ async function ballTimeout(match) {
 
       match.score += 6;
 
-      await bot.telegram.sendMessage(
+     await bot.telegram.sendMessage(
         match.groupId,
-`⚠️ Bowler missed!
-+6 runs awarded (Ball does NOT count)`
+`[ BOWLER TIMEOUT ]
+
++6 runs awarded.
+Ball does not count.`
       );
 
       if (match.bowlerMissCount >= 2) {
@@ -605,11 +617,12 @@ async function ballTimeout(match) {
 
         await bot.telegram.sendMessage(
           match.groupId,
-`🚫 Bowler removed due to consecutive delays.
-Cannot bowl this over and next over.
+`[ BOWLER SUSPENDED ]
 
-Host select new bowler:
-/bowler number`
+Consecutive delays.
+Cannot bowl this over or next.
+
+Host: /bowler number`
         );
 
         return;
@@ -641,8 +654,10 @@ Host select new bowler:
 
       await bot.telegram.sendMessage(
         match.groupId,
-`⚠️ Batter missed!
--6 runs penalty (Ball counted)`
+`[ BATTER TIMEOUT ]
+
+−6 run penalty.
+Ball counted.`
       );
 
       if (match.batterMissCount >= 2) {
@@ -652,7 +667,7 @@ Host select new bowler:
 
         await bot.telegram.sendMessage(
           match.groupId,
-          "❌ Batter OUT due to consecutive delay!"
+          "[ BATTER OUT ]  Dismissed for consecutive delays."
         );
 
         if (match.wickets >= match.maxWickets) {
@@ -664,9 +679,11 @@ Host select new bowler:
 
         await bot.telegram.sendMessage(
           match.groupId,
-          "📢 Send new batter:\n/batter number"
-        );
+`[ WICKET ]
 
+Set new batter:
+/batter number`
+        );
         return;
       }
 
@@ -887,7 +904,9 @@ async function processBall(match) {
     if (match.wicketStreak === 2 && bat === 0) {
       await bot.telegram.sendMessage(
         match.groupId,
-        "🔥 HATTRICK BALL! Batter cannot play 0!"
+`[ HATTRICK BALL ]
+
+Batter cannot play 0 on this delivery.`
       );
       match.awaitingBat = true;
       startTurnTimer(match, "bat");
@@ -916,6 +935,7 @@ async function processBall(match) {
     if (bat === bowl) {
 
       match.wickets++;
+      await sendAndPinPlayerList(match, bot.telegram);
       match.wicketStreak++;
       match.bowlerStats[match.bowler].wickets++;
       match.currentBall++;
@@ -940,10 +960,13 @@ async function processBall(match) {
         return;
       }
 
-      match.phase = "new_batter";
+    match.phase = "new_batter";
       await bot.telegram.sendMessage(
         match.groupId,
-        "📢 Send new batter:\n/batter number"
+`[ WICKET ]
+
+Set new batter:
+/batter number`
       );
       return;
     }
@@ -968,9 +991,9 @@ async function processBall(match) {
     /* ================= PARTNERSHIP MILESTONES ================= */
 
     if (match.currentPartnershipRuns === 50) {
-      await bot.telegram.sendMessage(match.groupId, "🔥 50 Run Partnership!");
-    } else if (match.currentPartnershipRuns === 100) {
-      await bot.telegram.sendMessage(match.groupId, "💯 100 Run Partnership!");
+      await bot.telegram.sendMessage(match.groupId, "[ PARTNERSHIP ]  50 runs 🔥");
+   } else if (match.currentPartnershipRuns === 100) {
+      await bot.telegram.sendMessage(match.groupId, "[ PARTNERSHIP ]  100 runs 💯");
     }
 
     /* ================= COMMENTARY ================= */
@@ -1038,13 +1061,12 @@ async function endInnings(match) {
 
    return bot.telegram.sendMessage(
      match.groupId,
-   `🏁 First Innings Completed
+`[ INNINGS 1 COMPLETE ]
 
-Score: ${match.score}/${match.wickets}
-Target: ${match.score + 1}
-
-Host type:
-/inningsswitch`
+Score   ${match.score} / ${match.wickets}
+Target  ${match.score + 1}
+━━━━━━━━━━━━━━
+Host: /inningsswitch`
     );
   }
 
@@ -1091,7 +1113,7 @@ Host type:
 
   await bot.telegram.sendMessage(
     match.groupId,
-    "📊 First Innings Scorecard"
+    "[ INNINGS 1 SCORECARD ]"
   );
 
   await bot.telegram.sendMessage(
@@ -1101,7 +1123,7 @@ Host type:
 
   await bot.telegram.sendMessage(
     match.groupId,
-    "📊 Second Innings Scorecard"
+    "[ INNINGS 2 SCORECARD ]"
   );
 
   await bot.telegram.sendMessage(
@@ -1189,18 +1211,16 @@ bot.command("inningsswitch", async (ctx) => {
   m.awaitingBowl = false;
 
   m.phase = "set_striker";
+  
+  await sendAndPinPlayerList(m, ctx.telegram);
 
   return ctx.reply(
-`🔁 Innings Switched Successfully!
+`[ INNINGS 2 ]
 
-🏏 Now Batting: ${
-  m.battingTeam === "A"
-    ? m.teamAName
-    : m.teamBName
-}
-🎯 Target: ${m.firstInningsScore + 1}
-
-Set STRIKER:
+🏏 Batting  —  ${m.battingTeam === "A" ? m.teamAName : m.teamBName}
+🎯 Target   —  ${m.firstInningsScore + 1}
+━━━━━━━━━━━━━━
+Set opener at striker:
 /batter number`
   );
 
@@ -1224,13 +1244,14 @@ async function endMatchWithWinner(match, winningTeam) {
 
   await bot.telegram.sendMessage(
     match.groupId,
-`🏆 MATCH RESULT
+`[ MATCH RESULT ]
 
-${teamName} WON THE MATCH!
+🏆 ${teamName}
+
 ${margin}
-
-1st Innings: ${match.firstInningsScore}
-2nd Innings: ${match.score}/${match.wickets}`
+━━━━━━━━━━━━━━
+1st innings  ${match.firstInningsScore}
+2nd innings  ${match.score} / ${match.wickets}`
   );
 
   clearTimers(match);
@@ -1239,7 +1260,7 @@ async function endMatchTie(match) {
 
   await bot.telegram.sendMessage(
     match.groupId,
-`🤝 MATCH TIED!
+`[ MATCH TIED ]
 
 Both teams scored ${match.score}`
   );

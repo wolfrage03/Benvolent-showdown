@@ -16,10 +16,12 @@ async function startToss(match) {
 
   await bot.telegram.sendMessage(
     match.groupId,
-    "🎲 Toss Time!\nCaptain choose Odd or Even:",
+`[ TOSS ]
+
+Captains, choose odd or even.`,
     Markup.inlineKeyboard([
       [
-        Markup.button.callback("Odd", "toss_odd"),
+        Markup.button.callback("Odd",  "toss_odd"),
         Markup.button.callback("Even", "toss_even")
       ]
     ])
@@ -40,22 +42,18 @@ bot.action(["toss_odd", "toss_even"], async (ctx) => {
   const captainB = match.captains.B;
 
   if (![captainA, captainB].includes(ctx.from.id))
-    return ctx.answerCbQuery("Only captains can choose");
+    return ctx.answerCbQuery("Only captains can choose.");
 
-  const choice =
-    ctx.callbackQuery.data === "toss_odd" ? "odd" : "even";
+  const choice = ctx.callbackQuery.data === "toss_odd" ? "odd" : "even";
 
   const tossNumber = Math.floor(Math.random() * 6) + 1;
   const result = tossNumber % 2 === 0 ? "even" : "odd";
 
   const chooser = ctx.from.id;
-
   const tossWinner =
     choice === result
       ? chooser
-      : chooser === captainA
-        ? captainB
-        : captainA;
+      : chooser === captainA ? captainB : captainA;
 
   match.tossWinner = tossWinner;
   match.phase = "batbowl";
@@ -63,22 +61,21 @@ bot.action(["toss_odd", "toss_even"], async (ctx) => {
   await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
 
   const winnerTeam = tossWinner === captainA ? "A" : "B";
+  const winnerName = winnerTeam === "A" ? match.teamAName : match.teamBName;
 
   await bot.telegram.sendMessage(
     match.groupId,
-`🎲 Toss Number: ${tossNumber} (${result})
+`[ TOSS RESULT ]
 
-🏆 Toss Winner: ${
-  winnerTeam === "A"
-    ? `${match.teamAName} (A)`
-    : `${match.teamBName} (B)`
-}
+Number rolled: ${tossNumber}  (${result})
+━━━━━━━━━━━━━━
+🏆 ${winnerName} won the toss
 
-Choose Bat or Bowl:`,
+Choose to bat or bowl:`,
     Markup.inlineKeyboard([
       [
-        Markup.button.callback("🏏 Bat", "decision_bat"),
-        Markup.button.callback("🎯 Bowl", "decision_bowl")
+        Markup.button.callback("🏏  Bat",   "decision_bat"),
+        Markup.button.callback("🎯  Bowl",  "decision_bowl")
       ]
     ])
   );
@@ -95,52 +92,40 @@ bot.action(["decision_bat", "decision_bowl"], async (ctx) => {
   if (!match || match.phase !== "batbowl") return;
 
   if (ctx.from.id !== match.tossWinner)
-    return ctx.answerCbQuery("Only toss winner decides");
+    return ctx.answerCbQuery("Only toss winner decides.");
 
-  const winnerTeam =
-    ctx.from.id === match.captains.A ? "A" : "B";
-
-  const otherTeam = winnerTeam === "A" ? "B" : "A";
-
-  const decision =
-    ctx.callbackQuery.data === "decision_bat" ? "bat" : "bowl";
+  const winnerTeam  = ctx.from.id === match.captains.A ? "A" : "B";
+  const otherTeam   = winnerTeam === "A" ? "B" : "A";
+  const decision    = ctx.callbackQuery.data === "decision_bat" ? "bat" : "bowl";
 
   if (decision === "bat") {
-    match.battingTeam = winnerTeam;
-    match.bowlingTeam = otherTeam;
+    match.battingTeam  = winnerTeam;
+    match.bowlingTeam  = otherTeam;
   } else {
-    match.bowlingTeam = winnerTeam;
-    match.battingTeam = otherTeam;
+    match.bowlingTeam  = winnerTeam;
+    match.battingTeam  = otherTeam;
   }
 
-  match.innings = 1;
-  match.score = 0;
-  match.wickets = 0;
-  match.currentOver = 0;
-  match.currentBall = 0;
-
-  match.phase = "setovers";
+  match.innings      = 1;
+  match.score        = 0;
+  match.wickets      = 0;
+  match.currentOver  = 0;
+  match.currentBall  = 0;
+  match.phase        = "setovers";
 
   await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
 
+  const battingName  = match.battingTeam  === "A" ? match.teamAName : match.teamBName;
+  const bowlingName  = match.bowlingTeam  === "A" ? match.teamAName : match.teamBName;
+
   await bot.telegram.sendMessage(
     match.groupId,
-`📢 Toss Decision Confirmed
+`[ MATCH SETUP ]
 
-🏏 ${
-  match.battingTeam === "A"
-    ? `${match.teamAName} (A)`
-    : `${match.teamBName} (B)`
-} Batting First
-
-🎯 ${
-  match.bowlingTeam === "A"
-    ? `${match.teamAName} (A)`
-    : `${match.teamBName} (B)`
-} Bowling First
-
-Host set overs:
-/setovers 1-25`
+🏏  Batting  —  ${battingName}
+🎯  Bowling  —  ${bowlingName}
+━━━━━━━━━━━━━━
+Host: /setovers 1–25`
   );
 });
 
@@ -155,32 +140,27 @@ bot.command("setovers", (ctx) => {
   if (!isHost(match, ctx.from.id))
     return ctx.reply("❌ Only host can set overs.");
 
-  const args = ctx.message.text.split(" ");
+  const args  = ctx.message.text.split(" ");
   const overs = parseInt(args[1]);
 
   if (isNaN(overs) || overs < 1 || overs > 25)
     return ctx.reply("⚠️ Overs must be between 1 and 25.");
 
   match.totalOvers = overs;
-
   match.maxWickets =
-    (match.battingTeam === "A"
-      ? match.teamA.length
-      : match.teamB.length) - 1;
-
+    (match.battingTeam === "A" ? match.teamA.length : match.teamB.length) - 1;
   match.phase = "set_striker";
 
   ctx.reply(
-`✅ Overs set to ${overs}
+`[ OVERS SET ]  ${overs} overs
 
-Set STRIKER:
+Set opening batter at striker end:
 /batter number`
   );
 });
 
 
-/* EXPORT startToss so captainCommands can call it */
-
+/* EXPORT startToss */
 helpers.startToss = startToss;
 
 };

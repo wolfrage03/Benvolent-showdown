@@ -1,4 +1,3 @@
-
 const { getMatch, matches } = require("../matchManager");
 const { getRandomTeams } = require("../commentary");
 
@@ -12,13 +11,10 @@ const { getDisplayName, getPlayerTeam } = helpers;
 bot.action("select_host", async (ctx) => {
 
   const match = getMatch(ctx);
-  if (!match) {
-    return ctx.answerCbQuery("Match not found.");
-  }
+  if (!match) return ctx.answerCbQuery("Match not found.");
 
-  if (match.phase !== "host_select") {
-    return ctx.answerCbQuery("Host already selected");
-  }
+  if (match.phase !== "host_select")
+    return ctx.answerCbQuery("Host already selected.");
 
   await ctx.answerCbQuery("You are now the host 👑");
 
@@ -29,12 +25,17 @@ bot.action("select_host", async (ctx) => {
   match.teamAName = selected[0];
   match.teamBName = selected[1];
 
-  try {
-    await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
-  } catch {}
+  try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
 
-  await ctx.reply(`👑 Host Selected: ${ctx.from.first_name}`);
-  await ctx.reply("Host use /createteam to create teams.");
+  await ctx.reply(
+`[ 👑 HOST ]  ${ctx.from.first_name}
+
+Teams assigned:
+🔵  ${match.teamAName}
+🔴  ${match.teamBName}
+
+Host: /createteam to open lobby`
+  );
 });
 
 
@@ -43,10 +44,10 @@ bot.action("select_host", async (ctx) => {
 bot.command("changehost", async (ctx) => {
 
   const match = getMatch(ctx);
-  if (!match) return ctx.reply("No active match.");
+  if (!match) return ctx.reply("⚠️ No active match.");
 
   if (ctx.chat.id !== match.groupId)
-    return ctx.reply("Use this command in match group.");
+    return ctx.reply("⚠️ Use this command in the match group.");
 
   const userId = ctx.from.id;
 
@@ -61,7 +62,7 @@ bot.command("changehost", async (ctx) => {
     match.teamB?.some(p => p.id === userId);
 
   if (!isPlayer)
-    return ctx.reply("❌ Only playing members can request host change.");
+    return ctx.reply("❌ Only match players can request a host change.");
 
   return startHostVoting(match, ctx);
 });
@@ -74,10 +75,7 @@ async function startHostVoting(match, ctx) {
   match.hostChange = {
     active: true,
     phase: "voting",
-    teamVotes: {
-      teamA: new Set(),
-      teamB: new Set()
-    },
+    teamVotes: { teamA: new Set(), teamB: new Set() },
     messageId: null,
     timeout: null
   };
@@ -87,8 +85,8 @@ async function startHostVoting(match, ctx) {
     {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "✅ Vote for Host Change", callback_data: "vote_host_change" }],
-          [{ text: "❌ Cancel Voting", callback_data: "cancel_host_vote" }]
+          [{ text: "✅  Vote for Host Change", callback_data: "vote_host_change" }],
+          [{ text: "❌  Cancel",               callback_data: "cancel_host_vote"  }]
         ]
       }
     }
@@ -103,18 +101,11 @@ async function startHostVoting(match, ctx) {
 
     try {
       await bot.telegram.editMessageReplyMarkup(
-        m.groupId,
-        m.hostChange.messageId,
-        null,
-        { inline_keyboard: [] }
+        m.groupId, m.hostChange.messageId, null, { inline_keyboard: [] }
       );
     } catch {}
 
-    await bot.telegram.sendMessage(
-      m.groupId,
-      "⏳ Host change voting expired."
-    );
-
+    await bot.telegram.sendMessage(m.groupId, "[ HOST CHANGE ]\n\nVoting expired.");
     m.hostChange = null;
 
   }, 60000);
@@ -122,19 +113,16 @@ async function startHostVoting(match, ctx) {
 
 
 function getVoteText(match) {
-
   const aVotes = match.hostChange.teamVotes.teamA.size;
   const bVotes = match.hostChange.teamVotes.teamB.size;
 
-  return `
-🗳 HOST CHANGE VOTING
+  return `[ HOST CHANGE VOTE ]
 
-Team A Votes: ${aVotes}/2
-Team B Votes: ${bVotes}/2
+Team A  —  ${aVotes} / 2 votes
+Team B  —  ${bVotes} / 2 votes
 
-Need up to 2 players from each team.
-Voting expires in 60 seconds.
-`;
+Need 2 votes from each team.
+Voting closes in 60 seconds.`;
 }
 
 
@@ -148,7 +136,6 @@ bot.action("vote_host_change", async (ctx) => {
     return ctx.answerCbQuery("Voting not active.");
 
   const userId = ctx.from.id;
-
   const isPlayer =
     match.teamA?.some(p => p.id === userId) ||
     match.teamB?.some(p => p.id === userId);
@@ -157,10 +144,7 @@ bot.action("vote_host_change", async (ctx) => {
     return ctx.answerCbQuery("Only match players can vote.");
 
   const team = getPlayerTeam(match, userId);
-  if (!team)
-    return ctx.answerCbQuery("Invalid team.");
-
-  if (!match.hostChange.teamVotes[team])
+  if (!team || !match.hostChange.teamVotes[team])
     return ctx.answerCbQuery("Invalid team.");
 
   if (match.hostChange.teamVotes[team].has(userId))
@@ -170,7 +154,6 @@ bot.action("vote_host_change", async (ctx) => {
     return ctx.answerCbQuery("Your team already has 2 votes.");
 
   match.hostChange.teamVotes[team].add(userId);
-
   ctx.answerCbQuery("Vote counted.");
 
   try {
@@ -182,8 +165,8 @@ bot.action("vote_host_change", async (ctx) => {
       {
         reply_markup: {
           inline_keyboard: [
-            [{ text: "✅ Vote for Host Change", callback_data: "vote_host_change" }],
-            [{ text: "❌ Cancel Voting", callback_data: "cancel_host_vote" }]
+            [{ text: "✅  Vote for Host Change", callback_data: "vote_host_change" }],
+            [{ text: "❌  Cancel",               callback_data: "cancel_host_vote"  }]
           ]
         }
       }
@@ -215,22 +198,22 @@ async function showHostSelection(match) {
   if (match.hostChange?.messageId) {
     try {
       await bot.telegram.editMessageReplyMarkup(
-        match.groupId,
-        match.hostChange.messageId,
-        null,
-        { inline_keyboard: [] }
+        match.groupId, match.hostChange.messageId, null, { inline_keyboard: [] }
       );
     } catch {}
   }
 
   const msg = await bot.telegram.sendMessage(
     match.groupId,
-    "⚡ Please take charge as new host.",
+`[ HOST SELECTION ]
+
+Voting passed.
+A non-playing member can now take host.`,
     {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "👑 Take Host", callback_data: "take_host" }],
-          [{ text: "❌ Cancel", callback_data: "cancel_host_vote" }]
+          [{ text: "👑  Take Host", callback_data: "take_host"        }],
+          [{ text: "❌  Cancel",    callback_data: "cancel_host_vote"  }]
         ]
       }
     }
@@ -249,7 +232,6 @@ bot.action("take_host", async (ctx) => {
     return ctx.answerCbQuery("Not allowed.");
 
   const userId = ctx.from.id;
-
   const isPlaying =
     match.teamA?.some(p => p.id === userId) ||
     match.teamB?.some(p => p.id === userId);
@@ -264,10 +246,7 @@ bot.action("take_host", async (ctx) => {
 
   try {
     await bot.telegram.editMessageReplyMarkup(
-      match.groupId,
-      match.hostChange.messageId,
-      null,
-      { inline_keyboard: [] }
+      match.groupId, match.hostChange.messageId, null, { inline_keyboard: [] }
     );
   } catch {}
 
@@ -275,7 +254,7 @@ bot.action("take_host", async (ctx) => {
 
   await bot.telegram.sendMessage(
     match.groupId,
-    `👑 ${getDisplayName(ctx.from)} is now the new host!`
+    `[ 👑 NEW HOST ]  ${getDisplayName(ctx.from)}`
   );
 
   ctx.answerCbQuery("You are now host.");
@@ -287,11 +266,9 @@ bot.action("take_host", async (ctx) => {
 bot.action("cancel_host_vote", async (ctx) => {
 
   const match = getMatch(ctx);
-  if (!match?.hostChange)
-    return ctx.answerCbQuery("No active process.");
+  if (!match?.hostChange) return ctx.answerCbQuery("No active process.");
 
   const userId = ctx.from.id;
-
   if (match.hostChange.phase !== "selection" && userId !== match.host)
     return ctx.answerCbQuery("Only host can cancel.");
 
@@ -299,17 +276,12 @@ bot.action("cancel_host_vote", async (ctx) => {
 
   try {
     await bot.telegram.editMessageReplyMarkup(
-      match.groupId,
-      match.hostChange.messageId,
-      null,
-      { inline_keyboard: [] }
+      match.groupId, match.hostChange.messageId, null, { inline_keyboard: [] }
     );
   } catch {}
 
-  await bot.telegram.sendMessage(match.groupId, "❌ Host change cancelled.");
-
+  await bot.telegram.sendMessage(match.groupId, "[ ✗ ]  Host change cancelled.");
   match.hostChange = null;
-
   ctx.answerCbQuery("Cancelled.");
 });
 

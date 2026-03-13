@@ -22,19 +22,16 @@ function registerStartHandler(bot) {
         { upsert: true }
       );
 
-      console.log(
-        "✅ DM user saved:",
-        username?.toLowerCase(),
-        "| telegramId:",
-        id
-      );
+      console.log("✅ DM user saved:", username?.toLowerCase(), "| telegramId:", id);
 
     } catch (err) {
       console.error("❌ DM user save error:", err);
     }
 
     await ctx.reply(
-      "✅ Bot connected.\n\nWhen you are selected as bowler, send your number (1-6) here."
+`[ BOT CONNECTED ]
+
+When selected as bowler, send your number (1–6) here in DM.`
     );
 
   });
