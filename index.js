@@ -194,10 +194,9 @@ async function advanceGame(match) {
     return;
   }
 
-  if (match.phase === "play") {
-    startBall(match);
-  }
+  startBall(match);   // always start next ball
 }
+
 
 const helpers = {
   isHost,
@@ -764,28 +763,21 @@ async function startBall(match) {
 
   if (!match) return;
 
-  // 🔥 HARD STOPS
   if (match.phase === "switch") return;
   if (match.currentOver >= match.totalOvers) return;
   if (match.wickets >= match.maxWickets) return;
 
-  // ✅ Stop previous timers
   clearTimers(match);
 
-  // Set phase flags
+  match.phase = "play";   // ADD THIS
+
   match.awaitingBowl = true;
   match.awaitingBat = false;
 
-  // Announce the ball
   await announceBall(match);
 
-  // Start turn timer
   startTurnTimer(match, "bowl");
 }
-
-
-
-
 
 /* ================= HANDLE INPUT ================= */
 
@@ -814,9 +806,12 @@ bot.on("text", async (ctx) => {
     match.batNumber = Number(text);
     match.awaitingBat = false;
 
+    if (match.ballLocked) return;   // ADD
+    match.ballLocked = true;        // ADD
+
     clearTimers(match);
 
-    return processBall(match);
+r.  eturn processBall(match);
   }
 
   /* ================= PRIVATE BOWLER INPUT ================= */
@@ -838,6 +833,8 @@ bot.on("text", async (ctx) => {
   match.bowlNumber = Number(text);
   match.awaitingBowl = false;
   match.awaitingBat = true;
+
+  match.ballLocked = false;   // reset lock when new ball starts
 
   await ctx.reply("✅ Ball submitted!");
 
@@ -865,7 +862,7 @@ async function processBall(match) {
   if (!match || match.ballLocked) return;
 
   clearTimers(match);   // 🔥 stop timers immediately
-  match.ballLocked = true;
+  
 
   try {
 
