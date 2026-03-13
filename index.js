@@ -210,16 +210,12 @@ async function handleBallCompletion(match) {
 async function checkOverEnd(match) {
 
   if (!match) return false;
-
-  // Only end over after 6 balls
   if (match.currentBall < 6) return false;
 
   match.currentOver++;
   match.currentBall = 0;
-
   match.currentOverRuns = 0;
   match.wicketStreak = 0;
-
   match.awaitingBat = false;
   match.awaitingBowl = false;
 
@@ -230,19 +226,19 @@ async function checkOverEnd(match) {
     return true;
   }
 
-  // Prevent same bowler next over
-  match.lastOverBowler = match.bowler;
-  match.bowler = null;
-
-  // Rotate strike
-  swapStrike(match);
-
-  match.phase = "set_bowler";
-
+  // ✅ Send scorecard BEFORE nulling bowler so it still has bowler data
   await bot.telegram.sendMessage(
     match.groupId,
     generateScorecard(match)
   );
+
+  // NOW null the bowler and rotate strike
+  match.lastOverBowler = match.bowler;
+  match.bowler = null;
+
+  swapStrike(match);
+
+  match.phase = "set_bowler";
 
   await bot.telegram.sendMessage(
     match.groupId,
@@ -254,8 +250,6 @@ async function checkOverEnd(match) {
 
   return true;
 }
-
-
 
 const helpers = {
   isHost,
