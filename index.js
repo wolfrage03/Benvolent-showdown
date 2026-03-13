@@ -206,7 +206,6 @@ async function handleBallCompletion(match) {
   return false;
 }
 
-
 async function checkOverEnd(match) {
 
   if (!match) return false;
