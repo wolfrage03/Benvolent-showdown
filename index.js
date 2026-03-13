@@ -389,45 +389,56 @@ Ball starting...`
 
 
 
+
 // ================= OVER COMPLETION =================
 
 async function handleOverCompletion(match) {
 
   if (!match) return false;
 
-  if (match.currentBall < 6) return false;
+  // only trigger exactly on 6th ball
+  if (match.currentBall !== 6) return false;
 
-  match.currentOver++;
+  const completedOver = match.currentOver + 1;
+
+  // reset ball state
   match.currentBall = 0;
+  match.currentOver = completedOver;
   match.currentOverRuns = 0;
   match.wicketStreak = 0;
 
   match.awaitingBat = false;
   match.awaitingBowl = false;
 
+  // innings finished
   if (match.currentOver >= match.totalOvers) {
     clearTimers(match);
     await endInnings(match);
     return true;
   }
 
+  // store last bowler so same bowler cannot bowl
   match.lastOverBowler = match.bowler;
   match.bowler = null;
 
+  // rotate strike at end of over
   swapStrike(match);
 
+  // change phase so bot waits for host
   match.phase = "set_bowler";
 
+  // show scoreboard first
   await bot.telegram.sendMessage(
     match.groupId,
     generateScorecard(match)
   );
 
+  // then ask host for bowler
   await bot.telegram.sendMessage(
     match.groupId,
-`🔄 Over ${match.currentOver} Completed!
+`🔄 Over ${completedOver} Completed!
 
-🎯 Host choose new bowler
+🎯 Host choose the next bowler
 /bowler number`
   );
 
@@ -941,29 +952,29 @@ async function processBall(match) {
       match.wickets++;
       match.wicketStreak++;
       match.bowlerStats[match.bowler].wickets++;
-      match.currentBall++;
+
+      match.currentBall++;   // ball completed
 
       const lastOver = match.overHistory[match.overHistory.length - 1];
       if (lastOver) lastOver.balls.push("W");
 
       match.currentPartnershipBalls++;
 
+      // 🔴 CHECK OVER END IMMEDIATELY
+      if (await handleOverCompletion(match)) return;
+
       if (match.wickets >= match.maxWickets) {
         await endInnings(match);
         return;
       }
 
-      /* CHECK OVER END */
-    const overEnded = await handleOverCompletion(match);
-    if (overEnded) return;
-
-      /* ONLY ASK BATTER IF OVER NOT ENDED */
       match.phase = "new_batter";
 
       await bot.telegram.sendMessage(
-         match.groupId,
-         "📢 Send new batter:\n/batter number"
+        match.groupId,
+        "📢 Send new batter:\n/batter number"
       );
+
       return;
     }
 
@@ -978,9 +989,14 @@ async function processBall(match) {
     match.bowlerStats[match.bowler].runs += bat;
 
     match.currentBall++;
+
     const lastOver = match.overHistory[match.overHistory.length - 1];
     if (lastOver) lastOver.balls.push(bat);
+
     match.wicketStreak = 0;
+
+    // 🔴 CHECK OVER END IMMEDIATELY
+    if (await handleOverCompletion(match)) return;
 
     /* ================= PARTNERSHIP MILESTONES ================= */
 
