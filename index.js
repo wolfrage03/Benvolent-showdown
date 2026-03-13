@@ -146,7 +146,7 @@ function clearTimers(match) {
     match.ballTimer = null;
   }
 
-  match.ballLocked = false;
+  
 }
 
 
@@ -198,14 +198,12 @@ async function advanceGame(match) {
 }
 
 async function handleBallCompletion(match) {
-
-  // 6th ball finished
   if (match.currentBall >= 6) {
-    return await checkOverEnd(match);
+    const overEnded = await checkOverEnd(match);
+    return overEnded; // ← return true so processBall knows to stop
   }
-
-  // normal next ball
   advanceGame(match);
+  return false;
 }
 
 
@@ -378,7 +376,6 @@ if (match.phase === "new_batter") {
 }
 
 });
-
 /* ================= SET BOWLER ================= */
 
 bot.command("bowler", async (ctx) => {
@@ -423,13 +420,7 @@ bot.command("bowler", async (ctx) => {
   match.bowler = player.id;
   match.lastOverBowler = player.id;
 
-  if (!match.overHistory) match.overHistory = [];
-
-  match.overHistory.push({
-    over: match.currentOver + 1,
-    bowler: match.bowler,
-    balls: []
-  });
+  // overHistory push removed — handled inside startBall now
 
   match.phase = "play";
   match.awaitingBat = false;
@@ -441,10 +432,8 @@ bot.command("bowler", async (ctx) => {
 Ball starting...`
   );
 
-  advanceGame(match);
+  advanceGame(match);  // ← only once
 });
-
-
 
 
 
@@ -648,6 +637,8 @@ Host select new bowler:
 
       match.batterStats[match.striker].runs -= 6;
       match.batterStats[match.striker].balls++;
+      match.currentPartnershipRuns -= 6;
+      match.currentPartnershipBalls++;
 
       await bot.telegram.sendMessage(
         match.groupId,
@@ -772,23 +763,31 @@ function setPhase(match, newPhase) {
 
 /* ================= START BALL ================= */
 
+
 async function startBall(match) {
-
   if (!match) return;
-
   if (match.phase === "switch") return;
   if (match.currentOver >= match.totalOvers) return;
   if (match.wickets >= match.maxWickets) return;
 
+  
+  if (!match.overHistory) match.overHistory = [];
+  if (match.bowler) {
+    const lastEntry = match.overHistory[match.overHistory.length - 1];
+    if (!lastEntry || lastEntry.over !== match.currentOver + 1) {
+      match.overHistory.push({
+        over: match.currentOver + 1,
+        bowler: match.bowler,
+        balls: []
+      });
+    }
+  }
+
   clearTimers(match);
-
-  match.phase = "play";   // ADD THIS
-
+  match.phase = "play";
   match.awaitingBowl = true;
   match.awaitingBat = false;
-
   await announceBall(match);
-
   startTurnTimer(match, "bowl");
 }
 
@@ -870,19 +869,13 @@ bot.on("text", async (ctx) => {
 /* ================= PROCESS BALL ================= */
 
 async function processBall(match) {
-
   if (!match) return;
 
   clearTimers(match);
-  
 
   try {
 
-    
-
-    if (match.batNumber === null || match.bowlNumber === null) {
-      return;
-    }
+    if (match.batNumber === null || match.bowlNumber === null) return;
 
     const bat = Number(match.batNumber);
     const bowl = Number(match.bowlNumber);
@@ -890,16 +883,13 @@ async function processBall(match) {
     match.bowlerMissCount = 0;
     match.batterMissCount = 0;
 
-   
     /* ================= HATTRICK BLOCK ================= */
 
     if (match.wicketStreak === 2 && bat === 0) {
-
       await bot.telegram.sendMessage(
         match.groupId,
         "🔥 HATTRICK BALL! Batter cannot play 0!"
       );
-
       match.awaitingBat = true;
       startTurnTimer(match, "bat");
       return;
@@ -916,12 +906,7 @@ async function processBall(match) {
     /* ================= INIT BOWLER ================= */
 
     if (!match.bowlerStats[match.bowler]) {
-      match.bowlerStats[match.bowler] = {
-        balls: 0,
-        runs: 0,
-        wickets: 0,
-        history: []
-      };
+      match.bowlerStats[match.bowler] = { balls: 0, runs: 0, wickets: 0, history: [] };
     }
 
     match.bowlerStats[match.bowler].balls++;
@@ -935,32 +920,38 @@ async function processBall(match) {
       match.wicketStreak++;
       match.bowlerStats[match.bowler].wickets++;
       match.currentBall++;
+      match.currentPartnershipBalls++;
 
       const lastOver = match.overHistory[match.overHistory.length - 1];
       if (lastOver) lastOver.balls.push("W");
 
-      match.currentPartnershipBalls++;
-  
-      if (await handleBallCompletion(match)) return;
+      // Reset partnership on wicket
+      match.currentPartnershipRuns = 0;
+      match.currentPartnershipBalls = 0;
 
+      await bot.telegram.sendMessage(match.groupId, randomLine("W"));
+
+      // Over ended on wicket ball — handle first
+      const overEnded = await handleBallCompletion(match);
+      if (overEnded) return;
+
+      // All out
       if (match.wickets >= match.maxWickets) {
-         await endInnings(match);
-         return;
+        await endInnings(match);
+        return;
       }
 
       match.phase = "new_batter";
-
       await bot.telegram.sendMessage(
         match.groupId,
         "📢 Send new batter:\n/batter number"
       );
-
       return;
     }
 
-    /* ================= RUNS (NEGATIVE ALLOWED) ================= */
+    /* ================= RUNS ================= */
 
-    match.score += bat;                 // ✅ negative runs allowed
+    match.score += bat;
     match.currentOverRuns += bat;
     match.currentPartnershipRuns += bat;
     match.currentPartnershipBalls++;
@@ -975,57 +966,42 @@ async function processBall(match) {
 
     match.wicketStreak = 0;
 
-    // ✅ CHECK OVER END
-    await handleBallCompletion(match);
-    return;
-
-    
-
     /* ================= PARTNERSHIP MILESTONES ================= */
 
     if (match.currentPartnershipRuns === 50) {
       await bot.telegram.sendMessage(match.groupId, "🔥 50 Run Partnership!");
-    }
-
-    if (match.currentPartnershipRuns === 100) {
+    } else if (match.currentPartnershipRuns === 100) {
       await bot.telegram.sendMessage(match.groupId, "💯 100 Run Partnership!");
     }
 
     /* ================= COMMENTARY ================= */
 
-    await bot.telegram.sendMessage(
-      match.groupId,
-      randomLine(bat)
-    );
+    await bot.telegram.sendMessage(match.groupId, randomLine(bat));
 
     /* ================= STRIKE ROTATION ================= */
 
-    if ([1, 3, 5, -1, -3, -5].includes(bat)) { // optional: rotate on negative odd
+    if ([1, 3, 5, -1, -3, -5].includes(bat)) {
       swapStrike(match);
     }
 
     /* ================= CHASE CHECK ================= */
 
-    if (
-      match.innings === 2 &&
-      match.score >= match.firstInningsScore + 1
-    ) {
+    if (match.innings === 2 && match.score >= match.firstInningsScore + 1) {
       await endInnings(match);
       return;
     }
 
+    /* ================= CHECK OVER END / NEXT BALL ================= */
 
-    /* ================= NEXT BALL ================= */
+    const overEnded = await handleBallCompletion(match);
+    if (overEnded) return;
 
-    advanceGame(match);
-
-    } catch (err) {
+  } catch (err) {
     console.error("processBall error:", err);
   } finally {
     match.ballLocked = false;
     match.batNumber = null;
     match.bowlNumber = null;
-  
   }
 }
 
@@ -1034,7 +1010,9 @@ async function processBall(match) {
 
 async function endInnings(match) {
 
-  if (!match) return;
+  if (!match) return;           
+  if (match.inningsEnded) return;
+  match.inningsEnded = true;
 
   clearTimers(match);
   match.awaitingBat = false;
@@ -1175,10 +1153,11 @@ bot.command("inningsswitch", async (ctx) => {
  
 
   /* ================= RESET MATCH STATE ================= */
-
+  
   m.score = 0;
   m.wickets = 0;
-
+  m.inningsEnded = false;
+  m.maxWickets = battingPlayers(m).length - 1;  
   m.currentOver = 0;
   m.currentBall = 0;
   m.currentOverNumber = 0;
@@ -1201,7 +1180,7 @@ bot.command("inningsswitch", async (ctx) => {
   m.nonStriker = null;
   m.bowler = null;
   m.lastOverBowler = null;
-
+  
   m.suspendedBowlers = {};
 
   m.overHistory = [];
@@ -1230,27 +1209,33 @@ Set STRIKER:
 /* ================= MATCH RESULT ================= */
 
 async function endMatchWithWinner(match, winningTeam) {
-
-
   const teamName =
     winningTeam === "A"
       ? `${match.teamAName} (A)`
       : `${match.teamBName} (B)`;
+
+  let margin = "";
+  if (match.innings === 2 && winningTeam === match.battingTeam) {
+    const wicketsLeft = match.maxWickets - match.wickets;
+    margin = `Won by ${wicketsLeft} wicket${wicketsLeft !== 1 ? "s" : ""}`;
+  } else {
+    const runDiff = Math.abs(match.firstInningsScore - match.score);
+    margin = `Won by ${runDiff} run${runDiff !== 1 ? "s" : ""}`;
+  }
 
   await bot.telegram.sendMessage(
     match.groupId,
 `🏆 MATCH RESULT
 
 ${teamName} WON THE MATCH!
+${margin}
 
-Final Score:
-${match.score}/${match.wickets}`
+1st Innings: ${match.firstInningsScore}
+2nd Innings: ${match.score}/${match.wickets}`
   );
 
   clearTimers(match);
-  matches.delete(match.groupId);
 }
-
 async function endMatchTie(match) {
 
   await bot.telegram.sendMessage(
@@ -1261,7 +1246,7 @@ Both teams scored ${match.score}`
   );
 
   clearTimers(match);
-  matches.delete(match.groupId);
+ 
 }
 
 (async () => {
