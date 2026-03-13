@@ -392,12 +392,15 @@ async function handleOverCompletion(match) {
 
   if (!match) return false;
 
-  if (match.currentBall < 6) return false;
+  if (match.currentBall !== 6) return false;
 
   match.currentOver++;
   match.currentBall = 0;
   match.currentOverRuns = 0;
   match.wicketStreak = 0;
+
+  match.awaitingBat = false;
+  match.awaitingBowl = false;
 
   // innings finished
   if (match.currentOver >= match.totalOvers) {
@@ -408,11 +411,12 @@ async function handleOverCompletion(match) {
 
   // prevent same bowler
   match.lastOverBowler = match.bowler;
+  match.bowler = null;
 
   // rotate strike
   swapStrike(match);
 
-  // 🔴 SET PHASE BEFORE MESSAGE
+  // phase change
   match.phase = "set_bowler";
 
   await bot.telegram.sendMessage(
@@ -430,6 +434,8 @@ async function handleOverCompletion(match) {
 
   return true;
 }
+
+
 /* ================= SCORE ================= */
 
 function getLiveScore(match) {
