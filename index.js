@@ -804,7 +804,7 @@ bot.on("text", async (ctx) => {
 
   if (isNaN(number) || number < 0 || number > 6) return;
 
-}
+});
 
 
   /* ================= GROUP BATTER INPUT ================= */
