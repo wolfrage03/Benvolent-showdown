@@ -785,30 +785,20 @@ async function startBall(match) {
 
 
 
+
+
 /* ================= HANDLE INPUT ================= */
 
 bot.on("text", async (ctx) => {
 
   if (ctx.message.text.startsWith("/")) return;
-  
 
   const match = getMatch(ctx);
   if (!match) return;
 
-  // Only block number inputs when not playing
-  const isNumber = /^[0-6]$/.test(ctx.message.text.trim());
-
-  if (match.phase !== "play" && isNumber) return;
-
-  const number = parseInt(ctx.message.text);
-
-  if (isNaN(number) || number < 0 || number > 6) return;
-
-});
-
+  const text = ctx.message.text.trim();
 
   /* ================= GROUP BATTER INPUT ================= */
-
 
   if (ctx.chat.type !== "private") {
 
@@ -817,8 +807,6 @@ bot.on("text", async (ctx) => {
 
     if (ctx.from.id !== match.striker)
       return ctx.reply("❌ You are not the striker.");
-
-    const text = ctx.message.text.trim();
 
     if (!/^[0-6]$/.test(text))
       return ctx.reply("❌ Send number between 0-6.");
@@ -831,10 +819,9 @@ bot.on("text", async (ctx) => {
     return processBall(match);
   }
 
-
   /* ================= PRIVATE BOWLER INPUT ================= */
 
-  if (match.phase !== "play") 
+  if (match.phase !== "play")
     return ctx.reply("⚠️ No active ball.");
 
   if (!match.awaitingBowl)
@@ -842,8 +829,6 @@ bot.on("text", async (ctx) => {
 
   if (ctx.from.id !== match.bowler)
     return ctx.reply("❌ You are not the current bowler.");
-
-  const text = ctx.message.text.trim();
 
   if (!/^[1-6]$/.test(text))
     return ctx.reply("❌ Send number between 1-6.");
@@ -853,8 +838,6 @@ bot.on("text", async (ctx) => {
   match.bowlNumber = Number(text);
   match.awaitingBowl = false;
   match.awaitingBat = true;
-
-  
 
   await ctx.reply("✅ Ball submitted!");
 
@@ -870,8 +853,8 @@ bot.on("text", async (ctx) => {
   );
 
   startTurnTimer(match, "bat");
-});
 
+});
 
 
 /* ================= PROCESS BALL ================= */
