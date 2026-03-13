@@ -202,6 +202,16 @@ async function advanceGame(match) {
   }
 }
 
+function checkBallReady(match) {
+  if (
+    match.batNumber !== null &&
+    match.bowlNumber !== null &&
+    !match.ballLocked
+  ) {
+    processBall(match);
+  }
+}
+
 const helpers = {
   isHost,
   getDisplayName,
@@ -452,7 +462,10 @@ function getLiveScore(match) {
 
   if (!match) return "⚠️ No active match.";
 
-  const overs = `${match.currentOver}.${match.currentBall}`;
+  const overs =
+    match.currentBall === 6
+      ? `${match.currentOver + 1}.0`
+      : `${match.currentOver}.${match.currentBall}`;
 
   const ballsBowled = (match.currentOver * 6) + match.currentBall;
   const totalBalls = (match.totalOvers || 0) * 6;
@@ -823,7 +836,7 @@ bot.on("text", async (ctx, next) => {
 
     if (match.phase !== "play") return;
 
-    if (!match.awaitingBat && match.currentBall < 6)
+    if (!match.awaitingBat)
       return;
 
     if (ctx.from.id !== match.striker)
@@ -839,7 +852,8 @@ bot.on("text", async (ctx, next) => {
 
     clearTimers(match);
 
-    return processBall(match);
+    checkBallReady(match);
+    return;
   }
 
 
@@ -864,6 +878,8 @@ bot.on("text", async (ctx, next) => {
   match.bowlNumber = Number(text);
   match.awaitingBowl = false;
   match.awaitingBat = true;
+
+  checkBallReady(match);
 
   
 
