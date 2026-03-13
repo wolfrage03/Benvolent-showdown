@@ -231,6 +231,7 @@ async function checkOverEnd(match) {
     generateScorecard(match)
   );
 
+
   // NOW null the bowler and rotate strike
   match.lastOverBowler = match.bowler;
   match.bowler = null;
