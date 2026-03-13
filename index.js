@@ -811,7 +811,7 @@ bot.on("text", async (ctx) => {
 
     clearTimers(match);
 
-r.  eturn processBall(match);
+    return processBall(match);
   }
 
   /* ================= PRIVATE BOWLER INPUT ================= */
