@@ -992,12 +992,7 @@ async function processBall(match) {
 
     match.wicketStreak = 0;
 
-    /* ================= OVER END CHECK (EARLY) ================= */
-
-    if (match.currentBall === 6) {
-      const overEnded = await handleOverCompletion(match);
-      if (overEnded) return;
-    }
+    
 
     /* ================= PARTNERSHIP MILESTONES ================= */
 
