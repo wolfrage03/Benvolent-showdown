@@ -987,6 +987,9 @@ async function processBall(match) {
 
     match.wicketStreak = 0;
 
+    // ✅ CHECK OVER END
+    if (await handleOverCompletion(match)) return;
+
     
 
     /* ================= PARTNERSHIP MILESTONES ================= */
