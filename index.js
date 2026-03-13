@@ -787,18 +787,18 @@ async function startBall(match) {
 
 /* ================= HANDLE INPUT ================= */
 
-bot.on("text", async (ctx, next) => {
+bot.on("text", async (ctx) => {
 
-  // 🔥 Always allow commands first
-  if (ctx.message.text.startsWith("/")) {
-    return next();
+  if (ctx.message.text.startsWith("/")) return;
   }
 
   const match = getMatch(ctx);
   if (!match) return;
 
-  // Only allow numbers during play
-  if (match.phase !== "play") return;
+  // Only block number inputs when not playing
+  const isNumber = /^[0-6]$/.test(ctx.message.text.trim());
+
+  if (match.phase !== "play" && isNumber) return;
 
   const number = parseInt(ctx.message.text);
 
@@ -949,13 +949,7 @@ async function processBall(match) {
 
       match.currentPartnershipBalls++;
   
-     // ================= OVER END CHECK =================
-
-     if (await handleOverCompletion(match)) return;
-
-     /* ================= NEXT BALL ================= */
-
-     advanceGame(match);
+      if (await handleOverCompletion(match)) return;
 
       if (match.wickets >= match.maxWickets) {
          await endInnings(match);
