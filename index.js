@@ -207,7 +207,8 @@ async function handleBallCompletion(match) {
 }
 
 async function checkOverEnd(match) {
-
+  console.log("checkOverEnd called, ball:", match.currentBall, "over:", match.currentOver);
+  
   if (!match) return false;
   if (match.currentBall < 6) return false;
 
@@ -218,38 +219,44 @@ async function checkOverEnd(match) {
   match.awaitingBat = false;
   match.awaitingBowl = false;
 
-  // End innings if overs finished
+  console.log("Over ended, new over:", match.currentOver, "totalOvers:", match.totalOvers);
+
   if (match.currentOver >= match.totalOvers) {
     clearTimers(match);
     await endInnings(match);
     return true;
   }
 
-  // ✅ Send scorecard BEFORE nulling bowler so it still has bowler data
-  await bot.telegram.sendMessage(
-    match.groupId,
-    generateScorecard(match)
-  );
+  console.log("Sending scorecard...");
+  try {
+    await bot.telegram.sendMessage(match.groupId, generateScorecard(match));
+    console.log("Scorecard sent");
+  } catch(e) {
+    console.error("Scorecard failed:", e.message);
+  }
 
-
-  // NOW null the bowler and rotate strike
   match.lastOverBowler = match.bowler;
   match.bowler = null;
-
   swapStrike(match);
-
   match.phase = "set_bowler";
 
-  await bot.telegram.sendMessage(
-    match.groupId,
+  console.log("Sending over complete message...");
+  try {
+    await bot.telegram.sendMessage(
+      match.groupId,
 `🔄 Over ${match.currentOver} Completed!
 
 🎯 Host choose new bowler
 /bowler number`
-  );
+    );
+    console.log("Over message sent, phase:", match.phase);
+  } catch(e) {
+    console.error("Over message failed:", e.message);
+  }
 
   return true;
 }
+
 
 const helpers = {
   isHost,
