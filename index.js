@@ -397,7 +397,7 @@ async function handleOverCompletion(match) {
   if (!match) return false;
 
   // only trigger exactly on 6th ball
-  if (match.currentBall !== 6) return false;
+  if (match.currentBall < 6) return false;
 
   const completedOver = match.currentOver + 1;
 
@@ -774,22 +774,21 @@ async function startBall(match) {
 
   if (!match) return;
 
-  // 🔥 HARD STOPS
-  if (match.phase === "switch") return;
+  if (match.phase !== "play") return;
   if (match.currentOver >= match.totalOvers) return;
   if (match.wickets >= match.maxWickets) return;
 
-  // ✅ Stop previous timers
   clearTimers(match);
 
-  // Set phase flags
+  // 🔴 RESET BALL INPUTS
+  match.batNumber = null;
+  match.bowlNumber = null;
+
   match.awaitingBowl = true;
   match.awaitingBat = false;
 
-  // Announce the ball
   await announceBall(match);
 
-  // Start turn timer
   startTurnTimer(match, "bowl");
 }
 
@@ -823,7 +822,9 @@ bot.on("text", async (ctx, next) => {
   if (ctx.chat.type !== "private") {
 
     if (match.phase !== "play") return;
-    if (!match.awaitingBat) return;
+
+    if (!match.awaitingBat && match.currentBall < 6)
+      return;
 
     if (ctx.from.id !== match.striker)
       return ctx.reply("❌ You are not the striker.");
@@ -1031,10 +1032,6 @@ async function processBall(match) {
       return;
     }
 
-    /* ================= OVER COMPLETION ================= */
-
-    const overEnded = await handleOverCompletion(match);
-    if (overEnded) return;
 
     /* ================= NEXT BALL ================= */
 
