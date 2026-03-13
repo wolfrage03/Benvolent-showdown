@@ -414,8 +414,6 @@ bot.command("bowler", async (ctx) => {
   match.bowler = player.id;
   match.lastOverBowler = player.id;
 
-  // overHistory push removed — handled inside startBall now
-
   match.phase = "play";
   match.awaitingBat = false;
   match.awaitingBowl = true;
@@ -426,7 +424,7 @@ bot.command("bowler", async (ctx) => {
 Ball starting...`
   );
 
-  advanceGame(match);  // ← only once
+  startBall(match);   
 });
 
 
@@ -761,10 +759,11 @@ function setPhase(match, newPhase) {
 async function startBall(match) {
   if (!match) return;
   if (match.phase === "switch") return;
+  if (match.phase === "set_bowler") return;   // ← ADD THIS
+  if (match.phase === "new_batter") return;   // ← ADD THIS too for safety
   if (match.currentOver >= match.totalOvers) return;
   if (match.wickets >= match.maxWickets) return;
 
-  
   if (!match.overHistory) match.overHistory = [];
   if (match.bowler) {
     const lastEntry = match.overHistory[match.overHistory.length - 1];
@@ -784,7 +783,6 @@ async function startBall(match) {
   await announceBall(match);
   startTurnTimer(match, "bowl");
 }
-
 /* ================= HANDLE INPUT ================= */
 
 bot.on("text", async (ctx) => {
