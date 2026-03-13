@@ -949,11 +949,13 @@ async function processBall(match) {
 
       match.currentPartnershipBalls++;
   
-      // ✅ OVER END CHECK FIRST
-      if (match.currentBall === 6) {
-        const overEnded = await handleOverCompletion(match);
-        if (overEnded) return;
-       }
+     // ================= OVER END CHECK =================
+
+     if (await handleOverCompletion(match)) return;
+
+     /* ================= NEXT BALL ================= */
+
+     advanceGame(match);
 
       if (match.wickets >= match.maxWickets) {
          await endInnings(match);
