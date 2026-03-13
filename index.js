@@ -948,30 +948,25 @@ async function processBall(match) {
       if (lastOver) lastOver.balls.push("W");
 
       match.currentPartnershipBalls++;
-
-      /* ================= OVER END CHECK ================= */
-
+  
+      // ✅ OVER END CHECK FIRST
       if (match.currentBall === 6) {
         const overEnded = await handleOverCompletion(match);
         if (overEnded) return;
-      }
+       }
 
       if (match.wickets >= match.maxWickets) {
-        await endInnings(match);
-        return;
+         await endInnings(match);
+         return;
       }
 
-      /* CHECK OVER END */
-    const overEnded = await handleOverCompletion(match);
-    if (overEnded) return;
-
-      /* ONLY ASK BATTER IF OVER NOT ENDED */
       match.phase = "new_batter";
 
       await bot.telegram.sendMessage(
-         match.groupId,
-         "📢 Send new batter:\n/batter number"
+        match.groupId,
+        "📢 Send new batter:\n/batter number"
       );
+
       return;
     }
 
