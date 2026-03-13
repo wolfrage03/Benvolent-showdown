@@ -790,7 +790,7 @@ async function startBall(match) {
 bot.on("text", async (ctx) => {
 
   if (ctx.message.text.startsWith("/")) return;
-  }
+  
 
   const match = getMatch(ctx);
   if (!match) return;
@@ -804,7 +804,7 @@ bot.on("text", async (ctx) => {
 
   if (isNaN(number) || number < 0 || number > 6) return;
 
-
+}
 
 
   /* ================= GROUP BATTER INPUT ================= */
