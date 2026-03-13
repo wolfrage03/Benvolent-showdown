@@ -392,7 +392,7 @@ async function handleOverCompletion(match) {
 
   if (!match) return false;
 
-  if (match.currentBall !== 6) return false;
+  if (match.currentBall < 6) return false;
 
   match.currentOver++;
   match.currentBall = 0;
