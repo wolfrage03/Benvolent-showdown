@@ -18,21 +18,76 @@ bot.command("createteam", (ctx) => {
 
   match.teamA = [];
   match.teamB = [];
-  match.captains = { A:null, B:null };
-
+  match.captains = { A: null, B: null };
   match.phase = "join";
 
   ctx.reply(
-    "🏏 Teams Created!\n\n" +
-    "🔵 " + match.teamAName + " (A)\n" +
-    "🔴 " + match.teamBName + " (B)\n\n" +
-    "Players join using:\n" +
-    "/joina\n" +
-    "/joinb\n\n" +
-    "Host can also add players:\n" +
-    "/add A @user\n" +
-    "/add B userID\n\n" +
-    "⏳ Joining open"
+`🏏 Match Lobby Open
+
+🔵 ${match.teamAName}  →  /joina
+🔴 ${match.teamBName}  →  /joinb
+
+⏱ 1 minute to join
+━━━━━━━━━━━━━━━━━━
+Host commands:
+/add A @user  •  /add B @user
+/closejoin  (close early)`
+  );
+
+  // Auto-close joining after 60 seconds (no cancel, just close)
+  match.joinTimer = setTimeout(async () => {
+
+    if (match.phase !== "join") return;
+
+    match.phase = "teams_set";
+
+    if (match.joinTimer) {
+      clearTimeout(match.joinTimer);
+      match.joinTimer = null;
+    }
+
+    await bot.telegram.sendMessage(
+      match.groupId,
+`⏱ Joining closed
+
+🔵 ${match.teamAName}: ${match.teamA.length} player${match.teamA.length !== 1 ? "s" : ""}
+🔴 ${match.teamBName}: ${match.teamB.length} player${match.teamB.length !== 1 ? "s" : ""}
+
+Host: /setcaptain to continue`
+    );
+
+  }, 60000);
+
+});
+
+
+/* ================= CLOSE JOIN EARLY ================= */
+
+bot.command("closejoin", async (ctx) => {
+
+  const match = getMatch(ctx);
+  if (!match) return ctx.reply("⚠️ No active match.");
+
+  if (!isHost(match, ctx.from.id))
+    return ctx.reply("❌ Only host can close joining.");
+
+  if (match.phase !== "join")
+    return ctx.reply("⚠️ Joining is not open.");
+
+  if (match.joinTimer) {
+    clearTimeout(match.joinTimer);
+    match.joinTimer = null;
+  }
+
+  match.phase = "teams_set";
+
+  await ctx.reply(
+`⏱ Joining closed
+
+🔵 ${match.teamAName}: ${match.teamA.length} player${match.teamA.length !== 1 ? "s" : ""}
+🔴 ${match.teamBName}: ${match.teamB.length} player${match.teamB.length !== 1 ? "s" : ""}
+
+Host: /setcaptain to continue`
   );
 
 });
@@ -40,80 +95,74 @@ bot.command("createteam", (ctx) => {
 
 /* ================= JOIN TEAM A ================= */
 
-bot.command("joina",(ctx)=>{
+bot.command("joina", (ctx) => {
 
   const match = getMatch(ctx);
   if (!match) return ctx.reply("⚠️ No active match.");
 
   if (match.phase !== "join")
-    return ctx.reply("⚠️ Joining closed.");
+    return ctx.reply("⚠️ Joining is closed.");
 
   if (playerActiveMatch.has(ctx.from.id))
-    return ctx.reply("❌ You already joined another match.");
+    return ctx.reply("❌ You are already in a match.");
 
   if (ctx.from.id === match.host)
-    return ctx.reply("❌ Host cannot join.");
+    return ctx.reply("❌ Host cannot join as player.");
 
-  if (match.teamA.some(p=>p.id===ctx.from.id))
-    return ctx.reply("⚠️ Already in Team A.");
+  if (match.teamA.some(p => p.id === ctx.from.id))
+    return ctx.reply("⚠️ You already joined Team A.");
+
+  if (match.teamB.some(p => p.id === ctx.from.id))
+    return ctx.reply("⚠️ You are already in Team B.");
 
   const name = ctx.from.first_name || "Player";
 
-  const player = {
+  match.teamA.push({
     id: ctx.from.id,
-    name: name,
+    name,
     mention: `<a href="tg://user?id=${ctx.from.id}">${name}</a>`
-  };
+  });
 
-  match.teamA.push(player);
   playerActiveMatch.set(ctx.from.id, match.groupId);
 
-  ctx.reply(
-    `✅ ${player.mention} joined 🔵 ${match.teamAName}\n\n`+
-    `Team A: ${match.teamA.length}\n`+
-    `Team B: ${match.teamB.length}`,
-    { parse_mode:"HTML" }
-  );
+  ctx.reply(`✅ ${name} joined 🔵 ${match.teamAName}`);
 
 });
 
 
 /* ================= JOIN TEAM B ================= */
 
-bot.command("joinb",(ctx)=>{
+bot.command("joinb", (ctx) => {
 
   const match = getMatch(ctx);
   if (!match) return ctx.reply("⚠️ No active match.");
 
   if (match.phase !== "join")
-    return ctx.reply("⚠️ Joining closed.");
+    return ctx.reply("⚠️ Joining is closed.");
 
   if (playerActiveMatch.has(ctx.from.id))
-    return ctx.reply("❌ You already joined another match.");
+    return ctx.reply("❌ You are already in a match.");
 
   if (ctx.from.id === match.host)
-    return ctx.reply("❌ Host cannot join.");
+    return ctx.reply("❌ Host cannot join as player.");
 
-  if (match.teamB.some(p=>p.id===ctx.from.id))
-    return ctx.reply("⚠️ Already in Team B.");
+  if (match.teamB.some(p => p.id === ctx.from.id))
+    return ctx.reply("⚠️ You already joined Team B.");
+
+  if (match.teamA.some(p => p.id === ctx.from.id))
+    return ctx.reply("⚠️ You are already in Team A.");
 
   const name = ctx.from.first_name || "Player";
 
-  const player = {
+  match.teamB.push({
     id: ctx.from.id,
-    name: name,
+    name,
     mention: `<a href="tg://user?id=${ctx.from.id}">${name}</a>`
-  };
+  });
 
-  match.teamB.push(player);
   playerActiveMatch.set(ctx.from.id, match.groupId);
 
-  ctx.reply(
-    `✅ ${player.mention} joined 🔴 ${match.teamBName}\n\n`+
-    `Team A: ${match.teamA.length}\n`+
-    `Team B: ${match.teamB.length}`,
-    { parse_mode:"HTML" }
-  );
+  ctx.reply(`✅ ${name} joined 🔴 ${match.teamBName}`);
 
 });
 
@@ -131,97 +180,72 @@ bot.command("add", async (ctx) => {
   const args = ctx.message.text.trim().split(/\s+/);
 
   if (args.length < 2)
-    return ctx.reply("Usage:\n/add A @user\n/add B 123456789\nReply + /add A");
+    return ctx.reply("Usage:\n/add A @user\n/add B 123456789\nOr reply to a message + /add A");
 
   const team = args[1].toUpperCase();
 
-  if (!["A","B"].includes(team))
+  if (!["A", "B"].includes(team))
     return ctx.reply("❌ Team must be A or B.");
 
-  let userId;
-  let name;
-  let mention;
-
-  /* ===== REPLY METHOD ===== */
+  let userId, name, mention;
 
   if (ctx.message.reply_to_message) {
 
     const user = ctx.message.reply_to_message.from;
-
-    if (user.is_bot)
-      return ctx.reply("❌ Cannot add bot.");
+    if (user.is_bot) return ctx.reply("❌ Cannot add a bot.");
 
     userId = user.id;
     name = user.first_name || "Player";
     mention = `<a href="tg://user?id=${userId}">${name}</a>`;
 
-  }
+  } else if (args[2] && args[2].startsWith("@")) {
 
-  /* ===== USERNAME METHOD ===== */
+    const username = args[2].replace("@", "");
+    const user = await User.findOne({ username });
 
-  else if (args[2] && args[2].startsWith("@")) {
-
-    const username = args[2].replace("@","");
-
-    const user = await User.findOne({ username: username });
-
-    if (!user)
-      return ctx.reply("❌ User not found in database.");
+    if (!user) return ctx.reply("❌ User not found in database.");
 
     userId = user.telegramId;
     name = user.name || username;
     mention = `<a href="tg://user?id=${userId}">${name}</a>`;
 
-  }
+  } else if (args[2]) {
 
-  /* ===== USER ID METHOD ===== */
-
-  else if (args[2]) {
-
-    if (isNaN(args[2]))
-      return ctx.reply("❌ Must provide Telegram user ID.");
+    if (isNaN(args[2])) return ctx.reply("❌ Must provide a valid Telegram user ID.");
 
     userId = Number(args[2]);
     name = "Player";
     mention = `<a href="tg://user?id=${userId}">${name}</a>`;
 
-  }
-
-  else {
-    return ctx.reply("Usage:\n/add A @user\n/add B 123456789\nReply + /add A");
+  } else {
+    return ctx.reply("Usage:\n/add A @user\n/add B 123456789");
   }
 
   if (userId === match.host)
-    return ctx.reply("❌ Host cannot be added.");
+    return ctx.reply("❌ Host cannot be added as a player.");
 
   if (
     match.teamA.some(p => p.id === userId) ||
     match.teamB.some(p => p.id === userId)
   )
-    return ctx.reply("⚠️ Player already added.");
+    return ctx.reply("⚠️ Player already in a team.");
 
-  const player = {
-    id: userId,
-    name: name,
-    mention: mention
-  };
-
-  if (team === "A") match.teamA.push(player);
-  else match.teamB.push(player);
+  if (team === "A") match.teamA.push({ id: userId, name, mention });
+  else match.teamB.push({ id: userId, name, mention });
 
   playerActiveMatch.set(userId, match.groupId);
 
-  ctx.reply(`✅ ${mention} added to Team ${team}`, { parse_mode:"HTML" });
+  ctx.reply(`✅ ${mention} added to Team ${team}`, { parse_mode: "HTML" });
 
 });
 
+
 /* ================= REMOVE PLAYER ================= */
 
-bot.command("remove", ctx => {
+bot.command("remove", (ctx) => {
 
   const match = getMatch(ctx);
-  if (!match)
-    return ctx.reply("⚠️ No active match.");
+  if (!match) return ctx.reply("⚠️ No active match.");
 
   if (!isHost(match, ctx.from.id))
     return ctx.reply("❌ Only host can remove players.");
@@ -229,19 +253,19 @@ bot.command("remove", ctx => {
   const args = ctx.message.text.trim().split(/\s+/);
 
   if (args.length < 2)
-    return ctx.reply("Usage: /remove A1 or B2");
+    return ctx.reply("Usage: /remove A1 or /remove B2");
 
   const arg = args[1].toUpperCase();
   const team = arg[0];
   const num = parseInt(arg.slice(1));
 
-  if (!["A","B"].includes(team) || isNaN(num))
-    return ctx.reply("Invalid format. Use A1 or B2");
+  if (!["A", "B"].includes(team) || isNaN(num))
+    return ctx.reply("❌ Invalid format. Use /remove A1 or /remove B2");
 
   const teamArr = team === "A" ? match.teamA : match.teamB;
 
   if (!teamArr || num < 1 || num > teamArr.length)
-    return ctx.reply("Player slot not found.");
+    return ctx.reply("⚠️ Player not found.");
 
   const removed = teamArr.splice(num - 1, 1)[0];
 
@@ -258,50 +282,49 @@ bot.command("remove", ctx => {
 });
 
 
-
 /* ================= CHANGE TEAM ================= */
 
-bot.command("changeteam",(ctx)=>{
+bot.command("changeteam", (ctx) => {
 
   const match = getMatch(ctx);
   if (!match) return ctx.reply("⚠️ No active match.");
 
-  if (!isHost(match,ctx.from.id))
-    return ctx.reply("❌ Only host can change teams.");
+  if (!isHost(match, ctx.from.id))
+    return ctx.reply("❌ Only host can move players.");
 
   if (match.phase !== "join")
-    return ctx.reply("❌ Can only change during joining.");
+    return ctx.reply("❌ Can only move players during joining.");
 
   const args = ctx.message.text.split(" ");
 
   if (args.length !== 3)
-    return ctx.reply("Usage:\n/changeteam A 1");
+    return ctx.reply("Usage: /changeteam A 1");
 
   const team = args[1].toUpperCase();
   const number = parseInt(args[2]);
 
-  if (!["A","B"].includes(team))
-    return ctx.reply("Team must be A or B.");
+  if (!["A", "B"].includes(team))
+    return ctx.reply("❌ Team must be A or B.");
 
-  const fromTeam = team==="A"?match.teamA:match.teamB;
-  const toTeam = team==="A"?match.teamB:match.teamA;
-  const target = team==="A"?"B":"A";
+  const fromTeam = team === "A" ? match.teamA : match.teamB;
+  const toTeam   = team === "A" ? match.teamB : match.teamA;
+  const target   = team === "A" ? "B" : "A";
 
   if (number < 1 || number > fromTeam.length)
-    return ctx.reply("Invalid player number.");
+    return ctx.reply("⚠️ Invalid player number.");
 
-  const player = fromTeam[number-1];
+  const player = fromTeam[number - 1];
 
-  match.pendingTeamChange={player,fromTeam,toTeam,target};
+  match.pendingTeamChange = { player, fromTeam, toTeam, target };
 
   ctx.reply(
-    "⚠️ Move "+player.mention+"\n\nTeam "+team+" → Team "+target+"?",
+    `Move ${player.mention} from Team ${team} → Team ${target}?`,
     {
-      parse_mode:"HTML",
+      parse_mode: "HTML",
       ...Markup.inlineKeyboard([
         [
-          Markup.button.callback("✅ Confirm","confirm_team_change"),
-          Markup.button.callback("❌ Cancel","cancel_team_change")
+          Markup.button.callback("✅ Confirm", "confirm_team_change"),
+          Markup.button.callback("❌ Cancel",  "cancel_team_change")
         ]
       ])
     }
@@ -312,7 +335,7 @@ bot.command("changeteam",(ctx)=>{
 
 /* ================= CONFIRM TEAM CHANGE ================= */
 
-bot.action("confirm_team_change", async(ctx)=>{
+bot.action("confirm_team_change", async (ctx) => {
 
   const match = getMatch(ctx);
   if (!match) return;
@@ -320,35 +343,30 @@ bot.action("confirm_team_change", async(ctx)=>{
   const change = match.pendingTeamChange;
   if (!change) return;
 
-  const {player,fromTeam,toTeam,target}=change;
+  const { player, fromTeam, toTeam, target } = change;
 
-  const index = fromTeam.findIndex(p=>p.id===player.id);
-  if(index!==-1) fromTeam.splice(index,1);
+  const index = fromTeam.findIndex(p => p.id === player.id);
+  if (index !== -1) fromTeam.splice(index, 1);
 
   toTeam.push(player);
+  match.pendingTeamChange = null;
 
-  match.pendingTeamChange=null;
-
-  await ctx.editMessageReplyMarkup({inline_keyboard:[]});
-
-  await ctx.reply(
-    "✅ "+player.mention+" moved to Team "+target,
-    {parse_mode:"HTML"}
-  );
+  await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
+  await ctx.reply(`✅ ${player.mention} moved to Team ${target}`, { parse_mode: "HTML" });
 
 });
 
 
 /* ================= CANCEL TEAM CHANGE ================= */
 
-bot.action("cancel_team_change",async(ctx)=>{
+bot.action("cancel_team_change", async (ctx) => {
 
   const match = getMatch(ctx);
-  if(!match) return;
+  if (!match) return;
 
-  match.pendingTeamChange=null;
+  match.pendingTeamChange = null;
 
-  await ctx.editMessageReplyMarkup({inline_keyboard:[]});
+  await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
   ctx.answerCbQuery("Cancelled");
 
 });
