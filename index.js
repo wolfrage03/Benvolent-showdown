@@ -197,6 +197,17 @@ async function advanceGame(match) {
   startBall(match);   // always start next ball
 }
 
+async function handleBallCompletion(match) {
+
+  // 6th ball finished
+  if (match.currentBall >= 6) {
+    return await checkOverEnd(match);
+  }
+
+  // normal next ball
+  advanceGame(match);
+}
+
 
 async function checkOverEnd(match) {
 
@@ -860,10 +871,9 @@ bot.on("text", async (ctx) => {
 
 async function processBall(match) {
 
+  if (!match) return;
 
-  if (!match || match.ballLocked) return;
-
-  clearTimers(match);   // 🔥 stop timers immediately
+  clearTimers(match);
   
 
   try {
@@ -931,7 +941,7 @@ async function processBall(match) {
 
       match.currentPartnershipBalls++;
   
-      if (await checkOverEnd(match)) return;
+      if (await handleBallCompletion(match)) return;
 
       if (match.wickets >= match.maxWickets) {
          await endInnings(match);
@@ -966,7 +976,8 @@ async function processBall(match) {
     match.wicketStreak = 0;
 
     // ✅ CHECK OVER END
-    if (await checkOverEnd(match)) return;
+    await handleBallCompletion(match);
+    return;
 
     
 
