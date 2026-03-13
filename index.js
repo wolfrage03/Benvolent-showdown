@@ -198,6 +198,56 @@ async function advanceGame(match) {
 }
 
 
+async function checkOverEnd(match) {
+
+  if (!match) return false;
+
+  // Only end over after 6 balls
+  if (match.currentBall < 6) return false;
+
+  match.currentOver++;
+  match.currentBall = 0;
+
+  match.currentOverRuns = 0;
+  match.wicketStreak = 0;
+
+  match.awaitingBat = false;
+  match.awaitingBowl = false;
+
+  // End innings if overs finished
+  if (match.currentOver >= match.totalOvers) {
+    clearTimers(match);
+    await endInnings(match);
+    return true;
+  }
+
+  // Prevent same bowler next over
+  match.lastOverBowler = match.bowler;
+  match.bowler = null;
+
+  // Rotate strike
+  swapStrike(match);
+
+  match.phase = "set_bowler";
+
+  await bot.telegram.sendMessage(
+    match.groupId,
+    generateScorecard(match)
+  );
+
+  await bot.telegram.sendMessage(
+    match.groupId,
+`🔄 Over ${match.currentOver} Completed!
+
+🎯 Host choose new bowler
+/bowler number`
+  );
+
+  return true;
+}
+
+
+
 const helpers = {
   isHost,
   getDisplayName,
@@ -385,54 +435,6 @@ Ball starting...`
 
 
 
-// ================= OVER COMPLETION =================
-
-async function handleOverCompletion(match) {
-
-  if (!match) return false;
-
-  if (match.currentBall < 6) return false;
-
-  match.currentOver++;
-  match.currentBall = 0;
-  match.currentOverRuns = 0;
-  match.wicketStreak = 0;
-
-  match.awaitingBat = false;
-  match.awaitingBowl = false;
-
-  // innings finished
-  if (match.currentOver >= match.totalOvers) {
-    clearTimers(match);
-    await endInnings(match);
-    return true;
-  }
-
-  // prevent same bowler
-  match.lastOverBowler = match.bowler;
-  match.bowler = null;
-
-  // rotate strike
-  swapStrike(match);
-
-  // phase change
-  match.phase = "set_bowler";
-
-  await bot.telegram.sendMessage(
-    match.groupId,
-    generateScorecard(match)
-  );
-
-  await bot.telegram.sendMessage(
-    match.groupId,
-`🔄 Over ${match.currentOver} Completed!
-
-🎯 Host choose new bowler
-/bowler number`
-  );
-
-  return true;
-}
 
 
 /* ================= SCORE ================= */
@@ -614,7 +616,7 @@ Host select new bowler:
         return;
       }
 
-      if (await handleOverCompletion(match)) return;
+      if (await checkOverEnd(match)) return;
 
       advanceGame(match);
       return;
@@ -667,9 +669,9 @@ Host select new bowler:
         return;
       }
 
-      if (await handleOverCompletion(match)) return;
-
+      if (await checkOverEnd(match)) return;
       advanceGame(match);
+
       return;
     }
 
@@ -929,7 +931,7 @@ async function processBall(match) {
 
       match.currentPartnershipBalls++;
   
-      if (await handleOverCompletion(match)) return;
+      if (await checkOverEnd(match)) return;
 
       if (match.wickets >= match.maxWickets) {
          await endInnings(match);
@@ -964,7 +966,7 @@ async function processBall(match) {
     match.wicketStreak = 0;
 
     // ✅ CHECK OVER END
-    if (await handleOverCompletion(match)) return;
+    if (await checkOverEnd(match)) return;
 
     
 
