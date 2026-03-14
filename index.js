@@ -614,7 +614,6 @@ bot.on("text", async (ctx) => {
   /* GROUP BATTER INPUT */
   if (ctx.chat.type !== "private") {
 
-    if (match.phase !== "play") return;
     if (!match.awaitingBat) return;
 
     if (ctx.from.id !== match.striker)
@@ -650,6 +649,20 @@ bot.on("text", async (ctx) => {
 
   match.bowlNumber = Number(text);
   match.awaitingBowl = false;
+
+  // Batter already submitted before bowler (race condition) — process immediately
+  if (match.batNumber !== null) {
+    match.awaitingBat = false;
+    if (!match.ballLocked) {
+      match.ballLocked = true;
+      clearTimers(match);
+      await ctx.reply(`✅ Submitted`);
+      return processBall(match);
+    }
+    return;
+  }
+
+  // Normal flow — wait for batter
   match.awaitingBat = true;
   match.ballLocked = false;
 
@@ -673,11 +686,12 @@ bot.on("text", async (ctx) => {
 async function processBall(match) {
   if (!match) return;
 
+  // Wait silently if either number not yet received — timer stays running
+  if (match.batNumber === null || match.bowlNumber === null) return;
+
   clearTimers(match);
 
   try {
-
-    if (match.batNumber === null || match.bowlNumber === null) return;
 
     const bat  = Number(match.batNumber);
     const bowl = Number(match.bowlNumber);
