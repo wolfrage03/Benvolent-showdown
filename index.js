@@ -221,24 +221,32 @@ bot.command("batter", async (ctx) => {
   };
 
   /* STRIKER */
-  if (match.phase === "set_striker") {
+if (match.phase === "set_striker") {
 
-    match.striker = selected.id;
-    match.batterStats[selected.id] = { runs: 0, balls: 0 };
-    if (!match.battingOrder.includes(selected.id))
-      match.battingOrder.push(selected.id);
-    match.usedBatters.push(selected.id);
-    match.phase = "set_non_striker";
-    await sendAndPinPlayerList(match, ctx.telegram);
+  if (!match.maxWickets) {
+    match.maxWickets =
+      (match.battingTeam === "A" ? match.teamA.length : match.teamB.length) - 1;
+  }
 
-    return ctx.reply(
+  match.striker = selected.id;
+  match.batterStats[selected.id] = { runs: 0, balls: 0 };
+
+  if (!match.battingOrder.includes(selected.id))
+    match.battingOrder.push(selected.id);
+
+  match.usedBatters.push(selected.id);
+  match.phase = "set_non_striker";
+
+  await sendAndPinPlayerList(match, ctx.telegram);
+
+  return ctx.reply(
 `🏏 Striker set
 ──────────────
 ${name} · \`${ordinal(orderNumber)}\`
 ──────────────
 👉 /batter [number] set non-striker`
-    );
-  }
+  );
+}
 
   /* NON STRIKER */
   if (match.phase === "set_non_striker") {
@@ -248,7 +256,6 @@ ${name} · \`${ordinal(orderNumber)}\`
 
     match.nonStriker = selected.id;
     match.usedBatters.push(selected.id);
-    match.maxWickets = battingPlayers(match).length - 1;
     match.phase = "set_bowler";
     await sendAndPinPlayerList(match, ctx.telegram);
 
@@ -762,8 +769,8 @@ if (bat === bowl) {
 
   await bot.telegram.sendMessage(match.groupId, randomLine("wicket"));
 
-  // ✅ ALWAYS check all-out FIRST before anything else
-  if (match.wickets >= match.maxWickets) {
+  // ALWAYS check all-out first
+  if (match.wickets >= match.maxWickets || match.wickets === battingPlayers(match).length - 1) {
     await endInnings(match);
     return;
   }
@@ -859,7 +866,6 @@ async function endInnings(match) {
 🔄 Switching innings...`
     );
 
-    // ✅ Auto switch — no manual command needed
     match.innings = 2;
     match.target = match.firstInningsScore + 1;
     match.ballLocked = false;
@@ -867,7 +873,7 @@ async function endInnings(match) {
     [match.battingTeam, match.bowlingTeam] = [match.bowlingTeam, match.battingTeam];
 
     match.score = 0; match.wickets = 0; match.inningsEnded = false;
-    match.maxWickets = battingPlayers(match).length - 1;
+    match.maxWickets = (match.battingTeam === "A" ? match.teamA.length : match.teamB.length) - 1;
     match.currentOver = 0; match.currentBall = 0; match.currentOverNumber = 0;
     match.currentPartnershipRuns = 0; match.currentPartnershipBalls = 0;
     match.currentOverRuns = 0; match.wicketStreak = 0;
