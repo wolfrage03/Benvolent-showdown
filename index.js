@@ -713,7 +713,7 @@ async function processBall(match) {
 
   clearTimers(match);
 
-
+  let hattrickRetry = false;
 
   try {
     const bat  = parseInt(match.batNumber);
@@ -726,12 +726,13 @@ async function processBall(match) {
 `⚠️ Hattrick ball — cannot play \`0\`
 Two wickets in a row!`
       );
-      } finally {
-    match.batNumber = null;
-    if (!match.awaitingBat) match.bowlNumber = null; 
-    match.ballLocked = false;
-    match.processingBall = false;
-  }
+      match.batNumber = null;
+      match.awaitingBat = true;
+      match.ballLocked = false;
+      hattrickRetry = true;
+      startTurnTimer(match, "bat");
+      return;
+    }
 
     match.bowlerMissCount = 0;
     match.batterMissCount = 0;
@@ -818,15 +819,13 @@ Two wickets in a row!`
 
   } catch (err) {
     console.error("processBall error:", err);
-
   } finally {
     match.batNumber = null;
-    match.bowlNumber = null;
+    if (!hattrickRetry) match.bowlNumber = null;
     match.ballLocked = false;
     match.processingBall = false;
   }
 }
-
 
 /* ================= END INNINGS ================= */
 
