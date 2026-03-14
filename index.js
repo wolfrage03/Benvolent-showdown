@@ -599,7 +599,10 @@ async function startBall(match) {
   if (match.phase === "set_bowler") return;
   if (match.phase === "new_batter") return;
   if (match.currentOver >= match.totalOvers) return;
-  if (match.wickets >= match.maxWickets) return;
+  if (match.wickets >= match.maxWickets) {
+    await endInnings(match);
+    return;
+  }
 
   if (!match.overHistory) match.overHistory = [];
   if (match.bowler) {
