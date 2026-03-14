@@ -16,47 +16,60 @@ function buildPlayerListText(match) {
     const captain = captainId ? teamArray.find(p => p.id === captainId) : null;
 
     if (captain) {
-      const dismissed =
+      const isStriker    = match.striker    === captain.id;
+      const isNonStriker = match.nonStriker === captain.id;
+      const dismissed    =
         match.usedBatters?.includes(captain.id) &&
-        match.striker !== captain.id &&
-        match.nonStriker !== captain.id;
-      list.push(`  1. 👑 ${captain.name}${dismissed ? "  ✗" : ""}`);
+        !isStriker && !isNonStriker;
+
+      const tag = isStriker ? " ⭐" : isNonStriker ? "  *" : dismissed ? "  ✗" : "";
+      list.push(`  1. 👑 ${captain.name}${tag}`);
     }
 
     const others = teamArray.filter(p => !captain || p.id !== captain.id);
     others.forEach(p => {
-      const dismissed =
+      const isStriker    = match.striker    === p.id;
+      const isNonStriker = match.nonStriker === p.id;
+      const dismissed    =
         match.usedBatters?.includes(p.id) &&
-        match.striker !== p.id &&
-        match.nonStriker !== p.id;
-      list.push(`  ${list.length + 1}. ${p.name}${dismissed ? "  ✗" : ""}`);
+        !isStriker && !isNonStriker;
+
+      const tag = isStriker ? " ⭐" : isNonStriker ? "  *" : dismissed ? "  ✗" : "";
+      list.push(`  ${list.length + 1}. ${p.name}${tag}`);
     });
 
     return list.join("\n");
   }
 
   const teamARole =
-    match.battingTeam === "A" ? "  🏏 Batting" :
-    match.battingTeam === "B" ? "  🎯 Bowling" : "";
+    match.battingTeam === "A" ? "  🏏" :
+    match.battingTeam === "B" ? "  🎯" : "";
 
   const teamBRole =
-    match.battingTeam === "B" ? "  🏏 Batting" :
-    match.battingTeam === "A" ? "  🎯 Bowling" : "";
+    match.battingTeam === "B" ? "  🏏" :
+    match.battingTeam === "A" ? "  🎯" : "";
 
   const score = `${match.score ?? 0}/${match.wickets ?? 0}`;
   const overs = `${match.currentOver ?? 0}.${match.currentBall ?? 0}`;
 
-  return [
-    `[ PLAYERS ]`,
+  const lines = [
+    `╔═ PLAYERS ═════════════════════════╗`,
     ``,
-    `🔵 ${match.teamAName}${teamARole}`,
+    `  🔵 ${match.teamAName}${teamARole}`,
+    `  ${"─".repeat(33)}`,
     formatTeam(match.teamA, match.captains?.A, "A"),
     ``,
-    `🔴 ${match.teamBName}${teamBRole}`,
+    `  🔴 ${match.teamBName}${teamBRole}`,
+    `  ${"─".repeat(33)}`,
     formatTeam(match.teamB, match.captains?.B, "B"),
     ``,
-    `⚫ ${score}  (${overs} ov)`
-  ].join("\n");
+    `╠══════════════════════════════════╣`,
+    `  📊 ${score}   ⚙️  ${overs} ov`,
+    `  ⭐ Striker   * Non-striker   ✗ Out`,
+    `╚══════════════════════════════════╝`,
+  ];
+
+  return lines.join("\n");
 }
 
 
@@ -65,7 +78,6 @@ async function sendAndPinPlayerList(match, telegram) {
 
   try {
     if (match.playerListMessageId) {
-      // Update the existing pinned message in-place
       await telegram.editMessageText(
         match.groupId,
         match.playerListMessageId,
@@ -73,7 +85,6 @@ async function sendAndPinPlayerList(match, telegram) {
         text
       );
     } else {
-      // First time — send, store id, and pin
       const msg = await telegram.sendMessage(match.groupId, text);
       match.playerListMessageId = msg.message_id;
 
@@ -111,10 +122,12 @@ module.exports = function (bot, helpers) {
     match.phase = "captain";
 
     ctx.reply(
-`[ CAPTAIN SELECTION ]
+`╔═ CAPTAIN SELECTION ═══════════════╗
 
-Each team selects their own captain.
-Tap the button for your team.`,
+  Each team picks their own captain.
+  Tap the button below.
+
+╚═══════════════════════════════════╝`,
       Markup.inlineKeyboard([
         [Markup.button.callback("👑  Captain  —  Team A", "cap_A")],
         [Markup.button.callback("👑  Captain  —  Team B", "cap_B")]
@@ -142,7 +155,14 @@ Tap the button for your team.`,
     match.captains.A = ctx.from.id;
 
     await ctx.answerCbQuery("You are Captain of Team A");
-    await ctx.reply(`[ 👑 CAPTAIN ]  ${getDisplayName(ctx.from)}  →  Team A`);
+    await ctx.reply(
+`╔═ CAPTAIN SET ═════════════════════╗
+
+  👑  ${getDisplayName(ctx.from).padEnd(20)}
+  📍  Team A
+
+╚═══════════════════════════════════╝`
+    );
 
     updateCaptainButtons(match, ctx);
   });
@@ -167,7 +187,14 @@ Tap the button for your team.`,
     match.captains.B = ctx.from.id;
 
     await ctx.answerCbQuery("You are Captain of Team B");
-    await ctx.reply(`[ 👑 CAPTAIN ]  ${getDisplayName(ctx.from)}  →  Team B`);
+    await ctx.reply(
+`╔═ CAPTAIN SET ═════════════════════╗
+
+  👑  ${getDisplayName(ctx.from).padEnd(20)}
+  📍  Team B
+
+╚═══════════════════════════════════╝`
+    );
 
     updateCaptainButtons(match, ctx);
   });
@@ -192,10 +219,12 @@ Tap the button for your team.`,
       match.phase = "toss";
 
       ctx.reply(
-`[ CAPTAINS SET ]
+`╔═ CAPTAINS CONFIRMED ══════════════╗
 
-Both captains confirmed.
-Starting toss...`
+  Both captains are set.
+  Starting toss...
+
+╚═══════════════════════════════════╝`
       );
 
       if (helpers.startToss) helpers.startToss(match);
@@ -215,12 +244,10 @@ Starting toss...`
       return ctx.reply("⚠️ No active match in this group.");
 
     if (!match.playerListMessageId) {
-      // Not sent yet — send and pin now
       await sendAndPinPlayerList(match, ctx.telegram);
       return;
     }
 
-    // Quote-reply the pinned message so user can tap to jump to it
     await ctx.telegram.sendMessage(
       match.groupId,
       "📋 Player list ↑",
@@ -269,11 +296,13 @@ Starting toss...`
     const name = getName(match, newCaptainId);
 
     await ctx.reply(
-`[ CAPTAIN CHANGE ]
+`╔═ CAPTAIN CHANGE ══════════════════╗
 
-Team ${teamLetter}  →  ${name}
+  Team ${teamLetter}  →  ${name}
 
-Confirm?`,
+  Confirm?
+
+╚═══════════════════════════════════╝`,
       Markup.inlineKeyboard([
         [
           Markup.button.callback("✅  Confirm", "confirm_cap_change"),
@@ -307,11 +336,14 @@ Confirm?`,
     const mention = `<a href="tg://user?id=${playerId}">${getName(match, playerId)}</a>`;
 
     await ctx.editMessageText(
-      `[ 👑 CAPTAIN UPDATED ]\n\n${mention}  →  Team ${team}`,
+`╔═ CAPTAIN UPDATED ═════════════════╗
+
+  👑  ${mention}  →  Team ${team}
+
+╚═══════════════════════════════════╝`,
       { parse_mode: "HTML" }
     );
 
-    // Reflect new captain crown in the pinned player list
     await sendAndPinPlayerList(match, ctx.telegram);
   });
 
@@ -327,7 +359,13 @@ Confirm?`,
       return ctx.answerCbQuery("Only host can cancel.");
 
     match.pendingCaptainChange = null;
-    await ctx.editMessageText("[ ✗ ]  Captain change cancelled.");
+    await ctx.editMessageText(
+`╔═ CANCELLED ═══════════════════════╗
+
+  ✗  Captain change cancelled.
+
+╚═══════════════════════════════════╝`
+    );
   });
 
 };

@@ -1,125 +1,139 @@
-const { Markup } = require("telegraf")
-const User = require("../User")
-
+const { Markup } = require("telegraf");
+const User = require("../User");
 const {
   getMatch,
   resetMatch,
   matches
-} = require("../matchManager")
+} = require("../matchManager");
 
-module.exports = function(bot, helpers){
+module.exports = function (bot, helpers) {
 
-const { clearTimers, clearActiveMatchPlayers } = helpers
-
-
-/* ================= START ================= */
-
-bot.command("start", async (ctx, next) => {
-
-  if (ctx.chat.type === "private") return next()
-
-  let match = getMatch(ctx)
-
-  if (match && match.phase !== "idle")
-    return ctx.reply("⚠️ A match is already running.")
-
-  try {
-    const { id, username, first_name, last_name } = ctx.from
-    await User.updateOne(
-      { telegramId: String(id) },
-      { $set: { telegramId: String(id), username: username?.toLowerCase(), firstName: first_name, lastName: last_name } },
-      { upsert: true }
-    )
-  } catch(err){
-    console.error("User save error:", err)
-  }
-
-  match = resetMatch(ctx.chat.id)
-  clearActiveMatchPlayers(match)
-  match.groupId = ctx.chat.id
-  match.phase = "host_select"
-
-  ctx.reply(
-`[ MATCH LOBBY ]
-
-A new match is starting.
-First player to press below becomes host.`,
-    Markup.inlineKeyboard([
-      [Markup.button.callback("👑  Become Host", "select_host")]
-    ])
-  )
-
-})
+  const { clearTimers, clearActiveMatchPlayers } = helpers;
 
 
-/* ================= END MATCH ================= */
+  /* ================= START ================= */
 
-bot.command("endmatch", async (ctx) => {
+  bot.command("start", async (ctx, next) => {
 
-  const match = getMatch(ctx)
+    if (ctx.chat.type === "private") return next();
 
-  if (!match || match.phase === "idle")
-    return ctx.reply("⚠️ No active match running.")
+    let match = getMatch(ctx);
+    if (match && match.phase !== "idle")
+      return ctx.reply("⚠️ A match is already running.");
 
-  let isAdmin = false
-  try {
-    const member = await ctx.getChatMember(ctx.from.id)
-    isAdmin = ["administrator", "creator"].includes(member.status)
-  } catch {}
+    try {
+      const { id, username, first_name, last_name } = ctx.from;
+      await User.updateOne(
+        { telegramId: String(id) },
+        {
+          $set: {
+            telegramId:  String(id),
+            username:    username?.toLowerCase(),
+            firstName:   first_name,
+            lastName:    last_name
+          }
+        },
+        { upsert: true }
+      );
+    } catch (err) {
+      console.error("User save error:", err);
+    }
 
-  if (ctx.from.id !== match.host && !isAdmin)
-    return ctx.reply("❌ Only host or admin can end the match.")
+    match = resetMatch(ctx.chat.id);
+    clearActiveMatchPlayers(match);
+    match.groupId = ctx.chat.id;
+    match.phase   = "host_select";
 
-  ctx.reply(
-    "⚠️ End the current match?",
-    Markup.inlineKeyboard([
-      [
-        Markup.button.callback("✅  Confirm", "confirm_end"),
-        Markup.button.callback("❌  Cancel",  "cancel_end")
-      ]
-    ])
-  )
+    ctx.reply(
+`╔═ MATCH LOBBY ═════════════════════╗
 
-})
+  A new match is starting!
 
+  First player to press the button
+  below becomes the host.
 
-/* ================= CONFIRM END ================= */
-
-bot.action("confirm_end", async (ctx) => {
-
-  const match = getMatch(ctx)
-  if (!match) return
-
-  let isAdmin = false
-  try {
-    const member = await ctx.getChatMember(ctx.from.id)
-    isAdmin = ["administrator", "creator"].includes(member.status)
-  } catch {}
-
-  if (ctx.from.id !== match.host && !isAdmin)
-    return ctx.answerCbQuery("Only host or admin can confirm.")
-
-  try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }) } catch {}
-
-  await ctx.reply(
-`[ MATCH ENDED ]
-
-The match has been stopped.
-Start a new one anytime with /start`
-  )
-
-  clearTimers(match)
-  clearActiveMatchPlayers(match)
-  matches.delete(match.groupId)
-
-})
+╚═══════════════════════════════════╝`,
+      Markup.inlineKeyboard([
+        [Markup.button.callback("👑  Become Host", "select_host")]
+      ])
+    );
+  });
 
 
-/* ================= CANCEL END ================= */
+  /* ================= END MATCH ================= */
 
-bot.action("cancel_end", async (ctx) => {
-  try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }) } catch {}
-  ctx.answerCbQuery("Cancelled")
-})
+  bot.command("endmatch", async (ctx) => {
 
-}
+    const match = getMatch(ctx);
+    if (!match || match.phase === "idle")
+      return ctx.reply("⚠️ No active match running.");
+
+    let isAdmin = false;
+    try {
+      const member = await ctx.getChatMember(ctx.from.id);
+      isAdmin = ["administrator", "creator"].includes(member.status);
+    } catch {}
+
+    if (ctx.from.id !== match.host && !isAdmin)
+      return ctx.reply("❌ Only host or admin can end the match.");
+
+    ctx.reply(
+`╔═ END MATCH ═══════════════════════╗
+
+  ⚠️   End the current match?
+  This cannot be undone.
+
+╚═══════════════════════════════════╝`,
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback("✅  Confirm", "confirm_end"),
+          Markup.button.callback("❌  Cancel",  "cancel_end")
+        ]
+      ])
+    );
+  });
+
+
+  /* ================= CONFIRM END ================= */
+
+  bot.action("confirm_end", async (ctx) => {
+
+    const match = getMatch(ctx);
+    if (!match) return;
+
+    let isAdmin = false;
+    try {
+      const member = await ctx.getChatMember(ctx.from.id);
+      isAdmin = ["administrator", "creator"].includes(member.status);
+    } catch {}
+
+    if (ctx.from.id !== match.host && !isAdmin)
+      return ctx.answerCbQuery("Only host or admin can confirm.");
+
+    try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
+
+    await ctx.reply(
+`╔═ MATCH ENDED ═════════════════════╗
+
+  🛑  The match has been stopped.
+
+╠═══════════════════════════════════╣
+  /start  to begin a new match
+╚═══════════════════════════════════╝`
+    );
+
+    clearTimers(match);
+    clearActiveMatchPlayers(match);
+    matches.delete(match.groupId);
+  });
+
+
+  /* ================= CANCEL END ================= */
+
+  bot.action("cancel_end", async (ctx) => {
+
+    try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
+    ctx.answerCbQuery("Cancelled.");
+  });
+
+};
