@@ -19,6 +19,14 @@ const {
 
 const {
   matches,
+  playerActiveMatch,  // ✅ already there
+  getMatch,
+  resetMatch,
+  deleteMatch
+} = require("./matchManager");
+
+const {
+  matches,
   playerActiveMatch,
   getMatch,
   resetMatch,
@@ -321,6 +329,7 @@ bot.command("bowler", async (ctx) => {
   match.bowler = player.id;
   match.lastOverBowler = player.id;
   match.phase = "play";
+  playerActiveMatch.set(player.id, match.groupId);
 
   await ctx.reply(`🎯 \`${player.name}\` is bowling — ball starting...`);
   await startBall(match);
