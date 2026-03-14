@@ -17,13 +17,6 @@ const {
   getRandomTeams
 } = require("./commentary");
 
-const {
-  matches,
-  playerActiveMatch,  // ✅ already there
-  getMatch,
-  resetMatch,
-  deleteMatch
-} = require("./matchManager");
 
 const {
   matches,
