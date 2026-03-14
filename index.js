@@ -299,7 +299,7 @@ bot.command("bowler", async (ctx) => {
     return ctx.reply("❌ Only host can set bowler.");
 
   const num = parseInt(ctx.message.text.split(" ")[1]);
-  if (!num) return ctx.reply("❌ Usage: /bowler 2");
+  if (isNaN(num)) return ctx.reply("❌ Usage: /bowler 2");
 
   const base = bowlingPlayers(match);
   const captainId = match.bowlingTeam === "A" ? match.captains.A : match.captains.B;
@@ -432,7 +432,7 @@ async function ballTimeout(match) {
 
         match.bowlerMissCount = 0;
         if (!match.suspendedBowlers) match.suspendedBowlers = {};
-        match.suspendedBowlers[match.bowler] = match.currentOver + 2;
+        match.suspendedBowlers[match.bowler] = match.currentOver + 1;
         match.phase = "set_bowler";
 
         await bot.telegram.sendMessage(
@@ -518,35 +518,51 @@ Consecutive delays · cannot bowl this over or next
 async function announceBall(match) {
 
   if (!match || !match.bowler || !match.striker) return;
+  if (match.phase === "switch") return;
 
+  // Clear previous timers
+  clearTimers(match);
+
+  // Reset ball state
   match.batNumber = null;
   match.bowlNumber = null;
   match.ballLocked = false;
-  match.awaitingBowl = true;  
-  match.awaitingBat = false; 
+  match.processingBall = false;
 
+  match.awaitingBowl = true;
+  match.awaitingBat = false;
+
+  const bowlerName = getName(match, match.bowler);
+
+  // Announce bowler in group
   await bot.telegram.sendMessage(
     match.groupId,
-    `[🎯 ${getName(match, match.bowler)}](tg://user?id=${match.bowler})`,
+    `[🎯 ${bowlerName}](tg://user?id=${match.bowler})`,
     { parse_mode: "Markdown" }
   );
 
+  // Bowling prompt
   await bot.telegram.sendMessage(
     match.groupId,
     randomBowlingPrompt(),
     bowlDMButton()
   );
 
+  // DM bowler
   try {
     await bot.telegram.sendMessage(
       match.bowler,
 `🎯 Your turn
 ──────────────
-Send your number  \`1 – 6\``
+Send your number \`1 – 6\``
     );
-  } catch (e) {}
-}
+  } catch (e) {
+    console.log("Bowler DM failed:", e.message);
+  }
 
+  // Start timer for bowler
+  startTurnTimer(match, "bowl");
+}
 
 /* ================= TIMER CONTROLLER ================= */
 
@@ -628,7 +644,7 @@ bot.on("text", async (ctx) => {
       return ctx.reply("❌ Send a number between `0–6`.");
 
     // Ignore duplicate submissions
-    if (match.batNumber !== null) return;
+    if (match.batNumber !== null || match.ballLocked) return;
 
     match.batNumber = Number(text);
     match.awaitingBat = false;
@@ -705,11 +721,12 @@ async function processBall(match) {
 
   clearTimers(match);
 
-  let hattrickRetry = false;  // ✅ declared OUTSIDE try so finally can see it
+
 
   try {
     const bat  = parseInt(match.batNumber);
     const bowl = parseInt(match.bowlNumber);
+
     /* HATTRICK BLOCK */
     if (match.wicketStreak === 2 && bat === 0) {
       await bot.telegram.sendMessage(
@@ -720,7 +737,6 @@ Two wickets in a row!`
       match.batNumber = null;
       match.awaitingBat = true;
       match.ballLocked = false;
-      hattrickRetry = true;
       startTurnTimer(match, "bat");
       return;
     }
@@ -739,43 +755,32 @@ Two wickets in a row!`
 
     /* WICKET */
     if (bat === bowl) {
+
       match.wickets++;
       match.wicketStreak++;
-      match.bowlerStats[match.bowler].wickets++;
       match.currentBall++;
-      match.currentPartnershipBalls++;
+      match.currentPartnershipRuns = 0;
+      match.currentPartnershipBalls = 0;
+      match.bowlerStats[match.bowler].wickets++;
 
       const lastOver = match.overHistory[match.overHistory.length - 1];
       if (lastOver) lastOver.balls.push("W");
 
-      match.currentPartnershipRuns = 0;
-      match.currentPartnershipBalls = 0;
-
       await bot.telegram.sendMessage(match.groupId, randomLine("W"));
-      await sendAndPinPlayerList(match, bot.telegram);
-
-      if (match.wickets >= match.maxWickets) {
-        await endInnings(match);
-        return;
-      }
-
-      if (match.currentBall >= 6) {
-        const overEnded = await checkOverEnd(match);
-        if (overEnded) return;
-      }
 
       match.phase = "new_batter";
-      match.awaitingBowl = false;
-      match.awaitingBat = false;
 
       await bot.telegram.sendMessage(
         match.groupId,
-`💥 Wicket!
-──────────────
-👉 /batter [number] new batter`
-      );
-      return;
-    }
+    `💥 Wicket!
+    ──────────────
+    👉 /batter [number] new batter`
+       );
+
+  return;
+}
+
+
 
     /* RUNS */
     match.score += bat;
@@ -798,7 +803,7 @@ Two wickets in a row!`
 
     await bot.telegram.sendMessage(match.groupId, randomLine(bat));
 
-    if ([1, 3, 5, -1, -3, -5].includes(bat)) swapStrike(match);
+    if ([1, 3, 5].includes(bat)) swapStrike(match);
 
     if (match.innings === 2 && match.score >= match.firstInningsScore + 1) {
       await endInnings(match);
@@ -811,9 +816,8 @@ Two wickets in a row!`
   } catch (err) {
     console.error("processBall error:", err);
   } finally {
-    match.batNumber = null;
-    if (!hattrickRetry) match.bowlNumber = null;  // ✅ preserve bowlNumber for hattrick retry
     match.ballLocked = false;
+    match.processingBall = false;
   }
 }
 
