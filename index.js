@@ -759,28 +759,39 @@ Two wickets in a row!`
       match.wickets++;
       match.wicketStreak++;
       match.currentBall++;
-      match.currentPartnershipRuns = 0;
-      match.currentPartnershipBalls = 0;
+      match.currentPartnershipBalls++;
       match.bowlerStats[match.bowler].wickets++;
 
       const lastOver = match.overHistory[match.overHistory.length - 1];
-      if (lastOver) lastOver.balls.push("W");
+      if (lastOver) lastOver.balls.push("wicket");
 
-      await bot.telegram.sendMessage(match.groupId, randomLine("W"));
+      match.currentPartnershipRuns = 0;
+      match.currentPartnershipBalls = 0;
+
+      await bot.telegram.sendMessage(match.groupId, randomLine("wicket"));
+
+      if (match.wickets >= match.maxWickets) {
+        await endInnings(match);
+        return;
+      }
+
+      if (match.currentBall >= 6) {
+        const overEnded = await checkOverEnd(match);
+        if (overEnded) return;
+      }
 
       match.phase = "new_batter";
+      match.awaitingBowl = false;
+      match.awaitingBat = false;
 
       await bot.telegram.sendMessage(
         match.groupId,
-    `💥 Wicket!
-    ──────────────
-    👉 /batter [number] new batter`
-       );
-
-  return;
-}
-
-
+`💥 Wicket!
+──────────────
+👉 /batter [number] new batter`
+      );
+      return;
+    }
 
     /* RUNS */
     match.score += bat;
@@ -815,7 +826,10 @@ Two wickets in a row!`
 
   } catch (err) {
     console.error("processBall error:", err);
+
   } finally {
+    match.batNumber = null;
+    match.bowlNumber = null;
     match.ballLocked = false;
     match.processingBall = false;
   }
