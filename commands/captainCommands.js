@@ -72,31 +72,39 @@ function buildPlayerListText(match) {
   return lines.join("\n");
 }
 
-
 async function sendAndPinPlayerList(match, telegram) {
   const text = buildPlayerListText(match);
-
   try {
     if (match.playerListMessageId) {
-      await telegram.editMessageText(
-        match.groupId,
-        match.playerListMessageId,
-        null,
-        text
-      );
+      try {
+        await telegram.editMessageText(
+          match.groupId,
+          match.playerListMessageId,
+          null,
+          text
+        );
+      } catch (e) {
+        // Ignore "message is not modified" — it's not a real error
+        if (!e.message?.includes("message is not modified")) {
+          console.error("EditMessage error:", e.message);
+        }
+      }
     } else {
       const msg = await telegram.sendMessage(match.groupId, text);
       match.playerListMessageId = msg.message_id;
-
-      await telegram.pinChatMessage(match.groupId, msg.message_id, {
-        disable_notification: true
-      });
+      try {
+        await telegram.pinChatMessage(match.groupId, msg.message_id, {
+          disable_notification: true
+        });
+      } catch (e) {
+        // Bot may not have pin permissions — don't let this kill innings switch
+        console.error("Pin failed:", e.message);
+      }
     }
   } catch (e) {
     console.error("PlayerList update error:", e.message);
   }
 }
-
 
 // ═══════════════════════════════════════════════
 // BOT COMMANDS

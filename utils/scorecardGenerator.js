@@ -26,8 +26,9 @@ function row(label, value) {
    MAIN
 ═══════════════════════════════════════════ */
 
-function generateScorecard(match) {
+function generateScorecard(match, getName) {
   if (!match) return "No match data.";
+ 
 
   const battingTeam = match.battingTeam === "A" ? match.teamAName : match.teamBName;
   const bowlingTeam = match.bowlingTeam === "A" ? match.teamAName : match.teamBName;

@@ -104,6 +104,7 @@ function bowlDMButton() {
 async function advanceGame(match) {
   if (!match) return;
   if (match.phase === "switch") return;
+  if (match.inningsEnded) return;
   if (match.wickets >= match.maxWickets) { await endInnings(match); return; }
   if (match.currentOver >= match.totalOvers) { await endInnings(match); return; }
   await startBall(match);
@@ -123,6 +124,7 @@ async function checkOverEnd(match) {
 
   if (!match) return false;
   if (match.currentBall < 6) return false;
+  if (match.inningsEnded) return true;
 
   match.currentOver++;
   match.currentBall = 0;
@@ -140,7 +142,7 @@ async function checkOverEnd(match) {
   }
 
   try {
-    await bot.telegram.sendMessage(match.groupId, generateScorecard(match));
+    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName));
   } catch (e) { console.error("Scorecard failed:", e.message); }
 
   match.lastOverBowler = match.bowler;
@@ -841,10 +843,12 @@ if (bat === bowl) {
 /* ================= END INNINGS ================= */
 
 async function endInnings(match) {
-
   if (!match) return;
   if (match.inningsEnded) return;
   match.inningsEnded = true;
+  match.ballLocked = true;
+
+  console.log("endInnings called, innings:", match.innings);
 
   clearTimers(match);
   match.awaitingBat = false;
@@ -852,14 +856,18 @@ async function endInnings(match) {
 
   /* FIRST INNINGS */
   if (match.innings === 1) {
+    console.log("Switching to innings 2");
 
     match.firstInningsScore = match.score;
     match.firstInningsData = JSON.parse(JSON.stringify(match));
 
-    await bot.telegram.sendMessage(match.groupId, generateScorecard(match));
+    try {
+      await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName));
+    } catch(e) { console.error("Scorecard send failed:", e.message); }
 
-    await bot.telegram.sendMessage(
-      match.groupId,
+    try {
+      await bot.telegram.sendMessage(
+        match.groupId,
 `✅ Innings 1 complete
 ──────────────
 📊 \`${match.score}/${match.wickets}\`
@@ -867,43 +875,64 @@ async function endInnings(match) {
 ⚙️ \`${match.currentOver}/${match.totalOvers}\` overs
 ──────────────
 🔄 Switching innings...`
-    );
+      );
+    } catch(e) { console.error("Innings message failed:", e.message); }
 
+    // RESET FOR INNINGS 2
     match.innings = 2;
     match.target = match.firstInningsScore + 1;
+    match.inningsEnded = false;
     match.ballLocked = false;
 
     [match.battingTeam, match.bowlingTeam] = [match.bowlingTeam, match.battingTeam];
 
-    match.score = 0; match.wickets = 0; match.inningsEnded = false;
+    match.score = 0;
+    match.wickets = 0;
     match.maxWickets = (match.battingTeam === "A" ? match.teamA.length : match.teamB.length) - 1;
-    match.currentOver = 0; match.currentBall = 0; match.currentOverNumber = 0;
-    match.currentPartnershipRuns = 0; match.currentPartnershipBalls = 0;
-    match.currentOverRuns = 0; match.wicketStreak = 0;
-    match.bowlerMissCount = 0; match.batterMissCount = 0;
-    match.usedBatters = []; match.battingOrder = [];
-    match.batterStats = {}; match.bowlerStats = {};
-    match.striker = null; match.nonStriker = null;
-    match.bowler = null; match.lastOverBowler = null;
+    match.currentOver = 0;
+    match.currentBall = 0;
+    match.currentOverNumber = 0;
+    match.currentPartnershipRuns = 0;
+    match.currentPartnershipBalls = 0;
+    match.currentOverRuns = 0;
+    match.wicketStreak = 0;
+    match.bowlerMissCount = 0;
+    match.batterMissCount = 0;
+    match.usedBatters = [];
+    match.battingOrder = [];
+    match.batterStats = {};
+    match.bowlerStats = {};
+    match.striker = null;
+    match.nonStriker = null;
+    match.bowler = null;
+    match.lastOverBowler = null;   // ← critical
     match.suspendedBowlers = {};
-    match.overHistory = []; match.currentOverBalls = [];
-    match.awaitingBat = false; match.awaitingBowl = false;
+    match.overHistory = [];
+    match.currentOverBalls = [];
+    match.awaitingBat = false;
+    match.awaitingBowl = false;
     match.phase = "set_striker";
 
-    await sendAndPinPlayerList(match, bot.telegram);
+    try {
+      await sendAndPinPlayerList(match, bot.telegram);
+    } catch(e) { console.error("PinList failed:", e.message); }
 
-    return bot.telegram.sendMessage(
-      match.groupId,
+    try {
+      await bot.telegram.sendMessage(
+        match.groupId,
 `🏏 Innings 2
 ──────────────
 🏏 Batting  \`${match.battingTeam === "A" ? match.teamAName : match.teamBName}\`
 🎯 Target  \`${match.firstInningsScore + 1}\`
 ──────────────
 👉 /batter [number] set opener`
-    );
+      );
+    } catch(e) { console.error("Innings 2 message failed:", e.message); }
+
+    return;
   }
 
-  /* SAVE PLAYER STATS */
+  /* SECOND INNINGS — SAVE STATS */
   try {
     for (const playerId in match.batterStats) {
       const b = match.batterStats[playerId];
@@ -921,8 +950,10 @@ async function endInnings(match) {
     console.error("Stats update error:", err);
   }
 
-  await bot.telegram.sendMessage(match.groupId, generateScorecard(match.firstInningsData));
-  await bot.telegram.sendMessage(match.groupId, generateScorecard(match));
+  try {
+    await bot.telegram.sendMessage(match.groupId, generateScorecard(match.firstInningsData, getName));
+    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName));
+  } catch(e) { console.error("Final scorecard failed:", e.message); }
 
   if (match.score > match.firstInningsScore) {
     await endMatchWithWinner(match, match.battingTeam);
@@ -935,8 +966,6 @@ async function endInnings(match) {
   clearActiveMatchPlayers(match);
   matches.delete(match.groupId);
 }
-
-
 /* ================= MATCH RESULT ================= */
 
 async function endMatchWithWinner(match, winningTeam) {
