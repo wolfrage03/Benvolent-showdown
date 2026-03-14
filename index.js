@@ -888,7 +888,7 @@ bot.command("inningsswitch", async (ctx) => {
 
   m.innings = 2;
   m.target = m.firstInningsScore + 1;
-  m.ballLocked = false;
+  m.ballLocked = false; 
 
   [m.battingTeam, m.bowlingTeam] = [m.bowlingTeam, m.battingTeam];
 
