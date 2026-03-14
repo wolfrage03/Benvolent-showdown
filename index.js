@@ -520,6 +520,8 @@ async function announceBall(match) {
   match.batNumber = null;
   match.bowlNumber = null;
   match.ballLocked = false;
+  match.awaitingBowl = true;  
+  match.awaitingBat = false; 
 
   await bot.telegram.sendMessage(
     match.groupId,
@@ -636,7 +638,11 @@ bot.on("text", async (ctx) => {
     }
 
     // Both numbers ready — batter sent after bowler
-    if (match.ballLocked) return;
+    // Both numbers ready — batter sent after bowler
+    if (match.ballLocked) {
+      await ctx.reply("⏳ Processing previous ball — please wait");
+      return;
+    }
     match.ballLocked = true;
 
     clearTimers(match);
@@ -704,6 +710,8 @@ async function processBall(match) {
     const bat  = Number(match.batNumber);
     const bowl = Number(match.bowlNumber);
 
+    let hattrickRetry = false;
+
     /* HATTRICK BLOCK */
     if (match.wicketStreak === 2 && bat === 0) {
       await bot.telegram.sendMessage(
@@ -711,11 +719,13 @@ async function processBall(match) {
 `⚠️ Hattrick ball — cannot play \`0\`
 Two wickets in a row!`
       );
+      match.batNumber = null;
       match.awaitingBat = true;
+      match.ballLocked = false;
+      hattrickRetry = true;
       startTurnTimer(match, "bat");
       return;
     }
-
     match.bowlerMissCount = 0;
     match.batterMissCount = 0;
 
@@ -807,8 +817,10 @@ if (bat === bowl) {
     console.error("processBall error:", err);
    } finally {
     match.batNumber = null;
+    if (!hattrickRetry) match.bowlNumber = null; 
+    match.ballLocked = false;
     match.bowlNumber = null;
-    if (match.phase === "play") match.ballLocked = false;
+    match.ballLocked = false;
   }
 }
 
