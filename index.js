@@ -708,9 +708,8 @@ async function processBall(match) {
   let hattrickRetry = false;  // ✅ declared OUTSIDE try so finally can see it
 
   try {
-    const bat  = Number(match.batNumber);
-    const bowl = Number(match.bowlNumber);
-
+    const bat  = parseInt(match.batNumber);
+    const bowl = parseInt(match.bowlNumber);
     /* HATTRICK BLOCK */
     if (match.wicketStreak === 2 && bat === 0) {
       await bot.telegram.sendMessage(
