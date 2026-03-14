@@ -320,9 +320,6 @@ bot.command("bowler", async (ctx) => {
 
   match.bowler = player.id;
   match.lastOverBowler = player.id;
-  match.phase = "play";
-  match.awaitingBat = false;
-  match.awaitingBowl = true;
 
   await ctx.reply(`🎯 \`${player.name}\` is bowling — ball starting...`);
   await startBall(match);
@@ -807,10 +804,10 @@ if (bat === bowl) {
 
   } catch (err) {
     console.error("processBall error:", err);
-  } finally {
-    match.ballLocked = false;
+   } finally {
     match.batNumber = null;
     match.bowlNumber = null;
+    if (match.phase === "play") match.ballLocked = false;
   }
 }
 
