@@ -726,12 +726,12 @@ async function processBall(match) {
 `⚠️ Hattrick ball — cannot play \`0\`
 Two wickets in a row!`
       );
-      match.batNumber = null;
-      match.awaitingBat = true;
-      match.ballLocked = false;
-      startTurnTimer(match, "bat");
-      return;
-    }
+      } finally {
+    match.batNumber = null;
+    if (!match.awaitingBat) match.bowlNumber = null; 
+    match.ballLocked = false;
+    match.processingBall = false;
+  }
 
     match.bowlerMissCount = 0;
     match.batterMissCount = 0;
@@ -845,11 +845,10 @@ async function endInnings(match) {
 
     match.firstInningsScore = match.score;
     match.firstInningsData = JSON.parse(JSON.stringify(match));
-    match.phase = "switch";
 
     await bot.telegram.sendMessage(match.groupId, generateScorecard(match));
 
-    return bot.telegram.sendMessage(
+    await bot.telegram.sendMessage(
       match.groupId,
 `✅ Innings 1 complete
 ──────────────
@@ -857,7 +856,41 @@ async function endInnings(match) {
 🎯 Target \`${match.score + 1}\`
 ⚙️ \`${match.currentOver}/${match.totalOvers}\` overs
 ──────────────
-👉 /inningsswitch to continue`
+🔄 Switching innings...`
+    );
+
+    // ✅ Auto switch — no manual command needed
+    match.innings = 2;
+    match.target = match.firstInningsScore + 1;
+    match.ballLocked = false;
+
+    [match.battingTeam, match.bowlingTeam] = [match.bowlingTeam, match.battingTeam];
+
+    match.score = 0; match.wickets = 0; match.inningsEnded = false;
+    match.maxWickets = battingPlayers(match).length - 1;
+    match.currentOver = 0; match.currentBall = 0; match.currentOverNumber = 0;
+    match.currentPartnershipRuns = 0; match.currentPartnershipBalls = 0;
+    match.currentOverRuns = 0; match.wicketStreak = 0;
+    match.bowlerMissCount = 0; match.batterMissCount = 0;
+    match.usedBatters = []; match.battingOrder = [];
+    match.batterStats = {}; match.bowlerStats = {};
+    match.striker = null; match.nonStriker = null;
+    match.bowler = null; match.lastOverBowler = null;
+    match.suspendedBowlers = {};
+    match.overHistory = []; match.currentOverBalls = [];
+    match.awaitingBat = false; match.awaitingBowl = false;
+    match.phase = "set_striker";
+
+    await sendAndPinPlayerList(match, bot.telegram);
+
+    return bot.telegram.sendMessage(
+      match.groupId,
+`🏏 Innings 2
+──────────────
+🏏 Batting  \`${match.battingTeam === "A" ? match.teamAName : match.teamBName}\`
+🎯 Target  \`${match.firstInningsScore + 1}\`
+──────────────
+👉 /batter [number] set opener`
     );
   }
 
@@ -895,50 +928,6 @@ async function endInnings(match) {
 }
 
 
-/* ================= INNINGS SWITCH ================= */
-
-// BLOCK 1 — fix inningsswitch guard
-bot.command("inningsswitch", async (ctx) => {
-
-  const m = getMatch(ctx);
-  if (!m || !m.groupId) return ctx.reply("⚠️ No active match.");
-  if (String(ctx.from.id) !== String(m.host))
-    return ctx.reply("❌ Only the match host can switch innings.");
-  if (m.phase !== "switch")                          // ✅ check phase not innings number
-    return ctx.reply("⚠️ Innings 1 not completed yet.");
-
-  m.innings = 2;
-  m.target = m.firstInningsScore + 1;
-  m.ballLocked = false;
-
-  [m.battingTeam, m.bowlingTeam] = [m.bowlingTeam, m.battingTeam];
-
-  m.score = 0; m.wickets = 0; m.inningsEnded = false;
-  m.maxWickets = battingPlayers(m).length - 1;
-  m.currentOver = 0; m.currentBall = 0; m.currentOverNumber = 0;
-  m.currentPartnershipRuns = 0; m.currentPartnershipBalls = 0;
-  m.currentOverRuns = 0; m.wicketStreak = 0;
-  m.bowlerMissCount = 0; m.batterMissCount = 0;
-  m.usedBatters = []; m.battingOrder = [];           // ✅ battingOrder explicitly reset
-  m.batterStats = {}; m.bowlerStats = {};
-  m.striker = null; m.nonStriker = null;
-  m.bowler = null; m.lastOverBowler = null;
-  m.suspendedBowlers = {};
-  m.overHistory = []; m.currentOverBalls = [];
-  m.awaitingBat = false; m.awaitingBowl = false;
-  m.phase = "set_striker";
-
-  await sendAndPinPlayerList(m, ctx.telegram);
-
-  return ctx.reply(
-`🏏 Innings 2
-──────────────
-🏏 Batting  \`${m.battingTeam === "A" ? m.teamAName : m.teamBName}\`
-🎯 Target  \`${m.firstInningsScore + 1}\`
-──────────────
-👉 /batter [number] set opener`
-  );
-});
 /* ================= MATCH RESULT ================= */
 
 async function endMatchWithWinner(match, winningTeam) {
