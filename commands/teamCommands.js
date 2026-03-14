@@ -24,14 +24,12 @@ bot.command("createteam", (ctx) => {
   match.phase = "join";
 
   ctx.reply(
-`🟢 <b>LOBBY OPEN</b>
-───────────────────────
-🔵 <b>${match.teamAName}</b>  →  /joina
-🔴 <b>${match.teamBName}</b>  →  /joinb
-───────────────────────
-⏱ Open for 60 seconds
-/closejoin to close early`,
-    { parse_mode: "HTML" }
+`🟢 Lobby is open
+──────────────
+🔵 ${match.teamAName} /joina
+🔴 ${match.teamBName} /joinb
+──────────────
+⏱ Closes in 60s · /closejoin`
   );
 
   match.joinTimer = setTimeout(async () => {
@@ -42,13 +40,12 @@ bot.command("createteam", (ctx) => {
 
     await bot.telegram.sendMessage(
       match.groupId,
-`🔒 <b>JOINING CLOSED</b>
-───────────────────────
-🔵 <b>${match.teamAName}</b>  ·  ${match.teamA.length} player${match.teamA.length !== 1 ? "s" : ""}
-🔴 <b>${match.teamBName}</b>  ·  ${match.teamB.length} player${match.teamB.length !== 1 ? "s" : ""}
-───────────────────────
-/choosecap to continue`,
-      { parse_mode: "HTML" }
+`🔒 Joining closed
+──────────────
+🔵 ${match.teamAName} · ${match.teamA.length}p
+🔴 ${match.teamBName} · ${match.teamB.length}p
+──────────────
+👉 /choosecap to continue`
     );
 
   }, 60000);
@@ -74,13 +71,12 @@ bot.command("closejoin", async (ctx) => {
   match.phase = "teams_set";
 
   await ctx.reply(
-`🔒 <b>JOINING CLOSED</b>
-───────────────────────
-🔵 <b>${match.teamAName}</b>  ·  ${match.teamA.length} player${match.teamA.length !== 1 ? "s" : ""}
-🔴 <b>${match.teamBName}</b>  ·  ${match.teamB.length} player${match.teamB.length !== 1 ? "s" : ""}
-───────────────────────
-/choosecap to continue`,
-    { parse_mode: "HTML" }
+`🔒 Joining closed
+──────────────
+🔵 ${match.teamAName} · ${match.teamA.length}p
+🔴 ${match.teamBName} · ${match.teamB.length}p
+──────────────
+👉 /choosecap to continue`
   );
 
 });
@@ -97,16 +93,16 @@ bot.command("joina", async (ctx) => {
     return ctx.reply("⚠️ Joining is closed.");
 
   if (playerActiveMatch.has(ctx.from.id))
-    return ctx.reply("❌ You are already in a match.");
+    return ctx.reply("❌ You're already in a match.");
 
   if (ctx.from.id === match.host)
     return ctx.reply("❌ Host cannot join as player.");
 
   if (match.teamA.some(p => p.id === ctx.from.id))
-    return ctx.reply("⚠️ You already joined Team A.");
+    return ctx.reply("⚠️ Already in Team A.");
 
   if (match.teamB.some(p => p.id === ctx.from.id))
-    return ctx.reply("⚠️ You are already in Team B.");
+    return ctx.reply("⚠️ Already in Team B.");
 
   const name = ctx.from.first_name || "Player";
 
@@ -118,10 +114,7 @@ bot.command("joina", async (ctx) => {
 
   playerActiveMatch.set(ctx.from.id, match.groupId);
 
-  await ctx.reply(
-`✅ <b>${name}</b> joined 🔵 <b>${match.teamAName}</b>`,
-    { parse_mode: "HTML" }
-  );
+  await ctx.reply(`✅ ${name} joined 🔵 ${match.teamAName}`);
 
   await sendAndPinPlayerList(match, ctx.telegram);
 
@@ -139,16 +132,16 @@ bot.command("joinb", async (ctx) => {
     return ctx.reply("⚠️ Joining is closed.");
 
   if (playerActiveMatch.has(ctx.from.id))
-    return ctx.reply("❌ You are already in a match.");
+    return ctx.reply("❌ You're already in a match.");
 
   if (ctx.from.id === match.host)
     return ctx.reply("❌ Host cannot join as player.");
 
   if (match.teamB.some(p => p.id === ctx.from.id))
-    return ctx.reply("⚠️ You already joined Team B.");
+    return ctx.reply("⚠️ Already in Team B.");
 
   if (match.teamA.some(p => p.id === ctx.from.id))
-    return ctx.reply("⚠️ You are already in Team A.");
+    return ctx.reply("⚠️ Already in Team A.");
 
   const name = ctx.from.first_name || "Player";
 
@@ -160,10 +153,7 @@ bot.command("joinb", async (ctx) => {
 
   playerActiveMatch.set(ctx.from.id, match.groupId);
 
-  await ctx.reply(
-`✅ <b>${name}</b> joined 🔴 <b>${match.teamBName}</b>`,
-    { parse_mode: "HTML" }
-  );
+  await ctx.reply(`✅ ${name} joined 🔴 ${match.teamBName}`);
 
   await sendAndPinPlayerList(match, ctx.telegram);
 
@@ -184,11 +174,10 @@ bot.command("add", async (ctx) => {
 
   if (args.length < 2)
     return ctx.reply(
-`ℹ️ <b>Usage</b>
+`ℹ️ Usage
 /add A @username
 /add B 123456789
-<i>Or reply to a message + /add A</i>`,
-      { parse_mode: "HTML" }
+or reply to a message + /add A`
     );
 
   const team = args[1].toUpperCase();
@@ -214,17 +203,16 @@ bot.command("add", async (ctx) => {
     mention = `<a href="tg://user?id=${userId}">${name}</a>`;
 
   } else if (args[2]) {
-    if (isNaN(args[2])) return ctx.reply("❌ Must provide a valid Telegram user ID.");
+    if (isNaN(args[2])) return ctx.reply("❌ Invalid Telegram user ID.");
     userId  = Number(args[2]);
     name    = "Player";
     mention = `<a href="tg://user?id=${userId}">${name}</a>`;
 
   } else {
     return ctx.reply(
-`ℹ️ <b>Usage</b>
+`ℹ️ Usage
 /add A @username
-/add B 123456789`,
-      { parse_mode: "HTML" }
+/add B 123456789`
     );
   }
 
@@ -240,7 +228,7 @@ bot.command("add", async (ctx) => {
   playerActiveMatch.set(userId, match.groupId);
 
   await ctx.reply(
-`✅ ${mention} added to 📍 <b>Team ${team}</b>`,
+`✅ ${mention} added to Team ${team}`,
     { parse_mode: "HTML" }
   );
 
@@ -263,10 +251,8 @@ bot.command("remove", async (ctx) => {
 
   if (args.length < 2)
     return ctx.reply(
-`ℹ️ <b>Usage</b>
-/remove A1
-/remove B2`,
-      { parse_mode: "HTML" }
+`ℹ️ Usage
+/remove A1  or  /remove B2`
     );
 
   const arg  = args[1].toUpperCase();
@@ -274,7 +260,7 @@ bot.command("remove", async (ctx) => {
   const num  = parseInt(arg.slice(1));
 
   if (!["A", "B"].includes(team) || isNaN(num))
-    return ctx.reply("❌ Invalid format. Use /remove A1 or /remove B2");
+    return ctx.reply("❌ Format: /remove A1 or /remove B2");
 
   const teamArr = team === "A" ? match.teamA : match.teamB;
 
@@ -288,7 +274,7 @@ bot.command("remove", async (ctx) => {
   if (Array.isArray(match.usedBatters))
     match.usedBatters = match.usedBatters.filter(id => id !== removed.id);
 
-  await ctx.reply(`✖️ <b>${removed.name}</b> removed from Team ${team}`, { parse_mode: "HTML" });
+  await ctx.reply(`✖️ ${removed.name} removed from Team ${team}`);
 
   await sendAndPinPlayerList(match, ctx.telegram);
 
@@ -311,7 +297,7 @@ bot.command("changeteam", (ctx) => {
   const args = ctx.message.text.split(" ");
 
   if (args.length !== 3)
-    return ctx.reply("Usage: /changeteam A 1");
+    return ctx.reply("ℹ️ Usage: /changeteam A 1");
 
   const team   = args[1].toUpperCase();
   const number = parseInt(args[2]);
@@ -330,17 +316,14 @@ bot.command("changeteam", (ctx) => {
   match.pendingTeamChange = { player, fromTeam, toTeam, target };
 
   ctx.reply(
-`🔄 <b>Move Player</b>
-───────────────────────
-${player.mention}
-Team ${team}  →  Team ${target}
-───────────────────────`,
+`🔄 Move ${player.mention}
+Team ${team} → Team ${target}`,
     {
       parse_mode: "HTML",
       ...Markup.inlineKeyboard([
         [
-          Markup.button.callback("✅  Confirm", "confirm_team_change"),
-          Markup.button.callback("❌  Cancel",  "cancel_team_change")
+          Markup.button.callback("✅ Confirm", "confirm_team_change"),
+          Markup.button.callback("✖️ Cancel",  "cancel_team_change")
         ]
       ])
     }
@@ -370,7 +353,7 @@ bot.action("confirm_team_change", async (ctx) => {
   await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
 
   await ctx.reply(
-`✅ ${player.mention} moved to <b>Team ${target}</b>`,
+`✅ ${player.mention} moved to Team ${target}`,
     { parse_mode: "HTML" }
   );
 
