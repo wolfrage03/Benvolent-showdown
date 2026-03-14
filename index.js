@@ -521,6 +521,7 @@ async function announceBall(match) {
 
   match.batNumber = null;
   match.bowlNumber = null;
+  match.ballLocked = false;
 
   await bot.telegram.sendMessage(
     match.groupId,
@@ -636,6 +637,7 @@ bot.on("text", async (ctx) => {
       return;
     }
 
+    // Both numbers ready — batter sent after bowler
     if (match.ballLocked) return;
     match.ballLocked = true;
 
@@ -661,16 +663,13 @@ bot.on("text", async (ctx) => {
   match.bowlNumber = Number(text);
   match.awaitingBowl = false;
 
-  // Batter already submitted before bowler (race condition) — process immediately
+  // Batter already submitted before bowler — process immediately
   if (match.batNumber !== null) {
     match.awaitingBat = false;
-    if (!match.ballLocked) {
-      match.ballLocked = true;
-      clearTimers(match);
-      await ctx.reply(`✅ Submitted`);
-      return processBall(match);
-    }
-    return;
+    match.ballLocked = true;  // force lock regardless of previous state
+    clearTimers(match);
+    await ctx.reply(`✅ Submitted`);
+    return processBall(match);
   }
 
   // Normal flow — wait for batter
