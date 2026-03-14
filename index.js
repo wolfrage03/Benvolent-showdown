@@ -699,18 +699,15 @@ bot.on("text", async (ctx) => {
 
 async function processBall(match) {
   if (!match) return;
-
-  // Wait silently if either number not yet received — timer stays running
   if (match.batNumber === null || match.bowlNumber === null) return;
 
   clearTimers(match);
 
-  try {
+  let hattrickRetry = false;  // ✅ declared OUTSIDE try so finally can see it
 
+  try {
     const bat  = Number(match.batNumber);
     const bowl = Number(match.bowlNumber);
-
-    let hattrickRetry = false;
 
     /* HATTRICK BLOCK */
     if (match.wicketStreak === 2 && bat === 0) {
@@ -726,6 +723,7 @@ Two wickets in a row!`
       startTurnTimer(match, "bat");
       return;
     }
+
     match.bowlerMissCount = 0;
     match.batterMissCount = 0;
 
@@ -739,46 +737,44 @@ Two wickets in a row!`
     match.bowlerStats[match.bowler].history.push(bat);
 
     /* WICKET */
-if (bat === bowl) {
-  match.wickets++;
-  match.wicketStreak++;
-  match.bowlerStats[match.bowler].wickets++;
-  match.currentBall++;
-  match.currentPartnershipBalls++;
+    if (bat === bowl) {
+      match.wickets++;
+      match.wicketStreak++;
+      match.bowlerStats[match.bowler].wickets++;
+      match.currentBall++;
+      match.currentPartnershipBalls++;
 
-  const lastOver = match.overHistory[match.overHistory.length - 1];
-  if (lastOver) lastOver.balls.push("W");
+      const lastOver = match.overHistory[match.overHistory.length - 1];
+      if (lastOver) lastOver.balls.push("W");
 
-  match.currentPartnershipRuns = 0;
-  match.currentPartnershipBalls = 0;
+      match.currentPartnershipRuns = 0;
+      match.currentPartnershipBalls = 0;
 
-  await bot.telegram.sendMessage(match.groupId, randomLine("W"));
-  await sendAndPinPlayerList(match, bot.telegram);
+      await bot.telegram.sendMessage(match.groupId, randomLine("W"));
+      await sendAndPinPlayerList(match, bot.telegram);
 
-  if (match.wickets >= match.maxWickets) {
-    await endInnings(match);
-    return;
-  }
+      if (match.wickets >= match.maxWickets) {
+        await endInnings(match);
+        return;
+      }
 
-  // ✅ Check if over ended first
-  if (match.currentBall >= 6) {
-    const overEnded = await checkOverEnd(match); // sets phase = "set_bowler", doesn't call startBall
-    if (overEnded) return;
-  }
+      if (match.currentBall >= 6) {
+        const overEnded = await checkOverEnd(match);
+        if (overEnded) return;
+      }
 
-  // ✅ Only reach here if over NOT ended — safely set new_batter
-  match.phase = "new_batter";
-  match.awaitingBowl = false;  // ✅ critical — prevent bowler input being accepted
-  match.awaitingBat = false;
+      match.phase = "new_batter";
+      match.awaitingBowl = false;
+      match.awaitingBat = false;
 
-  await bot.telegram.sendMessage(
-    match.groupId,
+      await bot.telegram.sendMessage(
+        match.groupId,
 `💥 Wicket!
 ──────────────
 👉 /batter [number] new batter`
-  );
-  return;
-}
+      );
+      return;
+    }
 
     /* RUNS */
     match.score += bat;
@@ -794,12 +790,10 @@ if (bat === bowl) {
 
     match.wicketStreak = 0;
 
-    /* PARTNERSHIP MILESTONES */
-    if (match.currentPartnershipRuns === 50) {
+    if (match.currentPartnershipRuns === 50)
       await bot.telegram.sendMessage(match.groupId, `🔥 \`50\`-run partnership!`);
-    } else if (match.currentPartnershipRuns === 100) {
+    else if (match.currentPartnershipRuns === 100)
       await bot.telegram.sendMessage(match.groupId, `💯 \`100\`-run partnership!`);
-    }
 
     await bot.telegram.sendMessage(match.groupId, randomLine(bat));
 
@@ -815,11 +809,9 @@ if (bat === bowl) {
 
   } catch (err) {
     console.error("processBall error:", err);
-   } finally {
+  } finally {
     match.batNumber = null;
-    if (!hattrickRetry) match.bowlNumber = null; 
-    match.ballLocked = false;
-    match.bowlNumber = null;
+    if (!hattrickRetry) match.bowlNumber = null;  // ✅ preserve bowlNumber for hattrick retry
     match.ballLocked = false;
   }
 }
