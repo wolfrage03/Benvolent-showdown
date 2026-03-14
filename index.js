@@ -320,6 +320,7 @@ bot.command("bowler", async (ctx) => {
 
   match.bowler = player.id;
   match.lastOverBowler = player.id;
+  match.phase = "play";
 
   await ctx.reply(`🎯 \`${player.name}\` is bowling — ball starting...`);
   await startBall(match);
