@@ -731,40 +731,46 @@ Two wickets in a row!`
     match.bowlerStats[match.bowler].history.push(bat);
 
     /* WICKET */
-    if (bat === bowl) {
+if (bat === bowl) {
+  match.wickets++;
+  match.wicketStreak++;
+  match.bowlerStats[match.bowler].wickets++;
+  match.currentBall++;
+  match.currentPartnershipBalls++;
 
-      match.wickets++;
-      match.wicketStreak++;
-      match.bowlerStats[match.bowler].wickets++;
-      match.currentBall++;
-      match.currentPartnershipBalls++;
+  const lastOver = match.overHistory[match.overHistory.length - 1];
+  if (lastOver) lastOver.balls.push("W");
 
-      const lastOver = match.overHistory[match.overHistory.length - 1];
-      if (lastOver) lastOver.balls.push("W");
+  match.currentPartnershipRuns = 0;
+  match.currentPartnershipBalls = 0;
 
-      match.currentPartnershipRuns = 0;
-      match.currentPartnershipBalls = 0;
+  await bot.telegram.sendMessage(match.groupId, randomLine("W"));
+  await sendAndPinPlayerList(match, bot.telegram);
 
-      await bot.telegram.sendMessage(match.groupId, randomLine("W"));
-      await sendAndPinPlayerList(match, bot.telegram);
+  if (match.wickets >= match.maxWickets) {
+    await endInnings(match);
+    return;
+  }
 
-      if (match.wickets >= match.maxWickets) {
-        await endInnings(match);
-        return;
-      }
+  // ✅ Check if over ended first
+  if (match.currentBall >= 6) {
+    const overEnded = await checkOverEnd(match); // sets phase = "set_bowler", doesn't call startBall
+    if (overEnded) return;
+  }
 
-      const overEnded = await handleBallCompletion(match);
-      if (overEnded) return;
+  // ✅ Only reach here if over NOT ended — safely set new_batter
+  match.phase = "new_batter";
+  match.awaitingBowl = false;  // ✅ critical — prevent bowler input being accepted
+  match.awaitingBat = false;
 
-      match.phase = "new_batter";
-      await bot.telegram.sendMessage(
-        match.groupId,
+  await bot.telegram.sendMessage(
+    match.groupId,
 `💥 Wicket!
 ──────────────
 👉 /batter [number] new batter`
-      );
-      return;
-    }
+  );
+  return;
+}
 
     /* RUNS */
     match.score += bat;
