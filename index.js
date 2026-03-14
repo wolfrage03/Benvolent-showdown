@@ -515,40 +515,34 @@ Consecutive delays · cannot bowl this over or next
 
 /* ================= ANNOUNCE BALL ================= */
 
+// FIX 1 — Remove startTurnTimer from inside announceBall (let startBall own the timer)
 async function announceBall(match) {
-
   if (!match || !match.bowler || !match.striker) return;
   if (match.phase === "switch") return;
 
-  // Clear previous timers
   clearTimers(match);
 
-  // Reset ball state
   match.batNumber = null;
   match.bowlNumber = null;
   match.ballLocked = false;
   match.processingBall = false;
-
   match.awaitingBowl = true;
   match.awaitingBat = false;
 
   const bowlerName = getName(match, match.bowler);
 
-  // Announce bowler in group
   await bot.telegram.sendMessage(
     match.groupId,
     `[🎯 ${bowlerName}](tg://user?id=${match.bowler})`,
     { parse_mode: "Markdown" }
   );
 
-  // Bowling prompt
   await bot.telegram.sendMessage(
     match.groupId,
     randomBowlingPrompt(),
     bowlDMButton()
   );
 
-  // DM bowler
   try {
     await bot.telegram.sendMessage(
       match.bowler,
@@ -559,9 +553,7 @@ Send your number \`1 – 6\``
   } catch (e) {
     console.log("Bowler DM failed:", e.message);
   }
-
-  // Start timer for bowler
-  startTurnTimer(match, "bowl");
+  // ✅ REMOVED startTurnTimer from here — startBall handles it
 }
 
 /* ================= TIMER CONTROLLER ================= */
@@ -763,7 +755,7 @@ Two wickets in a row!`
       match.bowlerStats[match.bowler].wickets++;
 
       const lastOver = match.overHistory[match.overHistory.length - 1];
-      if (lastOver) lastOver.balls.push("wicket");
+      if (lastOver) lastOver.balls.push("W");
 
       match.currentPartnershipRuns = 0;
       match.currentPartnershipBalls = 0;
@@ -905,17 +897,19 @@ async function endInnings(match) {
 
 /* ================= INNINGS SWITCH ================= */
 
+// BLOCK 1 — fix inningsswitch guard
 bot.command("inningsswitch", async (ctx) => {
 
   const m = getMatch(ctx);
   if (!m || !m.groupId) return ctx.reply("⚠️ No active match.");
   if (String(ctx.from.id) !== String(m.host))
     return ctx.reply("❌ Only the match host can switch innings.");
-  if (m.innings !== 1) return ctx.reply("⚠️ Innings already switched.");
+  if (m.phase !== "switch")                          // ✅ check phase not innings number
+    return ctx.reply("⚠️ Innings 1 not completed yet.");
 
   m.innings = 2;
   m.target = m.firstInningsScore + 1;
-  m.ballLocked = false; 
+  m.ballLocked = false;
 
   [m.battingTeam, m.bowlingTeam] = [m.bowlingTeam, m.battingTeam];
 
@@ -925,7 +919,7 @@ bot.command("inningsswitch", async (ctx) => {
   m.currentPartnershipRuns = 0; m.currentPartnershipBalls = 0;
   m.currentOverRuns = 0; m.wicketStreak = 0;
   m.bowlerMissCount = 0; m.batterMissCount = 0;
-  m.usedBatters = []; m.battingOrder = [];
+  m.usedBatters = []; m.battingOrder = [];           // ✅ battingOrder explicitly reset
   m.batterStats = {}; m.bowlerStats = {};
   m.striker = null; m.nonStriker = null;
   m.bowler = null; m.lastOverBowler = null;
@@ -945,8 +939,6 @@ bot.command("inningsswitch", async (ctx) => {
 👉 /batter [number] set opener`
   );
 });
-
-
 /* ================= MATCH RESULT ================= */
 
 async function endMatchWithWinner(match, winningTeam) {
