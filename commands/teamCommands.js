@@ -29,7 +29,7 @@ bot.command("createteam", (ctx) => {
 🔵 ${match.teamAName} /joina
 🔴 ${match.teamBName} /joinb
 ──────────────
-⏱ Closes in 60s · /closejoin`
+⏱ Closes in \`60s\` · /closejoin`
   );
 
   match.joinTimer = setTimeout(async () => {
@@ -42,8 +42,8 @@ bot.command("createteam", (ctx) => {
       match.groupId,
 `🔒 Joining closed
 ──────────────
-🔵 ${match.teamAName} · ${match.teamA.length}p
-🔴 ${match.teamBName} · ${match.teamB.length}p
+🔵 ${match.teamAName} · \`${match.teamA.length}p\`
+🔴 ${match.teamBName} · \`${match.teamB.length}p\`
 ──────────────
 👉 /choosecap to continue`
     );
@@ -73,8 +73,8 @@ bot.command("closejoin", async (ctx) => {
   await ctx.reply(
 `🔒 Joining closed
 ──────────────
-🔵 ${match.teamAName} · ${match.teamA.length}p
-🔴 ${match.teamBName} · ${match.teamB.length}p
+🔵 ${match.teamAName} · \`${match.teamA.length}p\`
+🔴 ${match.teamBName} · \`${match.teamB.length}p\`
 ──────────────
 👉 /choosecap to continue`
   );
@@ -228,7 +228,7 @@ or reply to a message + /add A`
   playerActiveMatch.set(userId, match.groupId);
 
   await ctx.reply(
-`✅ ${mention} added to Team ${team}`,
+`✅ ${mention} added to Team \`${team}\``,
     { parse_mode: "HTML" }
   );
 
@@ -274,7 +274,7 @@ bot.command("remove", async (ctx) => {
   if (Array.isArray(match.usedBatters))
     match.usedBatters = match.usedBatters.filter(id => id !== removed.id);
 
-  await ctx.reply(`✖️ ${removed.name} removed from Team ${team}`);
+  await ctx.reply(`✖️ ${removed.name} removed from Team \`${team}\``);
 
   await sendAndPinPlayerList(match, ctx.telegram);
 
@@ -317,7 +317,7 @@ bot.command("changeteam", (ctx) => {
 
   ctx.reply(
 `🔄 Move ${player.mention}
-Team ${team} → Team ${target}`,
+Team \`${team}\` → Team \`${target}\``,
     {
       parse_mode: "HTML",
       ...Markup.inlineKeyboard([
@@ -353,7 +353,7 @@ bot.action("confirm_team_change", async (ctx) => {
   await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
 
   await ctx.reply(
-`✅ ${player.mention} moved to Team ${target}`,
+`✅ ${player.mention} moved to Team \`${target}\``,
     { parse_mode: "HTML" }
   );
 

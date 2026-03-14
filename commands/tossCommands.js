@@ -15,16 +15,14 @@ async function startToss(match) {
 
   await bot.telegram.sendMessage(
     match.groupId,
-`╔═ TOSS ════════════════════════════╗
-
-  Captains, choose odd or even.
-  A number will be rolled.
-
-╚═══════════════════════════════════╝`,
+`🎲 Toss time
+──────────────
+Captains, choose odd or even.
+A number will be rolled.`,
     Markup.inlineKeyboard([
       [
-        Markup.button.callback("⚫  Odd",   "toss_odd"),
-        Markup.button.callback("⚪  Even",  "toss_even")
+        Markup.button.callback("⚫ Odd",  "toss_odd"),
+        Markup.button.callback("⚪ Even", "toss_even")
       ]
     ])
   );
@@ -46,10 +44,10 @@ bot.action(["toss_odd", "toss_even"], async (ctx) => {
   if (![captainA, captainB].includes(ctx.from.id))
     return ctx.answerCbQuery("Only captains can choose.");
 
-  const choice      = ctx.callbackQuery.data === "toss_odd" ? "odd" : "even";
-  const tossNumber  = Math.floor(Math.random() * 6) + 1;
-  const result      = tossNumber % 2 === 0 ? "even" : "odd";
-  const chooser     = ctx.from.id;
+  const choice     = ctx.callbackQuery.data === "toss_odd" ? "odd" : "even";
+  const tossNumber = Math.floor(Math.random() * 6) + 1;
+  const result     = tossNumber % 2 === 0 ? "even" : "odd";
+  const chooser    = ctx.from.id;
 
   const tossWinner =
     choice === result
@@ -66,18 +64,16 @@ bot.action(["toss_odd", "toss_even"], async (ctx) => {
 
   await bot.telegram.sendMessage(
     match.groupId,
-`╔═ TOSS RESULT ═════════════════════╗
-
-  🎲  Rolled        ${tossNumber}  (${result})
-  🏆  Winner        ${winnerName}
-
-╠═══════════════════════════════════╣
-  Choose to bat or bowl:
-╚═══════════════════════════════════╝`,
+`🎲 Toss result
+──────────────
+🎯 Rolled \`${tossNumber}\` · ${result}
+🏆 ${winnerName} won!
+──────────────
+Choose to bat or bowl:`,
     Markup.inlineKeyboard([
       [
-        Markup.button.callback("🏏  Bat",  "decision_bat"),
-        Markup.button.callback("🎯  Bowl", "decision_bowl")
+        Markup.button.callback("🏏 Bat",  "decision_bat"),
+        Markup.button.callback("🎯 Bowl", "decision_bowl")
       ]
     ])
   );
@@ -120,19 +116,16 @@ bot.action(["decision_bat", "decision_bowl"], async (ctx) => {
   const battingName = match.battingTeam === "A" ? match.teamAName : match.teamBName;
   const bowlingName = match.bowlingTeam === "A" ? match.teamAName : match.teamBName;
 
-  // Update pinned player list to reflect batting/bowling roles
   await sendAndPinPlayerList(match, ctx.telegram);
 
   await bot.telegram.sendMessage(
     match.groupId,
-`╔═ MATCH SETUP ═════════════════════╗
-
-  🏏  Batting    ${battingName}
-  🎯  Bowling    ${bowlingName}
-
-╠═══════════════════════════════════╣
-  /setovers [1–25]  to set overs
-╚═══════════════════════════════════╝`
+`✅ Match setup
+──────────────
+🏏 Batting  \`${battingName}\`
+🎯 Bowling  \`${bowlingName}\`
+──────────────
+👉 /setovers [1–25] to set overs`
   );
 });
 
@@ -151,13 +144,7 @@ bot.command("setovers", (ctx) => {
   const overs = parseInt(args[1]);
 
   if (isNaN(overs) || overs < 1 || overs > 25)
-    return ctx.reply(
-`╔═ INVALID ═════════════════════════╗
-
-  ⚠️   Overs must be between 1 – 25
-
-╚═══════════════════════════════════╝`
-    );
+    return ctx.reply("⚠️ Overs must be between `1` and `25`");
 
   match.totalOvers = overs;
   match.maxWickets =
@@ -166,13 +153,9 @@ bot.command("setovers", (ctx) => {
   match.phase = "set_striker";
 
   ctx.reply(
-`╔═ OVERS SET ═══════════════════════╗
-
-  ⚙️   ${overs} over${overs !== 1 ? "s" : ""}
-
-╠═══════════════════════════════════╣
-  /batter [number]  set opener
-╚═══════════════════════════════════╝`
+`⚙️ Overs set to \`${overs}\`
+──────────────
+👉 /batter [number] set opener`
   );
 });
 

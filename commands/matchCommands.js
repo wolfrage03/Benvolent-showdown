@@ -45,16 +45,12 @@ module.exports = function (bot, helpers) {
     match.phase   = "host_select";
 
     ctx.reply(
-`╔═ MATCH LOBBY ═════════════════════╗
-
-  A new match is starting!
-
-  First player to press the button
-  below becomes the host.
-
-╚═══════════════════════════════════╝`,
+`🏏 Match Lobby
+──────────────
+A new match is starting!
+First player to press the button becomes the host.`,
       Markup.inlineKeyboard([
-        [Markup.button.callback("👑  Become Host", "select_host")]
+        [Markup.button.callback("👑 Become Host", "select_host")]
       ])
     );
   });
@@ -78,16 +74,12 @@ module.exports = function (bot, helpers) {
       return ctx.reply("❌ Only host or admin can end the match.");
 
     ctx.reply(
-`╔═ END MATCH ═══════════════════════╗
-
-  ⚠️   End the current match?
-  This cannot be undone.
-
-╚═══════════════════════════════════╝`,
+`⚠️ End the current match?
+This cannot be undone.`,
       Markup.inlineKeyboard([
         [
-          Markup.button.callback("✅  Confirm", "confirm_end"),
-          Markup.button.callback("❌  Cancel",  "cancel_end")
+          Markup.button.callback("✅ Confirm", "confirm_end"),
+          Markup.button.callback("❌ Cancel",  "cancel_end")
         ]
       ])
     );
@@ -113,13 +105,9 @@ module.exports = function (bot, helpers) {
     try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
 
     await ctx.reply(
-`╔═ MATCH ENDED ═════════════════════╗
-
-  🛑  The match has been stopped.
-
-╠═══════════════════════════════════╣
-  /start  to begin a new match
-╚═══════════════════════════════════╝`
+`🛑 Match ended
+──────────────
+👉 /start to begin a new match`
     );
 
     clearTimers(match);
@@ -131,7 +119,6 @@ module.exports = function (bot, helpers) {
   /* ================= CANCEL END ================= */
 
   bot.action("cancel_end", async (ctx) => {
-
     try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
     ctx.answerCbQuery("Cancelled.");
   });

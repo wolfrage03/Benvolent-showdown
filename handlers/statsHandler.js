@@ -66,11 +66,9 @@ function registerStatsHandler(bot) {
 
     const stats = await PlayerStats.findOne({ userId: String(ctx.from.id) });
     if (!stats) return ctx.reply(
-`╔═ NO STATS YET ════════════════════╗
-
-  📊  Play some matches first!
-
-╚═══════════════════════════════════╝`
+`📊 No stats yet
+──────────────
+Play some matches first!`
     );
 
     const bat  = calculateBatting(stats);
@@ -92,33 +90,15 @@ function registerStatsHandler(bot) {
 
     const parts = ctx.message.text.trim().split(/\s+/);
     if (parts.length < 2 || !parts[1].startsWith("@"))
-      return ctx.reply(
-`╔═ USAGE ═══════════════════════════╗
-
-  /stats @username
-
-╚═══════════════════════════════════╝`
-      );
+      return ctx.reply("ℹ️ Usage: /stats @username");
 
     const username = parts[1].replace("@", "").toLowerCase();
     const user     = await User.findOne({ username });
 
-    if (!user) return ctx.reply(
-`╔═ NOT FOUND ═══════════════════════╗
-
-  ❌  User @${username} not found.
-
-╚═══════════════════════════════════╝`
-    );
+    if (!user) return ctx.reply(`❌ User @${username} not found.`);
 
     const stats = await PlayerStats.findOne({ userId: user.telegramId });
-    if (!stats) return ctx.reply(
-`╔═ NO STATS YET ════════════════════╗
-
-  📊  @${username} has no stats yet.
-
-╚═══════════════════════════════════╝`
-    );
+    if (!stats) return ctx.reply(`📊 @${username} has no stats yet.`);
 
     const bat  = calculateBatting(stats);
     const bowl = calculateBowling(stats);

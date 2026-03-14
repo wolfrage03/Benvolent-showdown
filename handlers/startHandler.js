@@ -29,9 +29,9 @@ function registerStartHandler(bot) {
     }
 
     await ctx.reply(
-`[ BOT CONNECTED ]
-
-When selected as bowler, send your number (1–6) here in DM.`
+`✅ Bot connected
+──────────────
+When selected as bowler, send your number \`1–6\` here in DM.`
     );
 
   });

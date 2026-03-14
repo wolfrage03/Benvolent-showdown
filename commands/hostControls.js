@@ -28,16 +28,13 @@ bot.action("select_host", async (ctx) => {
   try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
 
   await ctx.reply(
-`╔═ HOST ASSIGNED ═══════════════════╗
-
-  👑  ${ctx.from.first_name}
-
-  🔵  ${match.teamAName}
-  🔴  ${match.teamBName}
-
-╠═══════════════════════════════════╣
-  /createteam  to open lobby
-╚═══════════════════════════════════╝`
+`👑 Host assigned
+──────────────
+${ctx.from.first_name}
+🔵 \`${match.teamAName}\`
+🔴 \`${match.teamBName}\`
+──────────────
+👉 /createteam to open lobby`
   );
 });
 
@@ -88,8 +85,8 @@ async function startHostVoting(match, ctx) {
     {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "✅  Vote for Host Change", callback_data: "vote_host_change" }],
-          [{ text: "❌  Cancel",               callback_data: "cancel_host_vote"  }]
+          [{ text: "✅ Vote for Host Change", callback_data: "vote_host_change" }],
+          [{ text: "❌ Cancel",               callback_data: "cancel_host_vote"  }]
         ]
       }
     }
@@ -110,11 +107,8 @@ async function startHostVoting(match, ctx) {
 
     await bot.telegram.sendMessage(
       m.groupId,
-`╔═ HOST CHANGE ═════════════════════╗
-
-  ⏱️   Voting expired — no change made.
-
-╚═══════════════════════════════════╝`
+`⏱ Voting expired
+No host change made.`
     );
 
     m.hostChange = null;
@@ -128,15 +122,13 @@ function getVoteText(match) {
   const bVotes = match.hostChange.teamVotes.teamB.size;
 
   return (
-`╔═ HOST CHANGE VOTE ════════════════╗
-
-  🔵  ${match.teamAName.padEnd(20)} ${aVotes} / 2
-  🔴  ${match.teamBName.padEnd(20)} ${bVotes} / 2
-
-  Need 2 votes from each team.
-  ⏱️   Voting closes in 60 seconds.
-
-╚═══════════════════════════════════╝`
+`🗳 Host change vote
+──────────────
+🔵 ${match.teamAName} · \`${aVotes}/2\`
+🔴 ${match.teamBName} · \`${bVotes}/2\`
+──────────────
+Need \`2\` votes from each team
+⏱ Closes in \`60s\``
   );
 }
 
@@ -180,8 +172,8 @@ bot.action("vote_host_change", async (ctx) => {
       {
         reply_markup: {
           inline_keyboard: [
-            [{ text: "✅  Vote for Host Change", callback_data: "vote_host_change" }],
-            [{ text: "❌  Cancel",               callback_data: "cancel_host_vote"  }]
+            [{ text: "✅ Vote for Host Change", callback_data: "vote_host_change" }],
+            [{ text: "❌ Cancel",               callback_data: "cancel_host_vote"  }]
           ]
         }
       }
@@ -220,19 +212,14 @@ async function showHostSelection(match) {
 
   const msg = await bot.telegram.sendMessage(
     match.groupId,
-`╔═ HOST SELECTION ══════════════════╗
-
-  ✅  Voting passed!
-
-  A non-playing member can now
-  take the host role.
-
-╚═══════════════════════════════════╝`,
+`✅ Voting passed
+──────────────
+A non-playing member can now take host.`,
     {
       reply_markup: {
         inline_keyboard: [
-          [{ text: "👑  Take Host", callback_data: "take_host"       }],
-          [{ text: "❌  Cancel",    callback_data: "cancel_host_vote" }]
+          [{ text: "👑 Take Host", callback_data: "take_host"       }],
+          [{ text: "❌ Cancel",    callback_data: "cancel_host_vote" }]
         ]
       }
     }
@@ -273,11 +260,9 @@ bot.action("take_host", async (ctx) => {
 
   await bot.telegram.sendMessage(
     match.groupId,
-`╔═ NEW HOST ════════════════════════╗
-
-  👑  ${getDisplayName(ctx.from)}
-
-╚═══════════════════════════════════╝`
+`👑 New host
+──────────────
+\`${getDisplayName(ctx.from)}\``
   );
 
   ctx.answerCbQuery("You are now host 👑");
@@ -303,14 +288,7 @@ bot.action("cancel_host_vote", async (ctx) => {
     );
   } catch {}
 
-  await bot.telegram.sendMessage(
-    match.groupId,
-`╔═ CANCELLED ═══════════════════════╗
-
-  ✗  Host change cancelled.
-
-╚═══════════════════════════════════╝`
-  );
+  await bot.telegram.sendMessage(match.groupId, `✖️ Host change cancelled.`);
 
   match.hostChange = null;
   ctx.answerCbQuery("Cancelled.");

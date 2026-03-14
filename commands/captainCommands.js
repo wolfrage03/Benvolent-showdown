@@ -3,7 +3,7 @@ const { getMatch } = require("../matchManager");
 
 
 // ═══════════════════════════════════════════════
-// PLAYER LIST UTILITIES  (exported for index.js)
+// PLAYER LIST UTILITIES
 // ═══════════════════════════════════════════════
 
 function buildPlayerListText(match) {
@@ -122,15 +122,13 @@ module.exports = function (bot, helpers) {
     match.phase = "captain";
 
     ctx.reply(
-`╔═ CAPTAIN SELECTION ═══════════════╗
-
-  Each team picks their own captain.
-  Tap the button below.
-
-╚═══════════════════════════════════╝`,
+`👑 Captain selection
+──────────────
+Each team picks their own captain.
+Tap the button below.`,
       Markup.inlineKeyboard([
-        [Markup.button.callback("👑  Captain  —  Team A", "cap_A")],
-        [Markup.button.callback("👑  Captain  —  Team B", "cap_B")]
+        [Markup.button.callback("👑 Captain — Team A", "cap_A")],
+        [Markup.button.callback("👑 Captain — Team B", "cap_B")]
       ])
     );
   });
@@ -154,14 +152,11 @@ module.exports = function (bot, helpers) {
 
     match.captains.A = ctx.from.id;
 
-    await ctx.answerCbQuery("You are Captain of Team A");
+    await ctx.answerCbQuery("You are Captain of Team A 👑");
     await ctx.reply(
-`╔═ CAPTAIN SET ═════════════════════╗
-
-  👑  ${getDisplayName(ctx.from).padEnd(20)}
-  📍  Team A
-
-╚═══════════════════════════════════╝`
+`👑 Captain set
+──────────────
+${getDisplayName(ctx.from)} · 🔵 Team A`
     );
 
     updateCaptainButtons(match, ctx);
@@ -186,14 +181,11 @@ module.exports = function (bot, helpers) {
 
     match.captains.B = ctx.from.id;
 
-    await ctx.answerCbQuery("You are Captain of Team B");
+    await ctx.answerCbQuery("You are Captain of Team B 👑");
     await ctx.reply(
-`╔═ CAPTAIN SET ═════════════════════╗
-
-  👑  ${getDisplayName(ctx.from).padEnd(20)}
-  📍  Team B
-
-╚═══════════════════════════════════╝`
+`👑 Captain set
+──────────────
+${getDisplayName(ctx.from)} · 🔴 Team B`
     );
 
     updateCaptainButtons(match, ctx);
@@ -207,10 +199,10 @@ module.exports = function (bot, helpers) {
     const buttons = [];
 
     if (!match.captains.A)
-      buttons.push([Markup.button.callback("👑  Captain  —  Team A", "cap_A")]);
+      buttons.push([Markup.button.callback("👑 Captain — Team A", "cap_A")]);
 
     if (!match.captains.B)
-      buttons.push([Markup.button.callback("👑  Captain  —  Team B", "cap_B")]);
+      buttons.push([Markup.button.callback("👑 Captain — Team B", "cap_B")]);
 
     if (buttons.length === 0) {
 
@@ -219,12 +211,8 @@ module.exports = function (bot, helpers) {
       match.phase = "toss";
 
       ctx.reply(
-`╔═ CAPTAINS CONFIRMED ══════════════╗
-
-  Both captains are set.
-  Starting toss...
-
-╚═══════════════════════════════════╝`
+`✅ Both captains confirmed
+Starting toss...`
       );
 
       if (helpers.startToss) helpers.startToss(match);
@@ -270,10 +258,10 @@ module.exports = function (bot, helpers) {
     const args = ctx.message.text.trim().split(/\s+/);
 
     if (args.length !== 3)
-      return ctx.reply("Usage: /capchange A 2");
+      return ctx.reply("ℹ️ Usage: /capchange A 2");
 
     const teamLetter = args[1].toUpperCase();
-    const number = parseInt(args[2]);
+    const number     = parseInt(args[2]);
 
     if (!["A", "B"].includes(teamLetter))
       return ctx.reply("❌ Use A or B.");
@@ -296,17 +284,12 @@ module.exports = function (bot, helpers) {
     const name = getName(match, newCaptainId);
 
     await ctx.reply(
-`╔═ CAPTAIN CHANGE ══════════════════╗
-
-  Team ${teamLetter}  →  ${name}
-
-  Confirm?
-
-╚═══════════════════════════════════╝`,
+`🔄 Change captain
+Team \`${teamLetter}\` → ${name}`,
       Markup.inlineKeyboard([
         [
-          Markup.button.callback("✅  Confirm", "confirm_cap_change"),
-          Markup.button.callback("❌  Cancel",  "cancel_cap_change")
+          Markup.button.callback("✅ Confirm", "confirm_cap_change"),
+          Markup.button.callback("❌ Cancel",  "cancel_cap_change")
         ]
       ])
     );
@@ -336,11 +319,9 @@ module.exports = function (bot, helpers) {
     const mention = `<a href="tg://user?id=${playerId}">${getName(match, playerId)}</a>`;
 
     await ctx.editMessageText(
-`╔═ CAPTAIN UPDATED ═════════════════╗
-
-  👑  ${mention}  →  Team ${team}
-
-╚═══════════════════════════════════╝`,
+`👑 Captain updated
+──────────────
+${mention} → Team \`${team}\``,
       { parse_mode: "HTML" }
     );
 
@@ -359,20 +340,14 @@ module.exports = function (bot, helpers) {
       return ctx.answerCbQuery("Only host can cancel.");
 
     match.pendingCaptainChange = null;
-    await ctx.editMessageText(
-`╔═ CANCELLED ═══════════════════════╗
-
-  ✗  Captain change cancelled.
-
-╚═══════════════════════════════════╝`
-    );
+    await ctx.editMessageText(`✖️ Captain change cancelled.`);
   });
 
 };
 
 
 // ═══════════════════════════════════════════════
-// EXPORTS  (used by index.js and tossCommands.js)
+// EXPORTS
 // ═══════════════════════════════════════════════
 
 module.exports.sendAndPinPlayerList = sendAndPinPlayerList;
