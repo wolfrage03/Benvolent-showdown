@@ -746,45 +746,46 @@ Two wickets in a row!`
     match.bowlerStats[match.bowler].balls++;
     match.bowlerStats[match.bowler].history.push(bat);
 
-    /* WICKET */
-    if (bat === bowl) {
+   /* WICKET */
+if (bat === bowl) {
+  match.wickets++;
+  match.wicketStreak++;
+  match.currentBall++;
+  match.currentPartnershipBalls++;
+  match.bowlerStats[match.bowler].wickets++;
 
-      match.wickets++;
-      match.wicketStreak++;
-      match.currentBall++;
-      match.currentPartnershipBalls++;
-      match.bowlerStats[match.bowler].wickets++;
+  const lastOver = match.overHistory[match.overHistory.length - 1];
+  if (lastOver) lastOver.balls.push("W");
 
-      const lastOver = match.overHistory[match.overHistory.length - 1];
-      if (lastOver) lastOver.balls.push("W");
+  match.currentPartnershipRuns = 0;
+  match.currentPartnershipBalls = 0;
 
-      match.currentPartnershipRuns = 0;
-      match.currentPartnershipBalls = 0;
+  await bot.telegram.sendMessage(match.groupId, randomLine("wicket"));
 
-      await bot.telegram.sendMessage(match.groupId, randomLine("wicket"));
+  // ✅ ALWAYS check all-out FIRST before anything else
+  if (match.wickets >= match.maxWickets) {
+    await endInnings(match);
+    return;
+  }
 
-      if (match.wickets >= match.maxWickets) {
-        await endInnings(match);
-        return;
-      }
+  // Only check over end if NOT all out
+  if (match.currentBall >= 6) {
+    const overEnded = await checkOverEnd(match);
+    if (overEnded) return;
+  }
 
-      if (match.currentBall >= 6) {
-        const overEnded = await checkOverEnd(match);
-        if (overEnded) return;
-      }
+  match.phase = "new_batter";
+  match.awaitingBowl = false;
+  match.awaitingBat = false;
 
-      match.phase = "new_batter";
-      match.awaitingBowl = false;
-      match.awaitingBat = false;
-
-      await bot.telegram.sendMessage(
-        match.groupId,
+  await bot.telegram.sendMessage(
+    match.groupId,
 `💥 Wicket!
 ──────────────
 👉 /batter [number] new batter`
-      );
-      return;
-    }
+  );
+  return;
+}
 
     /* RUNS */
     match.score += bat;
