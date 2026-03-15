@@ -8,26 +8,15 @@ const { getMatch } = require("../matchManager");
 
 function buildPlayerListText(match) {
 
-  function formatTeam(teamArray, captainId, side) {
+  function formatTeam(teamArray, captainId) {
     if (!teamArray || !teamArray.length) return "  —";
 
-    let list = [];
+    const ordered = [
+      ...teamArray.filter(p => p.id === captainId),
+      ...teamArray.filter(p => p.id !== captainId)
+    ];
 
-    const captain = captainId ? teamArray.find(p => p.id === captainId) : null;
-
-    if (captain) {
-      const isStriker    = match.striker    === captain.id;
-      const isNonStriker = match.nonStriker === captain.id;
-      const dismissed    =
-        match.usedBatters?.includes(captain.id) &&
-        !isStriker && !isNonStriker;
-
-      const tag = isStriker ? " ⭐" : isNonStriker ? "  *" : dismissed ? "  ✗" : "";
-      list.push(`  1. 👑 ${captain.name}${tag}`);
-    }
-
-    const others = teamArray.filter(p => !captain || p.id !== captain.id);
-    others.forEach(p => {
+    return ordered.map((p, index) => {
       const isStriker    = match.striker    === p.id;
       const isNonStriker = match.nonStriker === p.id;
       const dismissed    =
@@ -35,10 +24,10 @@ function buildPlayerListText(match) {
         !isStriker && !isNonStriker;
 
       const tag = isStriker ? " ⭐" : isNonStriker ? "  *" : dismissed ? "  ✗" : "";
-      list.push(`  ${list.length + 1}. ${p.name}${tag}`);
-    });
+      const cap = p.id === captainId ? " 👑" : "";
 
-    return list.join("\n");
+      return `  ${index + 1}.${cap} ${p.name}${tag}`;
+    }).join("\n");
   }
 
   const teamARole =
@@ -53,20 +42,22 @@ function buildPlayerListText(match) {
   const overs = `${match.currentOver ?? 0}.${match.currentBall ?? 0}`;
 
   const lines = [
-    `╔═ PLAYERS ═════════════════════════╗`,
+    `╭━━━━━━━━━━━━━━━━━━━━━━━╮`,
+    `   👥 Players`,
+    `╰━━━━━━━━━━━━━━━━━━━━━━━╯`,
     ``,
-    `  🔵 ${match.teamAName}${teamARole}`,
+    `  🔵 〔Team A〕 ${match.teamAName}${teamARole}`,
     `  ${"─".repeat(33)}`,
-    formatTeam(match.teamA, match.captains?.A, "A"),
+    formatTeam(match.teamA, match.captains?.A),
     ``,
-    `  🔴 ${match.teamBName}${teamBRole}`,
+    `  🔴 〔Team B〕 ${match.teamBName}${teamBRole}`,
     `  ${"─".repeat(33)}`,
-    formatTeam(match.teamB, match.captains?.B, "B"),
+    formatTeam(match.teamB, match.captains?.B),
     ``,
-    `╠══════════════════════════════════╣`,
+    `━━━━━━━━━━━━━━━━━━━━━━`,
     `  📊 ${score}   ⚙️  ${overs} ov`,
     `  ⭐ Striker   * Non-striker   ✗ Out`,
-    `╚══════════════════════════════════╝`,
+    `━━━━━━━━━━━━━━━━━━━━━━`,
   ];
 
   return lines.join("\n");
@@ -84,7 +75,6 @@ async function sendAndPinPlayerList(match, telegram) {
           text
         );
       } catch (e) {
-        // Ignore "message is not modified" — it's not a real error
         if (!e.message?.includes("message is not modified")) {
           console.error("EditMessage error:", e.message);
         }
@@ -97,7 +87,6 @@ async function sendAndPinPlayerList(match, telegram) {
           disable_notification: true
         });
       } catch (e) {
-        // Bot may not have pin permissions — don't let this kill innings switch
         console.error("Pin failed:", e.message);
       }
     }
@@ -105,6 +94,7 @@ async function sendAndPinPlayerList(match, telegram) {
     console.error("PlayerList update error:", e.message);
   }
 }
+
 
 // ═══════════════════════════════════════════════
 // BOT COMMANDS
@@ -130,8 +120,9 @@ module.exports = function (bot, helpers) {
     match.phase = "captain";
 
     ctx.reply(
-`👑 Captain selection
-──────────────
+`╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   👑 Captain Selection
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 Each team picks their own captain.
 Tap the button below.`,
       Markup.inlineKeyboard([
@@ -162,9 +153,11 @@ Tap the button below.`,
 
     await ctx.answerCbQuery("You are Captain of Team A 👑");
     await ctx.reply(
-`👑 Captain set
-──────────────
-${getDisplayName(ctx.from)} · 🔵 Team A`
+`╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   👑 Captain Set
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+${getDisplayName(ctx.from)}
+🔵 〔Team A〕 Captain`
     );
 
     updateCaptainButtons(match, ctx);
@@ -191,9 +184,11 @@ ${getDisplayName(ctx.from)} · 🔵 Team A`
 
     await ctx.answerCbQuery("You are Captain of Team B 👑");
     await ctx.reply(
-`👑 Captain set
-──────────────
-${getDisplayName(ctx.from)} · 🔴 Team B`
+`╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   👑 Captain Set
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+${getDisplayName(ctx.from)}
+🔴 〔Team B〕 Captain`
     );
 
     updateCaptainButtons(match, ctx);
@@ -219,7 +214,9 @@ ${getDisplayName(ctx.from)} · 🔴 Team B`
       match.phase = "toss";
 
       ctx.reply(
-`✅ Both captains confirmed
+`╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✅ Both Captains Set
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 Starting toss...`
       );
 
@@ -292,8 +289,10 @@ Starting toss...`
     const name = getName(match, newCaptainId);
 
     await ctx.reply(
-`🔄 Change captain
-Team \`${teamLetter}\` → ${name}`,
+`╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🔄 Change Captain?
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+〔Team ${teamLetter}〕 → ${name}`,
       Markup.inlineKeyboard([
         [
           Markup.button.callback("✅ Confirm", "confirm_cap_change"),
@@ -327,9 +326,10 @@ Team \`${teamLetter}\` → ${name}`,
     const mention = `<a href="tg://user?id=${playerId}">${getName(match, playerId)}</a>`;
 
     await ctx.editMessageText(
-`👑 Captain updated
-──────────────
-${mention} → Team \`${team}\``,
+`╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   👑 Captain Updated
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+${mention} → 〔Team ${team}〕`,
       { parse_mode: "HTML" }
     );
 
@@ -348,7 +348,11 @@ ${mention} → Team \`${team}\``,
       return ctx.answerCbQuery("Only host can cancel.");
 
     match.pendingCaptainChange = null;
-    await ctx.editMessageText(`✖️ Captain change cancelled.`);
+    await ctx.editMessageText(
+`╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✖️ Captain Change Cancelled
+╰━━━━━━━━━━━━━━━━━━━━━━━╯`
+    );
   });
 
 };

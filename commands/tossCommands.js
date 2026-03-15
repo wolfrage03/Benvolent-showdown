@@ -15,16 +15,23 @@ async function startToss(match) {
 
   await bot.telegram.sendMessage(
     match.groupId,
-`🎲 Toss time
-──────────────
-Captains, choose odd or even.
+`╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🎲 <b>Toss Time</b>
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+🔵 〔<b>Team A</b>〕 ${match.teamAName}
+🔴 〔<b>Team B</b>〕 ${match.teamBName}
+━━━━━━━━━━━━━━━━━━━━━━
+Captains choose odd or even.
 A number will be rolled.`,
-    Markup.inlineKeyboard([
-      [
-        Markup.button.callback("⚫ Odd",  "toss_odd"),
-        Markup.button.callback("⚪ Even", "toss_even")
-      ]
-    ])
+    {
+      parse_mode: "HTML",
+      ...Markup.inlineKeyboard([
+        [
+          Markup.button.callback("⚫ Odd",  "toss_odd"),
+          Markup.button.callback("⚪ Even", "toss_even")
+        ]
+      ])
+    }
   );
 }
 
@@ -64,18 +71,22 @@ bot.action(["toss_odd", "toss_even"], async (ctx) => {
 
   await bot.telegram.sendMessage(
     match.groupId,
-`🎲 Toss result
-──────────────
-🎯 Rolled \`${tossNumber}\` · ${result}
-🏆 ${winnerName} won!
-──────────────
+`╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🎲 <b>Toss Result</b>
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+🎯 Rolled <b>${tossNumber}</b>   <b>${result}</b>
+🏆 〔<b>Team ${winnerTeam}</b>〕 <b>${winnerName}</b> won!
+━━━━━━━━━━━━━━━━━━━━━━
 Choose to bat or bowl:`,
-    Markup.inlineKeyboard([
-      [
-        Markup.button.callback("🏏 Bat",  "decision_bat"),
-        Markup.button.callback("🎯 Bowl", "decision_bowl")
-      ]
-    ])
+    {
+      parse_mode: "HTML",
+      ...Markup.inlineKeyboard([
+        [
+          Markup.button.callback("🏏 Bat",  "decision_bat"),
+          Markup.button.callback("🎯 Bowl", "decision_bowl")
+        ]
+      ])
+    }
   );
 });
 
@@ -120,12 +131,14 @@ bot.action(["decision_bat", "decision_bowl"], async (ctx) => {
 
   await bot.telegram.sendMessage(
     match.groupId,
-`✅ Match setup
-──────────────
-🏏 Batting  \`${battingName}\`
-🎯 Bowling  \`${bowlingName}\`
-──────────────
-👉 /setovers [1–25] to set overs`
+`╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ✅ <b>Match Setup</b>
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+🏏 〔<b>Team ${match.battingTeam}</b>〕 <b>${battingName}</b>  batting
+🎯 〔<b>Team ${match.bowlingTeam}</b>〕 <b>${bowlingName}</b>  bowling
+━━━━━━━━━━━━━━━━━━━━━━
+👉 /setovers [1–25] to set overs`,
+    { parse_mode: "HTML" }
   );
 });
 
@@ -144,7 +157,10 @@ bot.command("setovers", (ctx) => {
   const overs = parseInt(args[1]);
 
   if (isNaN(overs) || overs < 1 || overs > 25)
-    return ctx.reply("⚠️ Overs must be between `1` and `25`");
+    return ctx.reply(
+`⚠️ Overs must be between <b>1</b> and <b>25</b>`,
+      { parse_mode: "HTML" }
+    );
 
   match.totalOvers = overs;
   match.maxWickets =
@@ -152,10 +168,19 @@ bot.command("setovers", (ctx) => {
 
   match.phase = "set_striker";
 
+  const battingName = match.battingTeam === "A" ? match.teamAName : match.teamBName;
+  const bowlingName = match.bowlingTeam === "A" ? match.teamAName : match.teamBName;
+
   ctx.reply(
-`⚙️ Overs set to \`${overs}\`
-──────────────
-👉 /batter [number] set opener`
+`╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ⚙️ Overs Set
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
+Overs: <b>${overs}</b>
+🏏 〔<b>Team ${match.battingTeam}</b>〕 <b>${battingName}</b>  batting
+🎯 〔<b>Team ${match.bowlingTeam}</b>〕 <b>${bowlingName}</b>  bowling
+━━━━━━━━━━━━━━━━━━━━━━
+👉 /batter [number] set opener`,
+    { parse_mode: "HTML" }
   );
 });
 

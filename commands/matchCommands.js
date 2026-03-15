@@ -45,10 +45,11 @@ module.exports = function (bot, helpers) {
     match.phase   = "host_select";
 
     ctx.reply(
-`🏏 Match Lobby
-──────────────
+`╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🏏 Match Lobby
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 A new match is starting!
-First player to press the button becomes the host.`,
+First player to press becomes host.`,
       Markup.inlineKeyboard([
         [Markup.button.callback("👑 Become Host", "select_host")]
       ])
@@ -74,7 +75,9 @@ First player to press the button becomes the host.`,
       return ctx.reply("❌ Only host or admin can end the match.");
 
     ctx.reply(
-`⚠️ End the current match?
+`╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   ⚠️ End Match?
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 This cannot be undone.`,
       Markup.inlineKeyboard([
         [
@@ -105,8 +108,9 @@ This cannot be undone.`,
     try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
 
     await ctx.reply(
-`🛑 Match ended
-──────────────
+`╭━━━━━━━━━━━━━━━━━━━━━━━╮
+   🛑 Match Ended
+╰━━━━━━━━━━━━━━━━━━━━━━━╯
 👉 /start to begin a new match`
     );
 
