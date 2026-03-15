@@ -1,3 +1,5 @@
+require("dotenv").config();
+
 const User = require("./User"); 
 const { Telegraf, Markup } = require("telegraf");
 const initializeApp = require("./config/appInit");
@@ -152,11 +154,11 @@ async function checkOverEnd(match) {
   try {
     await bot.telegram.sendMessage(
       match.groupId,
-`╭─────────────────────╮
+`╭───────────────╮
    ✅ Over ${match.currentOver} Complete
-╰─────────────────────╯
+╰───────────────╯
 📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}/${match.totalOvers} ov   📈 ${rr}
-─────────────────────
+───────────────
 👉 /bowler [number] new bowler`
     );
   } catch (e) { console.error("Over message failed:", e.message); }
@@ -237,11 +239,11 @@ bot.command("batter", async (ctx) => {
     await sendAndPinPlayerList(match, ctx.telegram);
 
     return ctx.reply(
-`╭─────────────────────╮
+`╭───────────────╮
    🏏 Striker Set
-╰─────────────────────╯
+╰───────────────╯
 🏏 ${name}   ${ordinal(orderNumber)} batter
-─────────────────────
+───────────────
 👉 /batter [number] set non-striker`
     );
   }
@@ -258,11 +260,11 @@ bot.command("batter", async (ctx) => {
     await sendAndPinPlayerList(match, ctx.telegram);
 
     return ctx.reply(
-`╭─────────────────────╮
+`╭───────────────╮
    🪄 Non-Striker Set
-╰─────────────────────╯
+╰───────────────╯
 🪄 ${name}   ${ordinal(orderNumber)} batter
-─────────────────────
+───────────────
 👉 /bowler [number] set bowler`
     );
   }
@@ -282,9 +284,9 @@ bot.command("batter", async (ctx) => {
     match.phase = "play";
 
     await ctx.reply(
-`╭─────────────────────╮
+`╭───────────────╮
    🏏 New Batter
-╰─────────────────────╯
+╰───────────────╯
 🏏 ${name}   ${ordinal(orderNumber)} batter`
     );
     return startBall(match);
@@ -336,11 +338,11 @@ bot.command("bowler", async (ctx) => {
   playerActiveMatch.set(player.id, match.groupId);
 
   await ctx.reply(
-`╭─────────────────────╮
+`╭───────────────╮
    🏐 Bowler Set
-╰─────────────────────╯
+╰───────────────╯
 🏐 ${player.name} is bowling
-─────────────────────
+───────────────
 Ball starting...`
   );
   await startBall(match);
@@ -390,14 +392,14 @@ function getLiveScore(match) {
   const bowlingTeamName = bowlingTeamLetter === "A" ? match.teamAName : match.teamBName;
 
   return (
-`╭─────────────────────╮
+`╭───────────────╮
    📊 Live Score
-╰─────────────────────╯
+╰───────────────╯
 🏏 〔Team ${battingTeamLetter}〕 ${battingTeamName}  batting
 🎯 〔Team ${bowlingTeamLetter}〕 ${bowlingTeamName}  bowling
-─────────────────────
+───────────────
 📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}.${match.currentBall}/${match.totalOvers}   📈 ${runRate}
-${chaseBlock ? chaseBlock + "\n" : ""}─────────────────────
+${chaseBlock ? chaseBlock + "\n" : ""}───────────────
 ─────⊱ 〔 🏏 BATTING 〕⊰─────
 🏏 ${strikerName}   ${st.runs}(${st.balls})   SR:${stSR}
 🪄 ${nonStrikerName}   ${nst.runs}(${nst.balls})   SR:${nstSR}
@@ -435,9 +437,9 @@ async function ballTimeout(match) {
 
       await bot.telegram.sendMessage(
         match.groupId,
-`╭─────────────────────╮
+`╭───────────────╮
    ⏱ Bowler Timed Out
-╰─────────────────────╯
+╰───────────────╯
 +6 runs to batting team
 Ball does not count`
       );
@@ -451,12 +453,12 @@ Ball does not count`
 
         await bot.telegram.sendMessage(
           match.groupId,
-`╭─────────────────────╮
+`╭───────────────╮
    🚫 Bowler Suspended
-╰─────────────────────╯
+╰───────────────╯
 Consecutive delays
 Cannot bowl this over or next
-─────────────────────
+───────────────
 👉 /bowler [number] new bowler`
         );
         return;
@@ -486,9 +488,9 @@ Cannot bowl this over or next
 
       await bot.telegram.sendMessage(
         match.groupId,
-`╭─────────────────────╮
+`╭───────────────╮
    ⏱ Batter Timed Out
-╰─────────────────────╯
+╰───────────────╯
 -6 run penalty
 Ball counted`
       );
@@ -500,11 +502,11 @@ Ball counted`
 
         await bot.telegram.sendMessage(
           match.groupId,
-`╭─────────────────────╮
+`╭───────────────╮
    💥 Batter Dismissed
-╰─────────────────────╯
+╰───────────────╯
 Consecutive delays
-─────────────────────
+───────────────
 👉 /batter [number] new batter`
         );
 
@@ -564,9 +566,9 @@ async function announceBall(match) {
   try {
     await bot.telegram.sendMessage(
       match.bowler,
-`╭─────────────────────╮
+`╭───────────────╮
    🎯 Your Turn — Bowl
-╰─────────────────────╯
+╰───────────────╯
 Send your number 1 – 6`
     );
   } catch (e) {
@@ -737,9 +739,9 @@ async function processBall(match) {
     if (match.wicketStreak === 2 && bat === 0) {
       await bot.telegram.sendMessage(
         match.groupId,
-`╭─────────────────────╮
+`╭───────────────╮
    ⚠️ Hattrick Ball!
-╰─────────────────────╯
+╰───────────────╯
 Cannot play 0 — two wickets in a row!`
       );
       match.batNumber = null;
@@ -794,9 +796,9 @@ Cannot play 0 — two wickets in a row!`
 
       await bot.telegram.sendMessage(
         match.groupId,
-`╭─────────────────────╮
+`╭───────────────╮
    💥 Wicket!
-╰─────────────────────╯
+╰───────────────╯
 👉 /batter [number] new batter`
       );
       return;
@@ -877,13 +879,13 @@ async function endInnings(match) {
     try {
       await bot.telegram.sendMessage(
         match.groupId,
-`╭─────────────────────╮
+`╭───────────────╮
    ✅ Innings 1 Complete
-╰─────────────────────╯
+╰───────────────╯
 📊 ${match.score}/${match.wickets}
 🏹 Target ${match.score + 1}
 ⚙️ ${match.currentOver}/${match.totalOvers} overs
-─────────────────────
+───────────────
 🔄 Switching innings...`
       );
     } catch(e) { console.error("Innings message failed:", e.message); }
@@ -929,12 +931,12 @@ async function endInnings(match) {
     try {
       await bot.telegram.sendMessage(
         match.groupId,
-`╭─────────────────────╮
+`╭───────────────╮
    🏏 Innings 2
-╰─────────────────────╯
+╰───────────────╯
 🏏 〔Team ${match.battingTeam}〕 ${match.battingTeam === "A" ? match.teamAName : match.teamBName}  batting
 🏹 Target ${match.firstInningsScore + 1}
-─────────────────────
+───────────────
 👉 /batter [number] set opener`
       );
     } catch(e) { console.error("Innings 2 message failed:", e.message); }
@@ -995,12 +997,12 @@ async function endMatchWithWinner(match, winningTeam) {
 
   await bot.telegram.sendMessage(
     match.groupId,
-`╭─────────────────────╮
+`╭───────────────╮
    🏆 Match Result
-╰─────────────────────╯
+╰───────────────╯
 🏆 〔Team ${teamLetter}〕 ${teamName} won
    ${margin}
-─────────────────────
+───────────────
 1st innings   ${match.firstInningsScore}
 2nd innings   ${match.score}/${match.wickets}`
   );
@@ -1011,9 +1013,9 @@ async function endMatchWithWinner(match, winningTeam) {
 async function endMatchTie(match) {
   await bot.telegram.sendMessage(
     match.groupId,
-`╭─────────────────────╮
+`╭───────────────╮
    🤝 Match Tied
-╰─────────────────────╯
+╰───────────────╯
 Both teams scored ${match.score}`
   );
   clearTimers(match);

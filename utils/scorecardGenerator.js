@@ -103,24 +103,24 @@ function generateScorecard(match, getName) {
   const inningsLabel = `INNINGS ${match.innings ?? 1} SCORECARD`;
 
   return [
-    `╭─────────────────────╮`,
+    `╭───────────────╮`,
     `  📋 ${inningsLabel}`,
-    `╰─────────────────────╯`,
+    `╰───────────────╯`,
     `🏏 〔Team ${battingTeamLetter}〕 ${battingTeam}`,
     `🎯 〔Team ${bowlingTeamLetter}〕 ${bowlingTeam}`,
-    `─────────────────────`,
+    `───────────────`,
     `📊 ${match.score}/${match.wickets}  ⚙️ ${match.currentOver}.${match.currentBall}/${match.totalOvers}  📈 ${crr}`,
     ...(targetLine  ? [targetLine]  : []),
     ...(chaseBlock  ? [chaseBlock]  : []),
-    `─────────────────────`,
+    `───────────────`,
     `〔 🏏 BATTING 〕`,
     battingRows.trimEnd(),
     ...(dnbBat.trim() ? [dnbBat.trim()] : []),
-    `─────────────────────`,
+    `───────────────`,
     `〔 🎳 BOWLING 〕`,
     bowlingRows.trimEnd(),
     ...(dnbBowl.trim() ? [dnbBowl.trim()] : []),
-    `─────────────────────`,
+    `───────────────`,
   ].join("\n");
 }
 
