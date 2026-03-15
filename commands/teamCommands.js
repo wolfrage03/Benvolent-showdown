@@ -24,12 +24,12 @@ bot.command("createteam", (ctx) => {
   match.phase = "join";
 
   ctx.reply(
-`╭━━━━━━━━━━━━━━━━━━━━━━━╮
+`╭─────────────────────╮
    🟢 Lobby Open
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+╰─────────────────────╯
 🔵 〔Team A〕 ${match.teamAName}   /joina
 🔴 〔Team B〕 ${match.teamBName}   /joinb
-━━━━━━━━━━━━━━━━━━━━━━
+─────────────────────
 ⏱ Closes in 60s   /closejoin`
   );
 
@@ -41,12 +41,12 @@ bot.command("createteam", (ctx) => {
 
     await bot.telegram.sendMessage(
       match.groupId,
-`╭━━━━━━━━━━━━━━━━━━━━━━━╮
+`╭─────────────────────╮
    🔒 Joining Closed
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+╰─────────────────────╯
 🔵 〔Team A〕 ${match.teamAName}   ${match.teamA.length}p
 🔴 〔Team B〕 ${match.teamBName}   ${match.teamB.length}p
-━━━━━━━━━━━━━━━━━━━━━━
+─────────────────────
 👉 /choosecap to continue`
     );
 
@@ -73,12 +73,12 @@ bot.command("closejoin", async (ctx) => {
   match.phase = "teams_set";
 
   await ctx.reply(
-`╭━━━━━━━━━━━━━━━━━━━━━━━╮
+`╭─────────────────────╮
    🔒 Joining Closed
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+╰─────────────────────╯
 🔵 〔Team A〕 ${match.teamAName}   ${match.teamA.length}p
 🔴 〔Team B〕 ${match.teamBName}   ${match.teamB.length}p
-━━━━━━━━━━━━━━━━━━━━━━
+─────────────────────
 👉 /choosecap to continue`
   );
 
@@ -247,6 +247,17 @@ Ask them to send /start to the bot in DM first.`,
 
   playerActiveMatch.set(userId, match.groupId);
 
+  // ── If match already in progress, update maxWickets so new player counts ──
+  const matchInProgress = [
+    "set_striker", "set_non_striker", "set_bowler",
+    "play", "new_batter"
+  ].includes(match.phase);
+
+  if (matchInProgress) {
+    const battingTeamArr = match.battingTeam === "A" ? match.teamA : match.teamB;
+    match.maxWickets = battingTeamArr.length - 1;
+  }
+
   await ctx.reply(
 `✅ ${mention} added to 〔<b>Team ${team}</b>〕`,
     { parse_mode: "HTML" }
@@ -304,6 +315,17 @@ bot.command("remove", async (ctx) => {
   if (Array.isArray(match.usedBatters))
     match.usedBatters = match.usedBatters.filter(id => id !== removed.id);
 
+  // ── Recalculate maxWickets if match in progress ──
+  const matchInProgress = [
+    "set_striker", "set_non_striker", "set_bowler",
+    "play", "new_batter"
+  ].includes(match.phase);
+
+  if (matchInProgress) {
+    const battingTeamArr = match.battingTeam === "A" ? match.teamA : match.teamB;
+    match.maxWickets = battingTeamArr.length - 1;
+  }
+
   match.playerListMessageId = null;
 
   await ctx.reply(`✖️ ${removed.name} removed from 〔Team ${team}〕`);
@@ -355,9 +377,9 @@ bot.command("changeteam", (ctx) => {
   match.pendingTeamChange = { player, fromTeam: teamArr, toTeam, target };
 
   ctx.reply(
-`╭━━━━━━━━━━━━━━━━━━━━━━━╮
+`╭─────────────────────╮
    🔄 Move Player?
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
+╰─────────────────────╯
 ${player.mention}
 〔Team ${team}〕 → 〔Team ${target}〕`,
     {

@@ -21,12 +21,12 @@ function generateScorecard(match, getName) {
       chaseBlock = `✅ Target achieved!`;
     } else if (ballsLeft > 0) {
       const rrr = ((runsNeeded * 6) / ballsLeft).toFixed(2);
-      chaseBlock = `🏹 Need ${runsNeeded} from ${ballsLeft} balls   RRR: ${rrr}`;
+      chaseBlock = `🏹 Need ${runsNeeded} from ${ballsLeft} balls  RRR: ${rrr}`;
     }
   }
 
   const targetLine = match.innings === 2
-    ? `🏹 Target ${(match.firstInningsScore ?? 0) + 1}   1st inn: ${match.firstInningsScore ?? 0}`
+    ? `🏹 Target ${(match.firstInningsScore ?? 0) + 1}  (1st: ${match.firstInningsScore ?? 0})`
     : "";
 
   /* ── batting section ── */
@@ -49,11 +49,11 @@ function generateScorecard(match, getName) {
       : "0";
 
     let emoji = "🚶";
-    if (id === match.striker)         emoji = "🏏";
-    else if (id === match.nonStriker) emoji = "🪄";
-    else if (match.usedBatters?.includes(id)) emoji = "🏃";
+    if (id === match.striker)                  emoji = "🏏";
+    else if (id === match.nonStriker)          emoji = "🪄";
+    else if (match.usedBatters?.includes(id))  emoji = "🏃";
 
-    battingRows += `${emoji} ${name}   ${stats.runs}(${stats.balls})   SR:${sr}\n`;
+    battingRows += `${emoji} ${name}  ${stats.runs}(${stats.balls})  SR:${sr}\n`;
   }
 
   /* ── did not bat ── */
@@ -75,14 +75,14 @@ function generateScorecard(match, getName) {
     const ov   = `${Math.floor(b.balls / 6)}.${b.balls % 6}`;
 
     bowlingRows += `🏐 ${name}\n`;
-    bowlingRows += `   ${ov}ov   ${b.runs}r   ${b.wickets}w   E:${econ}\n`;
+    bowlingRows += `   ${ov}ov  ${b.runs}r  ${b.wickets}w  E:${econ}\n`;
 
     const theirOvers = (match.overHistory || []).filter(
       o => String(o.bowler) === String(id)
     );
     for (const o of theirOvers) {
       const balls = o.balls.map(x => x === "W" ? "W" : String(x)).join("  ");
-      bowlingRows += `   〔 Ov ${o.over} 〕  ${balls}\n`;
+      bowlingRows += `   〔Ov ${o.over}〕  ${balls}\n`;
     }
     bowlingRows += "\n";
   }
@@ -96,25 +96,28 @@ function generateScorecard(match, getName) {
     : "";
 
   /* ── assemble ── */
-  const inningsLabel = `◈ INNINGS ${match.innings ?? 1} SCORECARD ◈`;
+  const inningsLabel = `INNINGS ${match.innings ?? 1} SCORECARD`;
 
-  return `
-╭━━━━━━━━━━━━━━━━━━━━━━━╮
-   📋 ${inningsLabel}
-╰━━━━━━━━━━━━━━━━━━━━━━━╯
-🏏 〔Team ${battingTeamLetter}〕 ${battingTeam}  batting
-🎯 〔Team ${bowlingTeamLetter}〕 ${bowlingTeam}  bowling
-━━━━━━━━━━━━━━━━━━━━━━
-📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}.${match.currentBall}/${match.totalOvers}   📈 ${crr}
-${targetLine ? targetLine + "\n" : ""}${chaseBlock ? chaseBlock + "\n" : ""}━━━━━━━━━━━━━━━━━━━━━━
-─────⊱ 〔 🏏 BATTING 〕⊰─────
-${battingRows.trimEnd()}
-${dnbBat.trimEnd()}
-─────⊱ 〔 🎳 BOWLING 〕⊰─────
-${bowlingRows.trimEnd()}
-${dnbBowl.trimEnd()}
-━━━━━━━━━━━━━━━━━━━━━━
-╰━━━━━━━━━━━━━━━━━━━━━━━╯`.trim();
+  return [
+    `╭─────────────────────╮`,
+    `  📋 ${inningsLabel}`,
+    `╰─────────────────────╯`,
+    `🏏 〔Team ${battingTeamLetter}〕 ${battingTeam}`,
+    `🎯 〔Team ${bowlingTeamLetter}〕 ${bowlingTeam}`,
+    `─────────────────────`,
+    `📊 ${match.score}/${match.wickets}  ⚙️ ${match.currentOver}.${match.currentBall}/${match.totalOvers}  📈 ${crr}`,
+    ...(targetLine  ? [targetLine]  : []),
+    ...(chaseBlock  ? [chaseBlock]  : []),
+    `─────────────────────`,
+    `〔 🏏 BATTING 〕`,
+    battingRows.trimEnd(),
+    ...(dnbBat.trim() ? [dnbBat.trim()] : []),
+    `─────────────────────`,
+    `〔 🎳 BOWLING 〕`,
+    bowlingRows.trimEnd(),
+    ...(dnbBowl.trim() ? [dnbBowl.trim()] : []),
+    `─────────────────────`,
+  ].join("\n");
 }
 
 module.exports = generateScorecard;
