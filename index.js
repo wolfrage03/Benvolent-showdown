@@ -649,8 +649,8 @@ bot.on("text", async (ctx) => {
     const ballInProgress = match.awaitingBowl || match.awaitingBat;
     if (!ballInProgress) return;
 
-    if (ctx.from.id !== match.striker)
-      return ctx.reply("❌ You are not the striker.");
+    // ── FIX 3: silently ignore — no need to tell non-strikers they can't input ──
+    if (ctx.from.id !== match.striker) return;
 
     if (!/^[0-6]$/.test(text))
       return ctx.reply("❌ Send a number between 0–6.");

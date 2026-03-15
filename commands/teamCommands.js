@@ -18,9 +18,11 @@ bot.command("createteam", (ctx) => {
   if (!isHost(match, ctx.from.id))
     return ctx.reply("❌ Only host can create teams.");
 
-  match.teamA = [];
-  match.teamB = [];
-  match.captains = { A: null, B: null };
+  // ── FIX 1: Only reset teams if they are empty, preserve existing players ──
+  if (!match.teamA) match.teamA = [];
+  if (!match.teamB) match.teamB = [];
+  if (!match.captains) match.captains = { A: null, B: null };
+
   match.phase = "join";
 
   ctx.reply(
@@ -345,8 +347,14 @@ bot.command("changeteam", (ctx) => {
   if (!isHost(match, ctx.from.id))
     return ctx.reply("❌ Only host can move players.");
 
-  if (match.phase !== "join")
-    return ctx.reply("❌ Can only move players during joining.");
+  // ── FIX 2: Allow changeteam until batting has actually started ──
+  const allowedPhases = [
+    "join", "teams_set", "captain", "toss",
+    "batbowl", "setovers", "set_striker", "set_non_striker"
+  ];
+
+  if (!allowedPhases.includes(match.phase))
+    return ctx.reply("❌ Cannot move players after batting has started.");
 
   const args = ctx.message.text.split(" ");
 
