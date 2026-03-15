@@ -43,17 +43,21 @@ function generateScorecard(match, getName) {
     const stats = match.batterStats?.[id];
     if (!stats) continue;
 
-    const name = getName(match, id);
-    const sr   = stats.balls > 0
+    const name   = getName(match, id);
+    const sr     = stats.balls > 0
       ? ((stats.runs / stats.balls) * 100).toFixed(0)
       : "0";
+    const fours  = stats.fours ?? 0;
+    const fives  = stats.fives ?? 0;
+    const sixes  = stats.sixes ?? 0;
 
     let emoji = "🚶";
     if (id === match.striker)                  emoji = "🏏";
     else if (id === match.nonStriker)          emoji = "🪄";
     else if (match.usedBatters?.includes(id))  emoji = "🏃";
 
-    battingRows += `${emoji} ${name}  ${stats.runs}(${stats.balls})  SR:${sr}\n`;
+    battingRows += `${emoji} ${name}  ${stats.runs}(${stats.balls})\n`;
+    battingRows += `   4s:${fours}  5s:${fives}  6s:${sixes}  SR:${sr}\n`;
   }
 
   /* ── did not bat ── */

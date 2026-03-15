@@ -226,7 +226,7 @@ bot.command("batter", async (ctx) => {
     }
 
     match.striker = selected.id;
-    match.batterStats[selected.id] = { runs: 0, balls: 0 };
+    match.batterStats[selected.id] = { runs: 0, balls: 0, fours: 0, fives: 0, sixes: 0 };
 
     if (!match.battingOrder.includes(selected.id))
       match.battingOrder.push(selected.id);
@@ -274,7 +274,7 @@ bot.command("batter", async (ctx) => {
       return ctx.reply("⚠️ Choose a different player");
 
     match.striker = selected.id;
-    match.batterStats[selected.id] = { runs: 0, balls: 0 };
+    match.batterStats[selected.id] = { runs: 0, balls: 0, fours: 0, fives: 0, sixes: 0 };
     if (!match.battingOrder.includes(selected.id))
       match.battingOrder.push(selected.id);
     match.usedBatters.push(selected.id);
@@ -477,7 +477,7 @@ Cannot bowl this over or next
       match.score -= 6;
 
       if (!match.batterStats[match.striker])
-        match.batterStats[match.striker] = { runs: 0, balls: 0 };
+        match.batterStats[match.striker] = { runs: 0, balls: 0, fours: 0, fives: 0, sixes: 0 };
 
       match.batterStats[match.striker].runs -= 6;
       match.batterStats[match.striker].balls++;
@@ -754,7 +754,7 @@ Cannot play 0 — two wickets in a row!`
     match.batterMissCount = 0;
 
     if (!match.batterStats[match.striker])
-      match.batterStats[match.striker] = { runs: 0, balls: 0 };
+      match.batterStats[match.striker] = { runs: 0, balls: 0, fours: 0, fives: 0, sixes: 0 };
     match.batterStats[match.striker].balls++;
 
     if (!match.bowlerStats[match.bowler])
@@ -810,6 +810,11 @@ Cannot play 0 — two wickets in a row!`
     match.batterStats[match.striker].runs += bat;
     match.bowlerStats[match.bowler].runs += bat;
     match.currentBall++;
+
+    // ── track boundaries per batter ──
+    if (bat === 4) match.batterStats[match.striker].fours++;
+    if (bat === 5) match.batterStats[match.striker].fives++;
+    if (bat === 6) match.batterStats[match.striker].sixes++;
 
     const lastOver = match.overHistory[match.overHistory.length - 1];
     if (lastOver) lastOver.balls.push(bat);
