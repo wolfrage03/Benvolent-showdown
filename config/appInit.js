@@ -1,10 +1,3 @@
-require("dotenv").config();
-
-if (!process.env.BOT_TOKEN) {
-  console.error("❌ BOT_TOKEN missing in .env");
-  process.exit(1);
-}
-
 const connectDB = require("../database");
 
 async function initializeApp() {
