@@ -96,9 +96,9 @@ module.exports = function (bot, helpers) {
     match.phase = "captain";
 
     ctx.reply(
-`╭─────────────────────────╮
+`╭───────────╮
    👑 Captain Selection
-╰─────────────────────────╯
+╰───────────╯
 Each team picks their own captain.
 Tap the button below.`,
       Markup.inlineKeyboard([
@@ -129,9 +129,9 @@ Tap the button below.`,
 
     await ctx.answerCbQuery("You are Captain of Team A 👑");
     await ctx.reply(
-`╭───────────────────╮
+`╭───────────╮
    👑 Captain Set
-╰───────────────────╯
+╰───────────╯
 ${getDisplayName(ctx.from)}
 🔵 〔Team A〕 Captain`
     );
@@ -160,9 +160,9 @@ ${getDisplayName(ctx.from)}
 
     await ctx.answerCbQuery("You are Captain of Team B 👑");
     await ctx.reply(
-`╭───────────────────╮
+`╭───────────╮
    👑 Captain Set
-╰───────────────────╯
+╰───────────╯
 ${getDisplayName(ctx.from)}
 🔴 〔Team B〕 Captain`
     );
@@ -190,9 +190,9 @@ ${getDisplayName(ctx.from)}
       match.phase = "toss";
 
       ctx.reply(
-`╭─────────────────────────╮
+`╭───────────╮
    ✅ Both Captains Set
-╰─────────────────────────╯
+╰───────────╯
 Starting toss...`
       );
 
@@ -265,9 +265,9 @@ Starting toss...`
     const name = getName(match, newCaptainId);
 
     await ctx.reply(
-`╭───────────────────────╮
+`╭───────────╮
    🔄 Change Captain?
-╰───────────────────────╯
+╰───────────╯
 〔Team ${teamLetter}〕 → ${name}`,
       Markup.inlineKeyboard([
         [
@@ -302,9 +302,9 @@ Starting toss...`
     const mention = `<a href="tg://user?id=${playerId}">${getName(match, playerId)}</a>`;
 
     await ctx.editMessageText(
-`╭───────────────────────╮
+`╭───────────╮
    👑 Captain Updated
-╰───────────────────────╯
+╰───────────╯
 ${mention} → 〔Team ${team}〕`,
       { parse_mode: "HTML" }
     );
@@ -325,9 +325,9 @@ ${mention} → 〔Team ${team}〕`,
 
     match.pendingCaptainChange = null;
     await ctx.editMessageText(
-`╭─────────────────────────────────╮
+`╭───────────╮
    ✖️ Captain Change Cancelled
-╰─────────────────────────────────╯`
+╰───────────╯`
     );
   });
 

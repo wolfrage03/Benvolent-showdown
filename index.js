@@ -14,6 +14,7 @@ const { sendAndPinPlayerList } = require("./commands/captainCommands");
 
 const {
   randomLine,
+  randomGif,
   randomBowlingPrompt,
   randomBatterPrompt,
   getRandomTeams,
@@ -103,6 +104,21 @@ function bowlDMButton() {
   };
 }
 
+
+// ── Send a GIF + text message together ──
+async function sendWithGif(groupId, gifType, text) {
+  const fileId = randomGif(gifType);
+  if (fileId) {
+    try {
+      await bot.telegram.sendAnimation(groupId, fileId, { caption: text });
+      return;
+    } catch (e) {
+      console.error("sendAnimation failed:", e.message);
+    }
+  }
+  // Fallback: text only
+  await bot.telegram.sendMessage(groupId, text);
+}
 async function advanceGame(match) {
   if (!match) return;
   if (match.phase === "switch") return;
@@ -776,36 +792,35 @@ Cannot play 0 — two wickets in a row!`
       const lastOver = match.overHistory[match.overHistory.length - 1];
       if (lastOver) lastOver.balls.push("W");
 
-      // ── Duck check (batter scored 0 before being out) ──
-      const batterRuns = match.batterStats[match.striker]?.runs ?? 0;
-      const prevDuckStreak = match.duckStreak || 0;
-      if (batterRuns === 0) {
-        match.duckStreak = prevDuckStreak + 1;
-        if (match.duckStreak === 3) {
+      match.currentPartnershipRuns = 0;
+      match.currentPartnershipBalls = 0;
+
+      await sendWithGif(match.groupId, "wicket", randomLine("wicket"));
+
+      // ── Duck check ──
+      const batterRunsAtDismissal = match.batterStats[match.striker]?.runs ?? 0;
+      if (batterRunsAtDismissal === 0) {
+        match.duckStreak = (match.duckStreak || 0) + 1;
+        if (match.duckStreak >= 3) {
           await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('duckHattrick'));
           match.duckStreak = 0;
         } else {
-          await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('duck'));
+          await sendWithGif(match.groupId, 'duck', randomMilestoneLine('duck'));
         }
       } else {
         match.duckStreak = 0;
       }
 
-      match.currentPartnershipRuns = 0;
-      match.currentPartnershipBalls = 0;
-
-      await bot.telegram.sendMessage(match.groupId, randomLine("wicket"));
-
-      // ── Bowling fer milestones (3w, 4w, 5w, 6w) ──
-      const bowlerWickets = match.bowlerStats[match.bowler].wickets;
-      if (bowlerWickets === 3) await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('threeFer'));
-      else if (bowlerWickets === 4) await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('fourFer'));
-      else if (bowlerWickets === 5) await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('fiveFer'));
-      else if (bowlerWickets >= 6) await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('sixFer'));
+      // ── Bowling fer milestones ──
+      const bowlerWkts = match.bowlerStats[match.bowler]?.wickets ?? 0;
+      if (bowlerWkts === 3) await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('threeFer'));
+      else if (bowlerWkts === 4) await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('fourFer'));
+      else if (bowlerWkts === 5) await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('fiveFer'));
+      else if (bowlerWkts >= 6) await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('sixFer'));
 
       // ── Hattrick ──
       if (match.wicketStreak === 3) {
-        await bot.telegram.sendMessage(match.groupId, randomLine("hattrick"));
+        await bot.telegram.sendMessage(match.groupId, randomLine('hattrick'));
         match.wicketStreak = 0;
       }
 
@@ -852,21 +867,20 @@ Cannot play 0 — two wickets in a row!`
 
     match.wicketStreak = 0;
 
-    // ── Partnership milestones ──
     if (match.currentPartnershipRuns === 50)
-      await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('partnership50'));
+      await sendWithGif(match.groupId, 'partnership', randomMilestoneLine('partnership50'));
     else if (match.currentPartnershipRuns === 100)
-      await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('partnership100'));
+      await sendWithGif(match.groupId, 'partnership', randomMilestoneLine('partnership100'));
 
-    await bot.telegram.sendMessage(match.groupId, randomLine(bat));
+    await sendWithGif(match.groupId, bat, randomLine(bat));
 
-    // ── Batter individual milestones (50 & 100) ──
-    const batterRunsNow = match.batterStats[match.striker]?.runs ?? 0;
-    const batterRunsBefore = batterRunsNow - bat;
-    if (batterRunsBefore < 50 && batterRunsNow >= 50 && batterRunsNow < 100)
-      await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('fifty'));
-    else if (batterRunsBefore < 100 && batterRunsNow >= 100)
-      await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('hundred'));
+    // ── Batter milestones ──
+    const bRuns = match.batterStats[match.striker]?.runs ?? 0;
+    const bRunsBefore = bRuns - bat;
+    if (bRunsBefore < 50 && bRuns >= 50 && bRuns < 100)
+      await sendWithGif(match.groupId, 'fifty', randomMilestoneLine('fifty'));
+    else if (bRunsBefore < 100 && bRuns >= 100)
+      await sendWithGif(match.groupId, 'hundred', randomMilestoneLine('hundred'));
 
     if ([1, 3, 5].includes(bat)) swapStrike(match);
 

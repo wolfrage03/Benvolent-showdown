@@ -26,9 +26,9 @@ bot.command("createteam", (ctx) => {
   match.phase = "join";
 
   ctx.reply(
-`╭──────────────────╮
+`╭───────────╮
    🟢 Lobby Open
-╰──────────────────╯
+╰───────────╯
 🔵 〔Team A〕 ${match.teamAName}   /joina
 🔴 〔Team B〕 ${match.teamBName}   /joinb
 ───────────
@@ -43,9 +43,9 @@ bot.command("createteam", (ctx) => {
 
     await bot.telegram.sendMessage(
       match.groupId,
-`╭──────────────────────╮
+`╭───────────╮
    🔒 Joining Closed
-╰──────────────────────╯
+╰───────────╯
 🔵 〔Team A〕 ${match.teamAName}   ${match.teamA.length}p
 🔴 〔Team B〕 ${match.teamBName}   ${match.teamB.length}p
 ───────────
@@ -75,9 +75,9 @@ bot.command("closejoin", async (ctx) => {
   match.phase = "teams_set";
 
   await ctx.reply(
-`╭──────────────────────╮
+`╭───────────╮
    🔒 Joining Closed
-╰──────────────────────╯
+╰───────────╯
 🔵 〔Team A〕 ${match.teamAName}   ${match.teamA.length}p
 🔴 〔Team B〕 ${match.teamBName}   ${match.teamB.length}p
 ───────────
@@ -385,9 +385,9 @@ bot.command("changeteam", (ctx) => {
   match.pendingTeamChange = { player, fromTeam: teamArr, toTeam, target };
 
   ctx.reply(
-`╭────────────────────╮
+`╭───────────╮
    🔄 Move Player?
-╰────────────────────╯
+╰───────────╯
 ${player.mention}
 〔Team ${team}〕 → 〔Team ${target}〕`,
     {

@@ -20,7 +20,7 @@ const commentary = {
   ],
 
   2: [
-    "Placed beautifully — they’ll come back for two!",
+    "Placed beautifully — they'll come back for two!",
     "Good running between the wickets.",
     "In the gap! Comfortable couple.",
     "Excellent awareness — two more added.",
@@ -28,15 +28,15 @@ const commentary = {
   ],
 
   3: [
-    "Into the deep — they’ll get three!",
-    "Superb running, that’s three all the way.",
+    "Into the deep — they'll get three!",
+    "Superb running, that's three all the way.",
     "Chased hard… but three runs taken.",
     "Great placement and even better running!",
     "Turning ones into threes — brilliant effort."
   ],
 
   4: [
-    "Cracked away! That’s four!",
+    "Cracked away! That's four!",
     "Beautifully timed — races to the boundary!",
     "No stopping that — FOUR!",
     "Threaded the gap perfectly!",
@@ -44,19 +44,19 @@ const commentary = {
   ],
 
   5: [
-    "Overthrows! That’s five runs gifted!",
-    "Misfield and they’ll get five!",
+    "Overthrows! That's five runs gifted!",
+    "Misfield and they'll get five!",
     "Chaos in the field — five runs taken!",
-    "That’s costly — five to the total!",
+    "That's costly — five to the total!",
     "Extra runs courtesy of an overthrow!"
   ],
 
   6: [
-    "That’s massive! SIX!",
+    "That's massive! SIX!",
     "High and handsome — out of the park!",
     "Clears the ropes with ease!",
     "What a strike! Maximum!",
-    "That’s gone into the stands!"
+    "That's gone into the stands!"
   ],
 
   wicket: [
@@ -64,15 +64,15 @@ const commentary = {
     "Gone! Big breakthrough!",
     "Straight to the fielder — taken!",
     "What a delivery — timber!",
-    "That’s a huge wicket at this stage!"
+    "That's a huge wicket at this stage!"
   ],
 
   hattrick: [
     "Three in three! Unbelievable!",
-    "That’s a hattrick! Magical spell!",
+    "That's a hattrick! Magical spell!",
     "History made — three consecutive wickets!",
     "What a moment — hattrick hero!",
-    "Hattrick ball… and he’s done it!"
+    "Hattrick ball… and he's done it!"
   ],
 
   maiden: [
@@ -80,7 +80,7 @@ const commentary = {
     "Six balls, no runs — brilliant bowling.",
     "Pressure cooker stuff — maiden!",
     "Tidy and disciplined — no scoring.",
-    "Dot after dot — that’s a maiden!"
+    "Dot after dot — that's a maiden!"
   ],
 
   fifty: [
@@ -155,11 +155,106 @@ const commentary = {
 };
 
 
-// ================= PROMPTS ================= =================
+// ================= GIF FILE IDs =================
+
+const gifs = {
+
+  0: [
+    "CgACAgQAAyEFAATiBsiBAAN6abkHkm2ZeRFNPyQn8IbaYOYuJ6kAAo0CAAKklxVTUpQItKrasso6BA",
+    "CgACAgQAAyEFAATiBsiBAAOFabkNECKCbLHu_YgT0nVCTI6m02kAAkcDAAImQSVTR2WErATwqRE6BA",
+    "BAACAgUAAyEFAATiBsiBAAOLabkwbgcEMyiKyRTBwjZ-mLOxkNoAAtkgAAKh78lVUWikJzzZHe06BA",
+    "BAACAgUAAyEFAATiBsiBAAOMabkwbl8Ev03r1cg-cmGKr3ZfITIAAtogAAKh78lVXXaaplD_NZU6BA",
+    "CgACAgUAAyEFAATBvHTpAAECVRBptpUSPcF1NJjdDZ8c7KfvTsORUQACdAMAAmAVcVbaAAHlRJpTCO06BA"
+  ],
+
+  1: [
+    "CgACAgUAAyEFAATiBsiBAANtabkEtJPlRJc4XTbhHxs5_A1G3ukAAmccAAJlQxFVtLZutNsvtRw6BA",
+    "CgACAgUAAyEFAATiBsiBAAOmablFotLL3yJVt7IctYebG_8FY3AAAjwbAALxqchVk5ky-JliuCQ6BA"
+  ],
+
+  2: [
+    "CgACAgUAAyEFAATiBsiBAAOpablKoamwyB20bvmE0-x0sXcnca4AAj0bAALxqchVHB9EHsrHpFY6BA",
+    "BAACAgUAAyEFAATiBsiBAAPTabl3X6YU3TpUJaJGsmOGOt3irOQAAk0kAALnQ8lVKsrLhId7o6w6BA"
+  ],
+
+  3: [
+    "BAACAgUAAxkBAAEcNERpubIhtm1mppUiGNt-9e4Mn6OlGgACjh0AAg44yVXkBIuwayJP5zoE"
+  ],
+
+  4: [
+    "BAACAgUAAyEFAATiBsiBAANeabkD1-O-AW4QiO4AAcvqnTltS6csAAKrIgAC50PJVWyMINVoqrhIOgQ",
+    "CgACAgUAAxkBAAEcK4RpuFQDJNYVagGcAwABHLaEJMQppGUAAq0EAAJtQ0FW0pFqxqCYsJE6BA",
+    "CgACAgIAAxkBAAEcK4xpuFRVIP19ZGn6BzyjCHTtZotHygACa4AAAhf_8UhUJnGSR5od1zoE",
+    "CgACAgQAAyEFAATBvHTpAAECVg5puPKBGp5ZyVTTxgIInq2qIAoXIgAC0xkAAm07uFB2gcimGTMWhjoE",
+    "CgACAgUAAyEFAATBvHTpAAECVhJpuPKX4wiPrTlTauYW1X8S-FjZ0gACjwUAAvOMmFUui_5-cMAEGDoE",
+    "CgACAgQAAyEFAATBvHTpAAECVhppuPLPtWR1AgJFiPQ_t7aW7raCfgACWBIAAjE6uFO3x-Tv3E9fzToE",
+    "CgACAgUAAyEFAATBvHTpAAECVhhpuPLFUSQdBdgvmAH1ICGzsW_-FgACVBEAAoXgMFdkximVfq06nzoE",
+    "CgACAgQAAyEFAATBvHTpAAECVuppuPaiKCGkw27ITyk5ChremfnzzAACmg4AAkeCuFMmuost-pwAASg6BA",
+    "BAACAgUAAyEFAATiBsiBAAO6ablWPlMbBVNj8hWkdLwrg-gpREwAAu4jAALnQ8lVhXCyTTvcu606BA",
+    "BAACAgUAAyEFAATiBsiBAAO5ablWLmA-S5eKHn1pzy0dy7zcrvAAAu0jAALnQ8lV7iDMvO1GoH06BA"
+  ],
+
+  5: [
+    "BAACAgUAAxkBAAEcK0xpuFBgmLeShgABRJKDnoeiYY9IZLsAAg4iAAKaIhhVDYq-T",
+    "BAACAgUAAyEFAATiBsiBAAOQabkwfSPQz-cVTlPVztctraMY5H8AAtggAAKh78lVmR-Uqr-6OMw6BA",
+    "BAACAgUAAyEFAATiBsiBAAOPabkwfbB5MhiiDsucLNfPk5wR3WsAAtcgAAKh78lV50C6rfEwBYI6BA",
+    "BAACAgUAAyEFAATiBsiBAAOOabkwfXziyfzyIEMhGgHoJY2eHhMAAtYgAAKh78lVc9HGP5yWRro6BA"
+  ],
+
+  6: [
+    "CgACAgUAAxkBAAEcK2JpuFGZwc-a21_wh-0ewR5vksuRcwACzxYAAna0cVZPgzlDy3zYVToE",
+    "BAACAgUAAyEFAATiBsiBAANcabkDgr-e7TMX5UBfJA779QU1wYoAAqkiAALnQ8lVYfR8aJgClRU6BA",
+    "CgACAgUAAyEFAATiBsiBAAOqablKuctp6HjKi9jmXTNFolNmU5gAAj8bAALxqchV4PWgLoiQPI86BA",
+    "CgACAgUAAxkBAAEcK2RpuFGwRPZVH7lWzBOm5IxZcCQUOgACZwgAAsQamFcjitfPGRrDdzoE",
+    "CgACAgIAAxkBAAEcK2ZpuFHGxGH9yD9E26gQ3HS9rOdlDQAC730AAvksuEmPN1Jge4LS6ToE",
+    "CgACAgIAAxkBAAEcK2hpuFHei8KAhQ_ZbkzuHqN8RxScWwAC-mEAAr7XGUmsHe6av1DrZjoE",
+    "CgACAgIAAxkBAAEcK3RpuFJjE0ofuUY1VZcM2UgvQq1GvgACHHkAAnUMWEhkseTWre_NtDoE",
+    "CgACAgQAAyEFAATBvHTpAAECVg9puPKDUeJOdLDXqb56C1hlxNOq1QAC0hkAAm07uFDbZXxlS1wdijoE",
+    "CgACAgUAAyEFAATiBsiBAANZabkAAebiSWegL6RzIpZdzZPToyKXAAJwGgAC8anIVbNH2bV5Nd9sOgQ"
+  ],
+
+  wicket: [
+    "CgACAgIAAyEFAATiBsiBAAN8abkINKEQbvfor3yyq_ursAt0vA4AAoONAAIzJclJf4E5MqGR7f46BA",
+    "BAACAgUAAxkBAAEcK0hpuE8Yj_tWFX7Yg7UXGnzmdn_hvgACECIAApoiGFXBCXimVmRBVToE",
+    "CgACAgQAAxkBAAEcK05puFCm5Xcrb-kS1uvOVtMdAly8cgACxhEAAnSqEFALkEHxN-S-jDoE",
+    "CgACAgIAAxkBAAEcK1RpuFDcQCOHS1HIVE0XMjQ_kSjukAACmH0AAjfu2UpHdBzhtpaemDoE",
+    "CgACAgIAAxkBAAEcK1ZpuFEHlC1lR28a7pAqwt6ArCG_sQACKnwAAuxhIUglaugnIvIDXToE",
+    "CgACAgIAAxkBAAEcK1xpuFE72LvAvgG4oIgDJTS15vKtSQACj3QAAmH5iUpOjlTa2gXG1zoE",
+    "CgACAgUAAxkBAAEcK15puFFTLlaFRjGd9ELs0XM5oeRZwwACohEAAjIyeVQNnopT7iKpujoE",
+    "CgACAgUAAyEFAATiBsiBAANEabj92KGS3FIKbTjvu-CTFXLVeWsAAowZAAJE2fFWYChLSyMxfUk6BA"
+  ],
+
+  duck: [
+    "CgACAgUAAyEFAATiBsiBAAN5abkHTAhtTs7J7ZweWp9b0HqbAAGzAAK5HAAC3JVgVZoT1nfRkCy3OgQ"
+  ],
+
+  fifty: [
+    "CgACAgQAAyEFAATiBsiBAAN6abkHkm2ZeRFNPyQn8IbaYOYuJ6kAAo0CAAKklxVTUpQItKrasso6BA"
+  ],
+
+  hundred: [
+    "CgACAgUAAyEFAATiBsiBAANSabkAARAw3ZbHuy-awAqidj0LiUfrAAI-AwACdFIFUwlX06Ozffq5OgQ"
+  ],
+
+  partnership: [
+    "BAACAgUAAyEFAATiBsiBAANbabkCyb5JM7J4YzwVuJaOBsC4D8sAAqciAALnQ8lVoen35uvsMfg6BA",
+    "BAACAgUAAyEFAATiBsiBAAOzablV39VpXMVrXe3UONx0bg6fnikAAucjAALnQ8lVGNdImb-0XGk6BA",
+    "BAACAgUAAyEFAATiBsiBAAO0ablV_3ZhoQZ-l-KLWkh1_ciDJmkAAugjAALnQ8lVx7vIFguUMBY6BA",
+    "BAACAgUAAyEFAATiBsiBAAO1ablWBkf9wIFenzWrEKTW3UtID04AAukjAALnQ8lV0ZRO51rYenw6BA",
+    "BAACAgUAAyEFAATiBsiBAAO2ablWEJ2Ek3LM_YMopoxNUXVKfBYAAuojAALnQ8lVcPppbFK57Z46BA",
+    "BAACAgUAAyEFAATiBsiBAAO3ablWH2sbFr-bwLVKWxBcbE-uImsAAusjAALnQ8lVUwTuk6m-gvI6BA",
+    "BAACAgUAAyEFAATiBsiBAAO4ablWKHKwV75Pu0nfUTX8ZsjVUhYAAuwjAALnQ8lVSiwnP95VxBk6BA",
+    "BAACAgUAAyEFAATiBsiBAAO7ablWUAdWe-OewGsSzMK4Gm_GNxIAAu8jAALnQ8lV-NedQpKPqxg6BA"
+  ]
+
+};
+
+
+// ================= PROMPTS =================
 
 const bowlingPrompts = [
   "🎯 Bowl now!\nType a number between 1 and 6.",
-  "🚀 It’s your delivery!\nSend your bowling number quickly (1–6).",
+  "🚀 It's your delivery!\nSend your bowling number quickly (1–6).",
   "⏳ Waiting for your ball…\nReply with a number from 1 to 6.",
   "🔥 Time to strike!\nEnter your bowling number (1–6).",
   "💣 Drop a deadly delivery!\nSend your number (1–6).",
@@ -171,18 +266,18 @@ const bowlingPrompts = [
   "🎲 Roll the magic number!\nSend 1–6.",
   "💥 Boom or Bust?\nChoose your bowling number!",
   "🪄 Cast your bowling spell!\nSend a number (1–6).",
-  "🧨 Let’s see if you can explode the stumps!\nEnter your number."
+  "🧨 Let's see if you can explode the stumps!\nEnter your number."
 ];
 
 
 const batterPrompts = [
-  "🏏 Batter’s Turn!\nSend your number (0–6) now!",
+  "🏏 Batter's Turn!\nSend your number (0–6) now!",
   "🎯 Face the delivery!\nChoose a number between 0 and 6.",
   "🚀 Play your shot!\nEnter your number (0–6).",
   "🔥 Time to score!\nBatter, send your number!",
   "⏳ Waiting for the batter…\nPick a number (0–6).",
   "💥 Can you smash this one?\nSend your number (0–6)!",
-  "👀 Bowler is ready…\nBatter, what’s your move? (0–6)",
+  "👀 Bowler is ready…\nBatter, what's your move? (0–6)",
   "🧠 Mind game ON!\nChoose wisely between 0–6.",
   "🎯 Boundary or wicket?\nBatter, enter your number!",
   "😈 Pressure is building!\nSend your shot (0–6).",
@@ -248,23 +343,31 @@ const teams = [
   "Nekoma Cats"
 ];
 
+
 // ================= HELPERS =================
+
+function pick(arr) {
+  return arr[Math.floor(Math.random() * arr.length)];
+}
 
 function randomLine(type) {
   const list = commentary[type];
-  return list[Math.floor(Math.random() * list.length)];
+  return list ? pick(list) : null;
+}
+
+function randomGif(type) {
+  // Fallback chain: try exact type, then related types
+  const list = gifs[type];
+  if (list && list.length) return pick(list);
+  return null;
 }
 
 function randomBowlingPrompt() {
-  return bowlingPrompts[
-    Math.floor(Math.random() * bowlingPrompts.length)
-  ];
+  return pick(bowlingPrompts);
 }
 
 function randomBatterPrompt() {
-  return batterPrompts[
-    Math.floor(Math.random() * batterPrompts.length)
-  ];
+  return pick(batterPrompts);
 }
 
 function getRandomTeams() {
@@ -272,19 +375,20 @@ function getRandomTeams() {
   return shuffled.slice(0, 2);
 }
 
-module.exports = {
-  randomLine,
-  randomBowlingPrompt,
-  randomBatterPrompt,
-  getRandomTeams
-};
-
-// ================= MILESTONE HELPERS =================
-
 function randomMilestoneLine(type) {
   const list = commentary[type];
   if (!list) return null;
-  return list[Math.floor(Math.random() * list.length)];
+  return pick(list);
 }
 
-module.exports.randomMilestoneLine = randomMilestoneLine;
+
+// ================= EXPORTS =================
+
+module.exports = {
+  randomLine,
+  randomGif,
+  randomBowlingPrompt,
+  randomBatterPrompt,
+  getRandomTeams,
+  randomMilestoneLine
+};

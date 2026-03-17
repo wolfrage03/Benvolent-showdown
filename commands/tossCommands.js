@@ -15,9 +15,9 @@ async function startToss(match) {
 
   await bot.telegram.sendMessage(
     match.groupId,
-`╭────────────────────────╮
+`╭───────────╮
    🎲 <b>Toss Time</b>
-╰────────────────────────╯
+╰───────────╯
 🔵 〔<b>Team A</b>〕 ${match.teamAName}
 🔴 〔<b>Team B</b>〕 ${match.teamBName}
 ───────────
@@ -71,9 +71,9 @@ bot.action(["toss_odd", "toss_even"], async (ctx) => {
 
   await bot.telegram.sendMessage(
     match.groupId,
-`╭──────────────────────────╮
+`╭───────────╮
    🎲 <b>Toss Result</b>
-╰──────────────────────────╯
+╰───────────╯
 🎯 Rolled <b>${tossNumber}</b>   <b>${result}</b>
 🏆 〔<b>Team ${winnerTeam}</b>〕 <b>${winnerName}</b> won!
 ───────────
@@ -131,9 +131,9 @@ bot.action(["decision_bat", "decision_bowl"], async (ctx) => {
 
   await bot.telegram.sendMessage(
     match.groupId,
-`╭──────────────────────────╮
+`╭───────────╮
    ✅ <b>Match Setup</b>
-╰──────────────────────────╯
+╰───────────╯
 🏏 〔<b>Team ${match.battingTeam}</b>〕 <b>${battingName}</b>  batting
 🎯 〔<b>Team ${match.bowlingTeam}</b>〕 <b>${bowlingName}</b>  bowling
 ───────────
@@ -172,9 +172,9 @@ bot.command("setovers", (ctx) => {
   const bowlingName = match.bowlingTeam === "A" ? match.teamAName : match.teamBName;
 
   ctx.reply(
-`╭──────────────────╮
+`╭───────────╮
    ⚙️ Overs Set
-╰──────────────────╯
+╰───────────╯
 Overs: <b>${overs}</b>
 🏏 〔<b>Team ${match.battingTeam}</b>〕 <b>${battingName}</b>  batting
 🎯 〔<b>Team ${match.bowlingTeam}</b>〕 <b>${bowlingName}</b>  bowling
