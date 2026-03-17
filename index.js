@@ -105,19 +105,26 @@ function bowlDMButton() {
 }
 
 
-// ── Send a GIF + text message together ──
+// ── Send a GIF/video + text message together ──
+// BAAC = video (0x04), CgAC = animation/document (0x0a)
 async function sendWithGif(groupId, gifType, text) {
   const fileId = randomGif(gifType);
   if (fileId) {
     try {
-      await bot.telegram.sendAnimation(groupId, fileId, { caption: text });
+      if (fileId.startsWith("BAAC")) {
+        await bot.telegram.sendVideo(groupId, fileId, { caption: text });
+      } else {
+        await bot.telegram.sendAnimation(groupId, fileId, { caption: text });
+      }
       return;
     } catch (e) {
-      console.error("sendAnimation failed:", e.message);
+      console.error("sendWithGif failed:", e.message);
+      // Fallback: text only
+      await bot.telegram.sendMessage(groupId, text);
     }
+  } else {
+    await bot.telegram.sendMessage(groupId, text);
   }
-  // Fallback: text only
-  await bot.telegram.sendMessage(groupId, text);
 }
 async function advanceGame(match) {
   if (!match) return;
