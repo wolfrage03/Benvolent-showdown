@@ -17,45 +17,22 @@ function buildPlayerListText(match) {
     ];
 
     return ordered.map((p, index) => {
-      const isStriker    = match.striker    === p.id;
-      const isNonStriker = match.nonStriker === p.id;
-      const dismissed    =
-        match.usedBatters?.includes(p.id) &&
-        !isStriker && !isNonStriker;
-
-      const tag = isStriker ? " ⭐" : isNonStriker ? "  *" : dismissed ? "  ✗" : "";
       const cap = p.id === captainId ? " 👑" : "";
-
-      return `  ${index + 1}.${cap} ${p.name}${tag}`;
+      return `  ${index + 1}.${cap} ${p.name}`;
     }).join("\n");
   }
-
-  const teamARole =
-    match.battingTeam === "A" ? "  🏏" :
-    match.battingTeam === "B" ? "  🎯" : "";
-
-  const teamBRole =
-    match.battingTeam === "B" ? "  🏏" :
-    match.battingTeam === "A" ? "  🎯" : "";
-
-  const score = `${match.score ?? 0}/${match.wickets ?? 0}`;
-  const overs = `${match.currentOver ?? 0}.${match.currentBall ?? 0}`;
 
   const lines = [
     `╭───────────╮`,
     `  👥 Players`,
     `╰───────────╯`,
-    `🔵 〔Team A〕 ${match.teamAName}${teamARole}`,
+    `🔵 〔Team A〕 ${match.teamAName}`,
     `───────────`,
     formatTeam(match.teamA, match.captains?.A),
     ``,
-    `🔴 〔Team B〕 ${match.teamBName}${teamBRole}`,
+    `🔴 〔Team B〕 ${match.teamBName}`,
     `───────────`,
     formatTeam(match.teamB, match.captains?.B),
-    ``,
-    `───────────`,
-    `📊 ${score}   ⚙️ ${overs} ov`,
-    `⭐ Striker  * Non-striker  ✗ Out`,
     `───────────`,
   ];
 
