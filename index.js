@@ -1084,9 +1084,9 @@ Both teams scored ${match.score}`
 
 
 
-
 // TEMP: file ID logger — remove after collecting IDs
 bot.on(["animation", "video", "document"], async (ctx) => {
+  if (ctx.chat.type !== "private") return;
   const msg = ctx.message;
   const fileId =
     msg.animation?.file_id ||
@@ -1098,7 +1098,6 @@ bot.on(["animation", "video", "document"], async (ctx) => {
   console.log(`[GIF LOG] type=${type} file_id=${fileId}`);
   await ctx.reply(`\`${type}\n${fileId}\``, { parse_mode: "Markdown" });
 });
-
 
 
 
