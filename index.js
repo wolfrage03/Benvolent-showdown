@@ -1081,6 +1081,28 @@ Both teams scored ${match.score}`
 }
 
 
+
+
+
+
+// TEMP: file ID logger — remove after collecting IDs
+bot.on(["animation", "video", "document"], async (ctx) => {
+  const msg = ctx.message;
+  const fileId =
+    msg.animation?.file_id ||
+    msg.video?.file_id ||
+    msg.document?.file_id;
+  const type =
+    msg.animation ? "animation" :
+    msg.video     ? "video"     : "document";
+  console.log(`[GIF LOG] type=${type} file_id=${fileId}`);
+  await ctx.reply(`\`${type}\n${fileId}\``, { parse_mode: "Markdown" });
+});
+
+
+
+
+
 /* ================= BOT SAFETY ================= */
 
 bot.catch((err, ctx) => {
