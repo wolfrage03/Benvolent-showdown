@@ -206,29 +206,10 @@ require("./commands/teamCommands")(bot, helpers);
 require("./commands/captainCommands")(bot, helpers);
 require("./commands/tossCommands")(bot, helpers);
 
+registerStartHandler(bot);
+registerStatsHandler(bot);
+
 module.exports = { getName };
-
-/* ================= DEBUG STATS TEST ================= */
-
-bot.command("statstest", async (ctx) => {
-  try {
-    await ctx.reply("✅ statstest command works");
-    
-    const PlayerStats = require("./models/PlayerStats");
-    const count = await PlayerStats.countDocuments();
-    await ctx.reply(`📊 PlayerStats docs in DB: ${count}`);
-    
-    const mine = await PlayerStats.findOne({ userId: String(ctx.from.id) });
-    await ctx.reply(`👤 Your record: ${mine ? JSON.stringify({
-      runs: mine.runs,
-      matches: mine.matches,
-      wickets: mine.wickets
-    }) : "NOT FOUND"}`);
-    
-  } catch (err) {
-    await ctx.reply(`❌ Error: ${err.message}`);
-  }
-});
 
 
 /* ================= SET BATTER ================= */
@@ -1143,8 +1124,6 @@ bot.use(async (ctx, next) => {
 (async () => {
   await initializeApp();
   await initializeBot();
-  registerStartHandler(bot);
-  registerStatsHandler(bot);
   await bot.launch();
   console.log("🚀 Bot started successfully");
 })();
