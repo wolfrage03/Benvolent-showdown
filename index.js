@@ -206,9 +206,6 @@ require("./commands/teamCommands")(bot, helpers);
 require("./commands/captainCommands")(bot, helpers);
 require("./commands/tossCommands")(bot, helpers);
 
-registerStartHandler(bot);
-registerStatsHandler(bot);
-
 module.exports = { getName };
 
 
@@ -591,11 +588,13 @@ async function announceBall(match) {
   );
 
   try {
+    const strikerName = getName(match, match.striker);
     await bot.telegram.sendMessage(
       match.bowler,
 `╭───────────╮
    🎯 Your Turn — Bowl
 ╰───────────╯
+🏏 Batter: ${strikerName}
 Send your number 1 – 6`
     );
   } catch (e) {
@@ -1124,6 +1123,8 @@ bot.use(async (ctx, next) => {
 (async () => {
   await initializeApp();
   await initializeBot();
+  registerStartHandler(bot);
+  registerStatsHandler(bot);
   await bot.launch();
   console.log("🚀 Bot started successfully");
 })();

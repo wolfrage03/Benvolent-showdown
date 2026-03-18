@@ -17,8 +17,14 @@ function buildPlayerListText(match) {
     ];
 
     return ordered.map((p, index) => {
+      const isStriker    = match.striker    === p.id;
+      const isNonStriker = match.nonStriker === p.id;
+      const dismissed    =
+        match.usedBatters?.includes(p.id) &&
+        !isStriker && !isNonStriker;
       const cap = p.id === captainId ? " 👑" : "";
-      return `  ${index + 1}.${cap} ${p.name}`;
+      const tag = isStriker ? " 🏏" : isNonStriker ? " 🪄" : dismissed ? " ✗" : "";
+      return `  ${index + 1}.${cap} ${p.name}${tag}`;
     }).join("\n");
   }
 
