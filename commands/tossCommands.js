@@ -66,26 +66,67 @@ bot.action(["toss_odd", "toss_even"], async (ctx) => {
 
   await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
 
+  // ── Dice roll animation ──
+  const diceFaces = ["⚀", "⚁", "⚂", "⚃", "⚄", "⚅"];
+  const finalFace = diceFaces[tossNumber - 1];
+
+  // Frames: fast shuffle then slow down on final
+  const frames = [
+    diceFaces[Math.floor(Math.random() * 6)],
+    diceFaces[Math.floor(Math.random() * 6)],
+    diceFaces[Math.floor(Math.random() * 6)],
+    diceFaces[Math.floor(Math.random() * 6)],
+    diceFaces[Math.floor(Math.random() * 6)],
+    diceFaces[Math.floor(Math.random() * 6)],
+    finalFace,
+  ];
+
+  const delays = [100, 100, 150, 150, 250, 350, 500];
+
+  const rollMsg = await bot.telegram.sendMessage(
+    match.groupId,
+`🎲 Rolling...`
+  );
+
+  for (let i = 0; i < frames.length; i++) {
+    await new Promise(r => setTimeout(r, delays[i]));
+    try {
+      await bot.telegram.editMessageText(
+        match.groupId,
+        rollMsg.message_id,
+        null,
+        `${frames[i]} Rolling...`
+      );
+    } catch (e) {}
+  }
+
+  // Short pause before showing result
+  await new Promise(r => setTimeout(r, 400));
+
   const winnerTeam = tossWinner === captainA ? "A" : "B";
   const winnerName = winnerTeam === "A" ? match.teamAName : match.teamBName;
 
-  await bot.telegram.sendMessage(
+  await bot.telegram.editMessageText(
     match.groupId,
-`╭───────────╮
+    rollMsg.message_id,
+    null,
+`╭──────────────────────╮
    🎲 <b>Toss Result</b>
-╰───────────╯
-🎯 Rolled <b>${tossNumber}</b>   <b>${result}</b>
+╰──────────────────────╯
+${finalFace} Rolled <b>${tossNumber}</b>   <b>${result}</b>
 🏆 〔<b>Team ${winnerTeam}</b>〕 <b>${winnerName}</b> won!
-───────────
+───────────────────────
 Choose to bat or bowl:`,
     {
       parse_mode: "HTML",
-      ...Markup.inlineKeyboard([
-        [
-          Markup.button.callback("🏏 Bat",  "decision_bat"),
-          Markup.button.callback("🎯 Bowl", "decision_bowl")
+      reply_markup: {
+        inline_keyboard: [
+          [
+            { text: "🏏 Bat",  callback_data: "decision_bat"  },
+            { text: "🎯 Bowl", callback_data: "decision_bowl" }
+          ]
         ]
-      ])
+      }
     }
   );
 });
