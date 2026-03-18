@@ -1118,11 +1118,13 @@ bot.use(async (ctx, next) => {
   return next();
 });
 
+// Register handlers at top level before launch
+registerStartHandler(bot);
+registerStatsHandler(bot);
+
 (async () => {
   await initializeApp();
   await initializeBot();
-  registerStartHandler(bot);
-  registerStatsHandler(bot);
   await bot.launch();
   console.log("🚀 Bot started successfully");
 })();
