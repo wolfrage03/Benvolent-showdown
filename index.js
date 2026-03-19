@@ -524,7 +524,6 @@ Ball counted`
         match.batterMissCount = 0;
         match.wickets++;
 
-        // Mark batter as timed out
         if (!match.timedOutBatters) match.timedOutBatters = [];
         match.timedOutBatters.push(match.striker);
 
@@ -1179,12 +1178,14 @@ Wickets: ${mine.wickets}  Econ: ${bowl.economy}`
   }
 });
 
-/* ================= CATCH ALL DEBUG ================= */
-bot.on("message", async (ctx) => {
-  console.log("MSG RECEIVED:", ctx.chat.type, ctx.message?.text, "from:", ctx.from?.id);
-});
 registerStartHandler(bot);
 registerStatsHandler(bot);
+
+/* ================= CATCH ALL DEBUG ================= */
+bot.on("message", async (ctx, next) => {
+  console.log("MSG RECEIVED:", ctx.chat.type, ctx.message?.text, "from:", ctx.from?.id);
+  return next();
+});
 
 (async () => {
   await initializeApp();
