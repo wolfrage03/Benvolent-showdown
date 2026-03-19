@@ -5,6 +5,7 @@ const { Telegraf, Markup } = require("telegraf");
 const initializeApp = require("./config/appInit");
 const { bot, initializeBot } = require("./config/bot");
 
+
 const registerStartHandler = require("./handlers/startHandler");
 const registerStatsHandler = require("./handlers/statsHandler");
 const updatePlayerStats = require("./utils/updateStats");
@@ -524,6 +525,9 @@ Ball counted`
         match.batterMissCount = 0;
         match.wickets++;
 
+        if (!match.timedOutBatters) match.timedOutBatters = [];
+        match.timedOutBatters.push(match.striker);
+
         await bot.telegram.sendMessage(
           match.groupId,
 `╭───────────╮
@@ -588,11 +592,13 @@ async function announceBall(match) {
   );
 
   try {
+    const strikerName = getName(match, match.striker);
     await bot.telegram.sendMessage(
       match.bowler,
 `╭───────────╮
    🎯 Your Turn — Bowl
 ╰───────────╯
+🏏 Facing: ${strikerName}
 Send your number 1 – 6`
     );
   } catch (e) {
@@ -660,9 +666,9 @@ async function startBall(match) {
 
 /* ================= HANDLE INPUT ================= */
 
-bot.on("text", async (ctx) => {
+bot.on("text", async (ctx, next) => {
 
-  if (ctx.message.text.startsWith("/")) return;
+  if (ctx.message.text.startsWith("/")) return next();
 
   const match = getMatch(ctx);
   if (!match) return;
@@ -677,6 +683,9 @@ bot.on("text", async (ctx) => {
 
     // ── FIX 3: silently ignore — no need to tell non-strikers they can't input ──
     if (ctx.from.id !== match.striker) return;
+
+    if (match.awaitingBowl)
+      return ctx.reply("⏳ Wait for bowler to bowl first.");
 
     if (!/^[0-6]$/.test(text))
       return ctx.reply("❌ Send a number between 0–6.");
@@ -795,6 +804,9 @@ Cannot play 0 — two wickets in a row!`
       match.currentBall++;
       match.currentPartnershipBalls++;
       match.bowlerStats[match.bowler].wickets++;
+
+      if (match.batterStats[match.striker])
+        match.batterStats[match.striker].dismissedBy = match.bowler;
 
       const lastOver = match.overHistory[match.overHistory.length - 1];
       if (lastOver) lastOver.balls.push("W");
@@ -1122,48 +1134,18 @@ bot.use(async (ctx, next) => {
 /* ================= INLINE STATS (DEBUG) ================= */
 bot.command("mystats", async (ctx) => {
   try {
-    const mine = await PlayerStats.findOne({ userId: String(ctx.from.id) });
-    if (!mine) return ctx.reply(
-`📊 No stats yet
-──────────────
-Play some matches first!`
-    );
+    const count = await PlayerStats.countDocuments();
+    const mine  = await PlayerStats.findOne({ userId: String(ctx.from.id) });
+    if (!mine) return ctx.reply(`📊 No stats yet.\nTotal records in DB: ${count}`);
     const { calculateBatting, calculateBowling } = require("./utils/statsCalculator");
     const bat  = calculateBatting(mine);
     const bowl = calculateBowling(mine);
-    const name = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
-    const line = "─────────────────────";
     await ctx.reply(
-`╭─────────────────────╮
-  📊 Career Stats
-╰─────────────────────╯
-👤 ${name}
-${line}
-🏏 BATTING
-${line}
-🏟  Matches        ${mine.matches ?? 0}
-📋 Innings         ${mine.inningsBatting ?? 0}
-🏃 Runs            ${mine.runs ?? 0}  (${mine.balls ?? 0} balls)
-📊 Average         ${bat.average}
-⚡ Strike Rate     ${bat.strikeRate}
-🔥 4s / 6s / 5s   ${mine.fours ?? 0} / ${mine.sixes ?? 0} / ${mine.fives ?? 0}
-🏆 Best Score      ${mine.bestScore ?? 0}
-🌟 50s / 100s      ${mine.fifties ?? 0} / ${mine.hundreds ?? 0}
-🦆 Ducks           ${mine.ducks ?? 0}
-${line}
-🎯 BOWLING
-${line}
-📋 Innings         ${mine.inningsBowling ?? 0}
-🎳 Wickets         ${mine.wickets ?? 0}
-⚽ Balls           ${mine.ballsBowled ?? 0}
-💥 Runs Given      ${mine.runsConceded ?? 0}
-📈 Economy         ${bowl.economy}
-⚡ Strike Rate     ${bowl.strikeRate}
-📊 Average         ${bowl.average}
-🧘 Maidens         ${mine.maidens ?? 0}
-🎯 3w / 5w         ${mine.threeW ?? 0} / ${mine.fiveW ?? 0}
-🏅 Best Bowling    ${mine.bestBowlingWickets ?? 0}w / ${mine.bestBowlingRuns ?? 0}r
-${line}`
+`📊 Stats for @${ctx.from.username || ctx.from.first_name}
+Matches: ${mine.matches}
+Runs: ${mine.runs} (${mine.balls} balls)
+Avg: ${bat.average}  SR: ${bat.strikeRate}
+Wickets: ${mine.wickets}  Econ: ${bowl.economy}`
     );
   } catch(err) {
     ctx.reply("❌ Error: " + err.message);
@@ -1183,38 +1165,12 @@ bot.command("stats", async (ctx) => {
     const { calculateBatting, calculateBowling } = require("./utils/statsCalculator");
     const bat  = calculateBatting(mine);
     const bowl = calculateBowling(mine);
-    const line = "─────────────────────";
     await ctx.reply(
-`╭─────────────────────╮
-  📊 Career Stats
-╰─────────────────────╯
-👤 @${username}
-${line}
-🏏 BATTING
-${line}
-🏟  Matches        ${mine.matches ?? 0}
-📋 Innings         ${mine.inningsBatting ?? 0}
-🏃 Runs            ${mine.runs ?? 0}  (${mine.balls ?? 0} balls)
-📊 Average         ${bat.average}
-⚡ Strike Rate     ${bat.strikeRate}
-🔥 4s / 6s / 5s   ${mine.fours ?? 0} / ${mine.sixes ?? 0} / ${mine.fives ?? 0}
-🏆 Best Score      ${mine.bestScore ?? 0}
-🌟 50s / 100s      ${mine.fifties ?? 0} / ${mine.hundreds ?? 0}
-🦆 Ducks           ${mine.ducks ?? 0}
-${line}
-🎯 BOWLING
-${line}
-📋 Innings         ${mine.inningsBowling ?? 0}
-🎳 Wickets         ${mine.wickets ?? 0}
-⚽ Balls           ${mine.ballsBowled ?? 0}
-💥 Runs Given      ${mine.runsConceded ?? 0}
-📈 Economy         ${bowl.economy}
-⚡ Strike Rate     ${bowl.strikeRate}
-📊 Average         ${bowl.average}
-🧘 Maidens         ${mine.maidens ?? 0}
-🎯 3w / 5w         ${mine.threeW ?? 0} / ${mine.fiveW ?? 0}
-🏅 Best Bowling    ${mine.bestBowlingWickets ?? 0}w / ${mine.bestBowlingRuns ?? 0}r
-${line}`
+`📊 Stats for @${username}
+Matches: ${mine.matches}
+Runs: ${mine.runs} (${mine.balls} balls)
+Avg: ${bat.average}  SR: ${bat.strikeRate}
+Wickets: ${mine.wickets}  Econ: ${bowl.economy}`
     );
   } catch(err) {
     ctx.reply("❌ Error: " + err.message);
