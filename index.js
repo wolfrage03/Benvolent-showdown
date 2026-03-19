@@ -684,6 +684,10 @@ bot.on("text", async (ctx) => {
     // ── FIX 3: silently ignore — no need to tell non-strikers they can't input ──
     if (ctx.from.id !== match.striker) return;
 
+    // Don't accept batter input until bowler has bowled first
+    if (match.awaitingBowl)
+      return ctx.reply("⏳ Wait for bowler to bowl first.");
+
     if (!/^[0-6]$/.test(text))
       return ctx.reply("❌ Send a number between 0–6.");
 
