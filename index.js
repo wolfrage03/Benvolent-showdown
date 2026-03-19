@@ -683,7 +683,6 @@ bot.on("text", async (ctx) => {
     // ── FIX 3: silently ignore — no need to tell non-strikers they can't input ──
     if (ctx.from.id !== match.striker) return;
 
-    // Don't accept batter input until bowler has bowled first
     if (match.awaitingBowl)
       return ctx.reply("⏳ Wait for bowler to bowl first.");
 
@@ -805,7 +804,6 @@ Cannot play 0 — two wickets in a row!`
       match.currentPartnershipBalls++;
       match.bowlerStats[match.bowler].wickets++;
 
-      // Record which bowler took this wicket
       if (match.batterStats[match.striker])
         match.batterStats[match.striker].dismissedBy = match.bowler;
 
@@ -1131,14 +1129,59 @@ bot.use(async (ctx, next) => {
   return next();
 });
 
-registerStartHandler(bot);
-registerStatsHandler(bot);
+
+/* ================= INLINE STATS (DEBUG) ================= */
+bot.command("mystats", async (ctx) => {
+  try {
+    const count = await PlayerStats.countDocuments();
+    const mine  = await PlayerStats.findOne({ userId: String(ctx.from.id) });
+    if (!mine) return ctx.reply(`📊 No stats yet.\nTotal records in DB: ${count}`);
+    const { calculateBatting, calculateBowling } = require("./utils/statsCalculator");
+    const bat  = calculateBatting(mine);
+    const bowl = calculateBowling(mine);
+    await ctx.reply(
+`📊 Stats for @${ctx.from.username || ctx.from.first_name}
+Matches: ${mine.matches}
+Runs: ${mine.runs} (${mine.balls} balls)
+Avg: ${bat.average}  SR: ${bat.strikeRate}
+Wickets: ${mine.wickets}  Econ: ${bowl.economy}`
+    );
+  } catch(err) {
+    ctx.reply("❌ Error: " + err.message);
+  }
+});
+
+bot.command("stats", async (ctx) => {
+  try {
+    const parts = ctx.message.text.trim().split(/\s+/);
+    if (parts.length < 2 || !parts[1].startsWith("@"))
+      return ctx.reply("ℹ️ Usage: /stats @username");
+    const username = parts[1].replace("@","").toLowerCase();
+    const user = await User.findOne({ username });
+    if (!user) return ctx.reply(`❌ @${username} not found`);
+    const mine = await PlayerStats.findOne({ userId: user.telegramId });
+    if (!mine) return ctx.reply(`📊 @${username} has no stats yet`);
+    const { calculateBatting, calculateBowling } = require("./utils/statsCalculator");
+    const bat  = calculateBatting(mine);
+    const bowl = calculateBowling(mine);
+    await ctx.reply(
+`📊 Stats for @${username}
+Matches: ${mine.matches}
+Runs: ${mine.runs} (${mine.balls} balls)
+Avg: ${bat.average}  SR: ${bat.strikeRate}
+Wickets: ${mine.wickets}  Econ: ${bowl.economy}`
+    );
+  } catch(err) {
+    ctx.reply("❌ Error: " + err.message);
+  }
+});
 
 /* ================= CATCH ALL DEBUG ================= */
 bot.on("message", async (ctx, next) => {
   console.log("MSG RECEIVED:", ctx.chat.type, ctx.message?.text, "from:", ctx.from?.id);
   return next();
 });
+registerStartHandler(bot);
 
 (async () => {
   await initializeApp();
