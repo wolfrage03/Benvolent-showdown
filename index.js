@@ -1176,12 +1176,14 @@ Wickets: ${mine.wickets}  Econ: ${bowl.economy}`
   }
 });
 
+registerStartHandler(bot);
+registerStatsHandler(bot);
+
 /* ================= CATCH ALL DEBUG ================= */
 bot.on("message", async (ctx, next) => {
   console.log("MSG RECEIVED:", ctx.chat.type, ctx.message?.text, "from:", ctx.from?.id);
   return next();
 });
-registerStartHandler(bot);
 
 (async () => {
   await initializeApp();
