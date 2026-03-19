@@ -796,11 +796,6 @@ Cannot play 0 — two wickets in a row!`
       match.currentPartnershipBalls++;
       match.bowlerStats[match.bowler].wickets++;
 
-      // ── Record dismissing bowler on batter stats ──
-      if (match.batterStats[match.striker]) {
-        match.batterStats[match.striker].dismissedBy = match.bowler;
-      }
-
       const lastOver = match.overHistory[match.overHistory.length - 1];
       if (lastOver) lastOver.balls.push("W");
 
@@ -1123,11 +1118,12 @@ bot.use(async (ctx, next) => {
   return next();
 });
 
+registerStartHandler(bot);
+registerStatsHandler(bot);
+
 (async () => {
   await initializeApp();
   await initializeBot();
-  registerStartHandler(bot);
-  registerStatsHandler(bot);
   await bot.launch();
   console.log("🚀 Bot started successfully");
 })();
