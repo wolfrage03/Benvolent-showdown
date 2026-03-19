@@ -666,9 +666,9 @@ async function startBall(match) {
 
 /* ================= HANDLE INPUT ================= */
 
-bot.on("text", async (ctx) => {
+bot.on("text", async (ctx, next) => {
 
-  if (ctx.message.text.startsWith("/")) return;
+  if (ctx.message.text.startsWith("/")) return next();
 
   const match = getMatch(ctx);
   if (!match) return;
