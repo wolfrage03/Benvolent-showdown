@@ -50,6 +50,9 @@ function registerStatsHandler(bot) {
 
   bot.command("mystats", async (ctx) => {
     try {
+      if (ctx.chat.type === "private")
+        return ctx.reply("❌ Use this command in the group.");
+
       const stats = await PlayerStats.findOne({ userId: String(ctx.from.id) });
       if (!stats) return ctx.reply(
 `📊 No stats yet
@@ -74,6 +77,9 @@ Play some matches first!`
 
   bot.command("stats", async (ctx) => {
     try {
+      if (ctx.chat.type === "private")
+        return ctx.reply("❌ Use this command in the group.");
+
       const parts = ctx.message.text.trim().split(/\s+/);
       if (parts.length < 2 || !parts[1].startsWith("@"))
         return ctx.reply("ℹ️ Usage: /stats @username");
