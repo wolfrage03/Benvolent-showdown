@@ -524,6 +524,10 @@ Ball counted`
         match.batterMissCount = 0;
         match.wickets++;
 
+        // Mark batter as timed out
+        if (!match.timedOutBatters) match.timedOutBatters = [];
+        match.timedOutBatters.push(match.striker);
+
         await bot.telegram.sendMessage(
           match.groupId,
 `╭───────────╮
@@ -588,11 +592,13 @@ async function announceBall(match) {
   );
 
   try {
+    const strikerName = getName(match, match.striker);
     await bot.telegram.sendMessage(
       match.bowler,
 `╭───────────╮
    🎯 Your Turn — Bowl
 ╰───────────╯
+🏏 Facing: ${strikerName}
 Send your number 1 – 6`
     );
   } catch (e) {
@@ -795,6 +801,10 @@ Cannot play 0 — two wickets in a row!`
       match.currentBall++;
       match.currentPartnershipBalls++;
       match.bowlerStats[match.bowler].wickets++;
+
+      // Record which bowler took this wicket
+      if (match.batterStats[match.striker])
+        match.batterStats[match.striker].dismissedBy = match.bowler;
 
       const lastOver = match.overHistory[match.overHistory.length - 1];
       if (lastOver) lastOver.balls.push("W");
