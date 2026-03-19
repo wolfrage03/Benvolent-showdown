@@ -393,7 +393,7 @@ Cannot play 0 — two wickets in a row!`
     if (match.innings === 2 && match.score >= match.firstInningsScore + 1) {
       await endInnings(match);
       return;
-    }
+    }z
 
     const overEnded = await checkOverEnd(match) || false;
     if (!overEnded) await advanceGame(match);
