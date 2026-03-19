@@ -11,18 +11,20 @@ function generateScorecard(match, getName) {
   const oversDecimal = ballsBowled / 6;
   const crr          = oversDecimal > 0 ? (match.score / oversDecimal).toFixed(2) : "0.00";
 
-  /* ── target line (innings 2 only, no "need X runs" block) ── */
-  const targetLine = match.innings === 2
-    ? `🏹 Target ${(match.firstInningsScore ?? 0) + 1}`
-    : "";
-
-  /* ── pad helper for alignment ── */
+  /* ── pad helpers ── */
+  function lpad(str, len) {
+    str = String(str);
+    return str.length >= len ? str : " ".repeat(len - str.length) + str;
+  }
   function rpad(str, len) {
     str = String(str);
     return str.length >= len ? str : str + " ".repeat(len - str.length);
   }
 
-  /* ── batting section ── */
+  /* ════════════════════════════════
+     BATTING SECTION
+  ════════════════════════════════ */
+
   const battingOrder = match.battingOrder || [];
   const allBatted = [
     ...battingOrder,
@@ -31,7 +33,13 @@ function generateScorecard(match, getName) {
       .filter(id => !battingOrder.includes(id))
   ];
 
+  // Column header
+  const batHeader =
+    ` ${"BATTER".padEnd(16)} ${"R".padStart(4)} ${"B".padStart(5)}` +
+    `  ${"4s".padStart(3)} ${"5s".padStart(3)} ${"6s".padStart(3)}  ${"SR".padStart(5)}`;
+
   let battingRows = "";
+
   for (const id of allBatted) {
     const stats = match.batterStats?.[id];
     if (!stats) continue;
@@ -44,63 +52,79 @@ function generateScorecard(match, getName) {
     const fives = stats.fives ?? 0;
     const sixes = stats.sixes ?? 0;
 
-    // Status: striker / non-striker / not out (still in) / dismissed / timed out
     const isStriker    = id === match.striker;
     const isNonStriker = id === match.nonStriker;
     const isTimedOut   = match.timedOutBatters?.includes(id);
     const isDismissed  = match.usedBatters?.includes(id) && !isStriker && !isNonStriker;
     const isNotOut     = isStriker || isNonStriker;
 
-    // Score string — not-out gets asterisk
-    const scoreStr = isNotOut
-      ? `${stats.runs}(${stats.balls})*`
-      : `${stats.runs}(${stats.balls})`;
+    // Balls field: append * for not-out (after balls count)
+    const ballsStr = isNotOut ? `${stats.balls}*` : `${stats.balls}`;
 
-    // 3rd line: dismissal info (bowler name or timed out)
-    let dismissalLine = "";
+    // All batters same 🏏 emoji — no special icon for striker/non-striker
+    const nameField = rpad(name, 16);
+
+    const statLine =
+      ` 🏏 ${nameField}` +
+      ` ${lpad(stats.runs, 4)} ${lpad(ballsStr, 5)}` +
+      `  ${lpad(fours, 3)} ${lpad(fives, 3)} ${lpad(sixes, 3)}  ${lpad(sr, 5)}`;
+
+    battingRows += statLine + "\n";
+
+    // Second line: runs, balls, boundary counts with SR
+    const countsPart = `4:${lpad(fours, 2)}  5:${lpad(fives, 2)}  6:${lpad(sixes, 2)}`;
+    battingRows += `   ${rpad(stats.runs + "R", 6)} ${rpad(stats.balls + "B", 6)}  ${countsPart}  SR:${sr}\n`;
+
+    // Third line: dismissal / timed out (only if applicable)
     if (isTimedOut) {
-      dismissalLine = "\n   timed out";
+      battingRows += `   timed out\n`;
     } else if (isDismissed && stats.dismissedBy) {
       const bowlerName = getName(match, stats.dismissedBy);
-      dismissalLine = `\n   b ${bowlerName}`;
+      battingRows += `   b ${bowlerName}\n`;
     }
-
-    // All batters get 🏏
-    battingRows += `🏏 ${name}\n`;
-    battingRows += `   ${rpad(scoreStr, 10)}  ${rpad(stats.balls + "B", 5)}  SR:${sr}\n`;
-    battingRows += `   ${rpad("4s:" + fours, 7)}  ${rpad("5s:" + fives, 7)}  6s:${sixes}${dismissalLine}\n`;
   }
 
   /* ── did not bat ── */
   const battingTeamPlayers = battingTeamLetter === "A" ? match.teamA : match.teamB;
   const didNotBat = (battingTeamPlayers || []).filter(p => !allBatted.includes(p.id));
   const dnbBat = didNotBat.length
-    ? `– DNB: ${didNotBat.map(p => p.name).join(", ")}`
-    : "";
+    ? ` DNB: ${didNotBat.map(p => p.name).join(", ")}`
+    : ` DNB: —`;
 
-  /* ── bowling section ── */
+  /* ════════════════════════════════
+     BOWLING SECTION
+  ════════════════════════════════ */
+
   const bowlingTeamPlayers = bowlingTeamLetter === "A" ? match.teamA : match.teamB;
   const bowlerIds = Object.keys(match.bowlerStats || {}).map(Number);
 
+  // Column header
+  const bowlHeader =
+    ` ${"BOWLER".padEnd(16)} ${"OV".padStart(5)} ${"R".padStart(4)} ${"W".padStart(3)}  ${"ECON".padStart(5)}`;
+
   let bowlingRows = "";
+
   for (const id of bowlerIds) {
     const b    = match.bowlerStats[id];
     const name = getName(match, id);
     const econ = b.balls > 0 ? ((b.runs / b.balls) * 6).toFixed(1) : "0.0";
     const ov   = `${Math.floor(b.balls / 6)}.${b.balls % 6}`;
 
-    // Format: name  overs-runs-wickets-econ
-    bowlingRows += `🎯 ${name}  ${ov}-${b.runs}-${b.wickets}-${econ}\n`;
+    const nameField = rpad(name, 16);
+    const bowlLine =
+      ` 🎯 ${nameField}` +
+      ` ${lpad(ov, 5)} ${lpad(b.runs, 4)} ${lpad(b.wickets, 3)}  ${lpad(econ, 5)}`;
 
-    // Over history — only overs this bowler actually bowled
+    bowlingRows += bowlLine + "\n";
+
+    // Over history using actual over numbers from overHistory
     const theirOvers = (match.overHistory || []).filter(
       o => String(o.bowler) === String(id)
     );
     for (const o of theirOvers) {
       const balls = o.balls.map(x => x === "W" ? "W" : String(x)).join("  ");
-      bowlingRows += `   Over ${o.over}:  ${balls}\n`;
+      bowlingRows += `   〔Ov ${o.over}〕  ${balls}\n`;
     }
-    bowlingRows += "\n";
   }
 
   /* ── did not bowl ── */
@@ -108,31 +132,50 @@ function generateScorecard(match, getName) {
     p => !bowlerIds.includes(p.id)
   );
   const dnbBowl = didNotBowl.length
-    ? `– DNB: ${didNotBowl.map(p => p.name).join(", ")}`
+    ? ` DNB: ${didNotBowl.map(p => p.name).join(", ")}`
     : "";
 
-  /* ── assemble ── */
-  const inningsLabel = `Innings ${match.innings ?? 1}`;
+  /* ════════════════════════════════
+     HEADER
+  ════════════════════════════════ */
+
+  const inningsNum   = match.innings ?? 1;
+  const inningsLabel = `INNINGS ${inningsNum} · ${battingTeam} bat · ${bowlingTeam} bowl`;
+
+  const sep  = `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━`;
+  const thin = ` ─────────────────────────────────────────`;
+
+  const scoreLine =
+    ` 📊 ${match.score}/${match.wickets}` +
+    `   ⚙️ ${match.currentOver}.${match.currentBall}/${match.totalOvers}` +
+    `   📈 ${crr}`;
+
+  // Innings 2: show target only, no "need X runs" line
+  const targetLine = match.innings === 2
+    ? ` 🏹 Target ${(match.firstInningsScore ?? 0) + 1}`
+    : "";
+
+  /* ════════════════════════════════
+     ASSEMBLE
+  ════════════════════════════════ */
 
   return [
-    `━━━━━━━━━━━━━━━━━━━━━━━━`,
-    ` ${inningsLabel} Scorecard`,
-    `━━━━━━━━━━━━━━━━━━━━━━━━`,
-    `🏏 ${battingTeam}`,
-    `🎯 ${bowlingTeam}`,
-    `📊 ${match.score}/${match.wickets}  ⚙️ ${match.currentOver}.${match.currentBall}/${match.totalOvers}  📈 ${crr}`,
+    sep,
+    ` ${inningsLabel}`,
+    sep,
+    scoreLine,
     ...(targetLine ? [targetLine] : []),
-    `━━━━━━━━━━━━━━━━━━━━━━━━`,
-    ` BATTING`,
-    `────────────────────────`,
+    sep,
+    batHeader,
+    thin,
     battingRows.trimEnd(),
-    ...(dnbBat ? [dnbBat] : []), 
-    `━━━━━━━━━━━━━━━━━━━━━━━━`,
-    ` BOWLING`,
-    `────────────────────────`,
+    dnbBat,
+    sep,
+    bowlHeader,
+    thin,
     bowlingRows.trimEnd(),
     ...(dnbBowl ? [dnbBowl] : []),
-    `━━━━━━━━━━━━━━━━━━━━━━━━`,
+    sep,
   ].join("\n");
 }
 
