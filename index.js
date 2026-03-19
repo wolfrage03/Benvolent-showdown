@@ -1185,7 +1185,7 @@ bot.on("message", async (ctx, next) => {
   return next();
 });
 
-(async () => {
+(async () => { 
   await initializeApp();
   await initializeBot();
   await bot.launch();
