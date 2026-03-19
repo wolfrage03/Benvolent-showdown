@@ -49,57 +49,75 @@ function registerStatsHandler(bot) {
   /* ================= MY STATS ================= */
 
   bot.command("mystats", async (ctx) => {
+
     try {
-      if (ctx.chat.type === "private")
-        return ctx.reply("❌ Use this command in the group.");
 
       const stats = await PlayerStats.findOne({ userId: String(ctx.from.id) });
-      if (!stats) return ctx.reply(
-`📊 No stats yet
-──────────────
-Play some matches first!`
-      );
 
-      const bat  = calculateBatting(stats);
+      if (!stats) {
+        return ctx.reply("📊 No stats yet\n──────────────\nPlay some matches first!");
+      }
+
+      const bat = calculateBatting(stats);
       const bowl = calculateBowling(stats);
+
       const name = ctx.from.username
         ? `@${ctx.from.username}`
         : ctx.from.first_name;
 
-      await ctx.reply(buildStatsCard(name, stats, bat, bowl));
+      const card = buildStatsCard(name, stats, bat, bowl);
+
+      await ctx.reply(card);
+
     } catch (err) {
+
       console.error("mystats error:", err);
       ctx.reply("⚠️ Error fetching stats.");
+
     }
+
   });
 
   /* ================= OTHER PLAYER STATS ================= */
 
   bot.command("stats", async (ctx) => {
+
     try {
-      if (ctx.chat.type === "private")
-        return ctx.reply("❌ Use this command in the group.");
 
       const parts = ctx.message.text.trim().split(/\s+/);
-      if (parts.length < 2 || !parts[1].startsWith("@"))
+
+      if (parts.length < 2 || !parts[1].startsWith("@")) {
         return ctx.reply("ℹ️ Usage: /stats @username");
+      }
 
       const username = parts[1].replace("@", "").toLowerCase();
-      const user     = await User.findOne({ username });
 
-      if (!user) return ctx.reply(`❌ User @${username} not found.`);
+      const user = await User.findOne({ username });
+
+      if (!user) {
+        return ctx.reply(`❌ User @${username} not found.`);
+      }
 
       const stats = await PlayerStats.findOne({ userId: user.telegramId });
-      if (!stats) return ctx.reply(`📊 @${username} has no stats yet.`);
 
-      const bat  = calculateBatting(stats);
+      if (!stats) {
+        return ctx.reply(`📊 @${username} has no stats yet.`);
+      }
+
+      const bat = calculateBatting(stats);
       const bowl = calculateBowling(stats);
 
-      await ctx.reply(buildStatsCard(`@${username}`, stats, bat, bowl));
+      const card = buildStatsCard(`@${username}`, stats, bat, bowl);
+
+      await ctx.reply(card);
+
     } catch (err) {
+
       console.error("stats error:", err);
       ctx.reply("⚠️ Error fetching stats.");
+
     }
+
   });
 
 }
