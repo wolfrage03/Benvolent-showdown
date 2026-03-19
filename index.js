@@ -1131,53 +1131,6 @@ bot.use(async (ctx, next) => {
   return next();
 });
 
-
-/* ================= INLINE STATS (DEBUG) ================= */
-bot.command("mystats", async (ctx) => {
-  try {
-    const count = await PlayerStats.countDocuments();
-    const mine  = await PlayerStats.findOne({ userId: String(ctx.from.id) });
-    if (!mine) return ctx.reply(`📊 No stats yet.\nTotal records in DB: ${count}`);
-    const { calculateBatting, calculateBowling } = require("./utils/statsCalculator");
-    const bat  = calculateBatting(mine);
-    const bowl = calculateBowling(mine);
-    await ctx.reply(
-`📊 Stats for @${ctx.from.username || ctx.from.first_name}
-Matches: ${mine.matches}
-Runs: ${mine.runs} (${mine.balls} balls)
-Avg: ${bat.average}  SR: ${bat.strikeRate}
-Wickets: ${mine.wickets}  Econ: ${bowl.economy}`
-    );
-  } catch(err) {
-    ctx.reply("❌ Error: " + err.message);
-  }
-});
-
-bot.command("stats", async (ctx) => {
-  try {
-    const parts = ctx.message.text.trim().split(/\s+/);
-    if (parts.length < 2 || !parts[1].startsWith("@"))
-      return ctx.reply("ℹ️ Usage: /stats @username");
-    const username = parts[1].replace("@","").toLowerCase();
-    const user = await User.findOne({ username });
-    if (!user) return ctx.reply(`❌ @${username} not found`);
-    const mine = await PlayerStats.findOne({ userId: user.telegramId });
-    if (!mine) return ctx.reply(`📊 @${username} has no stats yet`);
-    const { calculateBatting, calculateBowling } = require("./utils/statsCalculator");
-    const bat  = calculateBatting(mine);
-    const bowl = calculateBowling(mine);
-    await ctx.reply(
-`📊 Stats for @${username}
-Matches: ${mine.matches}
-Runs: ${mine.runs} (${mine.balls} balls)
-Avg: ${bat.average}  SR: ${bat.strikeRate}
-Wickets: ${mine.wickets}  Econ: ${bowl.economy}`
-    );
-  } catch(err) {
-    ctx.reply("❌ Error: " + err.message);
-  }
-});
-
 registerStartHandler(bot);
 registerStatsHandler(bot);
 
