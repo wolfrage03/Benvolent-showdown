@@ -5,8 +5,6 @@ const { Telegraf, Markup } = require("telegraf");
 const initializeApp = require("./config/appInit");
 const { bot, initializeBot } = require("./config/bot");
 
-const registerStartHandler = require("./handlers/startHandler");
-const registerStatsHandler = require("./handlers/statsHandler");
 const updatePlayerStats = require("./utils/updateStats");
 const PlayerStats = require("./models/PlayerStats");
 const generateScorecard = require("./utils/scorecardGenerator");
@@ -208,6 +206,95 @@ require("./commands/tossCommands")(bot, helpers);
 
 module.exports = { getName };
 
+
+
+bot.command("start", async (ctx, next) => {
+  if (ctx.chat.type !== "private") return next();
+  try {
+    const { id, username, first_name, last_name } = ctx.from;
+    await User.updateOne(
+      { telegramId: String(id) },
+      { $set: { telegramId: String(id), username: username?.toLowerCase(), firstName: first_name, lastName: last_name } },
+      { upsert: true }
+    );
+  } catch (err) { console.error("DM user save error:", err); }
+  await ctx.reply("✅ Bot connected\n──────────────\nWhen selected as bowler, send your number 1–6 here in DM.");
+});
+
+
+
+/* ================= STATS ================= */
+
+function buildStatsCard(displayName, stats, bat, bowl) {
+  const line = "─────────────────────";
+  return (
+`╭─────────────────────╮
+  📊 Career Stats
+╰─────────────────────╯
+👤 ${displayName}
+${line}
+🏏 BATTING
+${line}
+🏟  Matches        ${stats.matches ?? 0}
+📋 Innings         ${stats.inningsBatting ?? 0}
+🏃 Runs            ${stats.runs ?? 0}  (${stats.balls ?? 0} balls)
+📊 Average         ${bat.average}
+⚡ Strike Rate     ${bat.strikeRate}
+🔥 4s / 6s / 5s   ${stats.fours ?? 0} / ${stats.sixes ?? 0} / ${stats.fives ?? 0}
+🏆 Best Score      ${stats.bestScore ?? 0}
+🌟 50s / 100s      ${stats.fifties ?? 0} / ${stats.hundreds ?? 0}
+🦆 Ducks           ${stats.ducks ?? 0}
+${line}
+🎯 BOWLING
+${line}
+📋 Innings         ${stats.inningsBowling ?? 0}
+🎳 Wickets         ${stats.wickets ?? 0}
+⚽ Balls           ${stats.ballsBowled ?? 0}
+💥 Runs Given      ${stats.runsConceded ?? 0}
+📈 Economy         ${bowl.economy}
+⚡ Strike Rate     ${bowl.strikeRate}
+📊 Average         ${bowl.average}
+🧘 Maidens         ${stats.maidens ?? 0}
+🎯 3w / 5w         ${stats.threeW ?? 0} / ${stats.fiveW ?? 0}
+🏅 Best Bowling    ${stats.bestBowlingWickets ?? 0}w / ${stats.bestBowlingRuns ?? 0}r
+${line}`
+  );
+}
+
+bot.command("mystats", async (ctx) => {
+  try {
+    const stats = await PlayerStats.findOne({ userId: String(ctx.from.id) });
+    if (!stats) return ctx.reply("📊 No stats yet\n──────────────\nPlay some matches first!");
+    const { calculateBatting, calculateBowling } = require("./utils/statsCalculator");
+    const bat  = calculateBatting(stats);
+    const bowl = calculateBowling(stats);
+    const name = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
+    await ctx.reply(buildStatsCard(name, stats, bat, bowl));
+  } catch (err) {
+    console.error("mystats error:", err);
+    await ctx.reply("⚠️ Error: " + err.message);
+  }
+});
+
+bot.command("stats", async (ctx) => {
+  try {
+    const parts = ctx.message.text.trim().split(/\s+/);
+    if (parts.length < 2 || !parts[1].startsWith("@"))
+      return ctx.reply("ℹ️ Usage: /stats @username");
+    const username = parts[1].replace("@", "").toLowerCase();
+    const user = await User.findOne({ username });
+    if (!user) return ctx.reply(`❌ User @${username} not found.`);
+    const stats = await PlayerStats.findOne({ userId: user.telegramId });
+    if (!stats) return ctx.reply(`📊 @${username} has no stats yet.`);
+    const { calculateBatting, calculateBowling } = require("./utils/statsCalculator");
+    const bat  = calculateBatting(stats);
+    const bowl = calculateBowling(stats);
+    await ctx.reply(buildStatsCard(`@${username}`, stats, bat, bowl));
+  } catch (err) {
+    console.error("stats error:", err);
+    await ctx.reply("⚠️ Error: " + err.message);
+  }
+});
 
 /* ================= SET BATTER ================= */
 
@@ -1118,13 +1205,10 @@ bot.use(async (ctx, next) => {
   return next();
 });
 
-registerStartHandler(bot);
-registerStatsHandler(bot);
-
 (async () => {
   await initializeApp();
   await initializeBot();
-  await bot.launch();
+      await bot.launch();
   console.log("🚀 Bot started successfully");
 })();
 
