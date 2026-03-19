@@ -11,7 +11,9 @@ function generateScorecard(match, getName) {
   const oversDecimal = ballsBowled / 6;
   const crr          = oversDecimal > 0 ? (match.score / oversDecimal).toFixed(2) : "0.00";
 
-  const sep = `─────────────────`;
+  /* ── separators ── */
+  const boldLine = `━━━━━━━━━━━`;  // ~25% shorter than before
+  const thinLine = `─────────────`;
 
   /* ════════════════════════════════
      BATTING SECTION
@@ -31,49 +33,46 @@ function generateScorecard(match, getName) {
     const stats = match.batterStats?.[id];
     if (!stats) continue;
 
-    const name  = getName(match, id);
-    const sr    = stats.balls > 0
+    const name   = getName(match, id);
+    const sr     = stats.balls > 0
       ? ((stats.runs / stats.balls) * 100).toFixed(0)
       : "0";
-    const fours = stats.fours ?? 0;
-    const fives = stats.fives ?? 0;
-    const sixes = stats.sixes ?? 0;
+    const fours  = stats.fours ?? 0;
+    const fives  = stats.fives ?? 0;
+    const sixes  = stats.sixes ?? 0;
 
-    // A batter is truly not-out only if they are currently at crease
-    // AND have not been recorded as dismissed (usedBatters includes dismissed ones)
-    // usedBatters is populated when batter is SENT IN — so we check dismissedBy and timedOut
     const isTimedOut  = match.timedOutBatters?.includes(id);
-    // Dismissed = has a dismissedBy set, OR timed out
     const isDismissed = !!stats.dismissedBy || isTimedOut;
-    // Not-out = currently at crease AND not dismissed
     const isNotOut    = (id === match.striker || id === match.nonStriker) && !isDismissed;
 
-    // Asterisk after name for not-out batters
-    const nameStr = isNotOut ? `${name}*` : name;
+    const notOutMark = isNotOut ? "*" : "";
 
-    // Line 1: 🏏 Name*  12R  3B  400SR
-    battingRows += `🏏 ${nameStr}  ${stats.runs}R  ${stats.balls}B  ${sr}SR\n`;
+    // Line 1: emoji + name*  runs = X, balls = X
+    //          then SR starts at 3rd word position (after emoji name)
+    // Format:  🏏 Name*  4R  2B  SR:200
+    //          └─ 4s:1  5s:0  6s:0
+    //             └─ b BowlerName
 
-    // Line 2: boundary counts aligned under runs
-    battingRows += `    ${fours}(4)  ${fives}(5)  ${sixes}(6)\n`;
+    const line1 = `🏏 ${name}${notOutMark}  ${stats.runs}R  ${stats.balls}B  SR:${sr}`;
+    const line2 = `┗━ 4s:${fours}  5s:${fives}  6s:${sixes}`;
 
-    // Line 3: dismissal info
+    battingRows += line1 + "\n";
+    battingRows += line2 + "\n";
+
     if (isTimedOut) {
-      battingRows += `    timed out\n`;
+      battingRows += `   ┗━ timed out\n`;
     } else if (isDismissed && stats.dismissedBy) {
       const bowlerName = getName(match, stats.dismissedBy);
-      battingRows += `    b ${bowlerName}\n`;
+      battingRows += `   ┗━ b ${bowlerName}\n`;
     }
+
+    battingRows += "\n";
   }
 
   /* ── did not bat ── */
-  // Include batters who are set (in battingOrder / batterStats) but have 0 balls
-  // as well as players who haven't been sent in at all
   const battingTeamPlayers = battingTeamLetter === "A" ? match.teamA : match.teamB;
   const didNotBat = (battingTeamPlayers || []).filter(p => !allBatted.includes(p.id));
-  const dnbBat = didNotBat.length
-    ? `DNB: ${didNotBat.map(p => p.name).join(", ")}`
-    : `DNB: —`;
+  const dnbBat = `DNB: ${didNotBat.length ? didNotBat.map(p => p.name).join(", ") : "—"}`;
 
   /* ════════════════════════════════
      BOWLING SECTION
@@ -90,16 +89,21 @@ function generateScorecard(match, getName) {
     const econ = b.balls > 0 ? ((b.runs / b.balls) * 6).toFixed(1) : "0.0";
     const ov   = `${Math.floor(b.balls / 6)}.${b.balls % 6}`;
 
-    bowlingRows += `🎯 ${name}  ${ov}-${b.runs}-${b.wickets}-${econ}\n`;
+    // Line 1: emoji + bowler name + figures
+    bowlingRows += `🎾 ${name}  ${ov}-${b.runs}-${b.wickets}-${econ}\n`;
 
-    // Over history — actual over numbers
+    // Over history with L-shape, indented further for each subsequent over
     const theirOvers = (match.overHistory || []).filter(
       o => String(o.bowler) === String(id)
     );
-    for (const o of theirOvers) {
-      const balls = o.balls.map(x => x === "W" ? "W" : String(x)).join(" ");
-      bowlingRows += `   〔Ov ${o.over}〕 ${balls}\n`;
+    for (let i = 0; i < theirOvers.length; i++) {
+      const o     = theirOvers[i];
+      const balls = o.balls.map(x => x === "W" ? "W" : String(x)).join("  ");
+      const indent = "   ".repeat(i + 1);
+      bowlingRows += `${indent}┗━ Ov ${o.over}: ${balls}\n`;
     }
+
+    bowlingRows += "\n";
   }
 
   /* ── did not bowl ── */
@@ -114,13 +118,11 @@ function generateScorecard(match, getName) {
      HEADER
   ════════════════════════════════ */
 
-  const inningsNum   = match.innings ?? 1;
-  const inningsLabel = `Innings ${inningsNum} · ${battingTeam} (Team ${battingTeamLetter})`;
+  const inningsNum = match.innings ?? 1;
 
-  const scoreLine =
-    `📊 ${match.score}/${match.wickets}` +
-    `  ⚙️ ${match.currentOver}.${match.currentBall}/${match.totalOvers}` +
-    `  📈 ${crr}`;
+  // Score line with pipe separators
+  const oversDisplay = `${match.currentOver}.${match.currentBall}/${match.totalOvers}`;
+  const scoreLine    = `Score: ${match.score}/${match.wickets} | Overs: ${oversDisplay} | RR: ${crr}`;
 
   const targetLine = match.innings === 2
     ? `🏹 Target ${(match.firstInningsScore ?? 0) + 1}`
@@ -131,18 +133,25 @@ function generateScorecard(match, getName) {
   ════════════════════════════════ */
 
   return [
-    sep,
-    inningsLabel,
-    sep,
+    boldLine,
+    `Innings ${inningsNum} · ${battingTeam} (Team ${battingTeamLetter})`,
+    boldLine,
+    ``,
     scoreLine,
     ...(targetLine ? [targetLine] : []),
-    sep,
+    ``,
+    thinLine,
+    ``,
     battingRows.trimEnd(),
+    ``,
     dnbBat,
-    sep,
+    ``,
+    boldLine,
+    ``,
     bowlingRows.trimEnd(),
-    ...(dnbBowl ? [dnbBowl] : []),
-    sep,
+    ...(dnbBowl ? [``, dnbBowl] : []),
+    ``,
+    boldLine,
   ].join("\n");
 }
 

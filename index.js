@@ -5,6 +5,8 @@ const { Telegraf, Markup } = require("telegraf");
 const initializeApp = require("./config/appInit");
 const { bot, initializeBot } = require("./config/bot");
 
+const registerStartHandler = require("./handlers/startHandler");
+const registerStatsHandler = require("./handlers/statsHandler");
 const updatePlayerStats = require("./utils/updateStats");
 const PlayerStats = require("./models/PlayerStats");
 const generateScorecard = require("./utils/scorecardGenerator");
@@ -206,95 +208,6 @@ require("./commands/tossCommands")(bot, helpers);
 
 module.exports = { getName };
 
-
-
-bot.command("start", async (ctx, next) => {
-  if (ctx.chat.type !== "private") return next();
-  try {
-    const { id, username, first_name, last_name } = ctx.from;
-    await User.updateOne(
-      { telegramId: String(id) },
-      { $set: { telegramId: String(id), username: username?.toLowerCase(), firstName: first_name, lastName: last_name } },
-      { upsert: true }
-    );
-  } catch (err) { console.error("DM user save error:", err); }
-  await ctx.reply("✅ Bot connected\n──────────────\nWhen selected as bowler, send your number 1–6 here in DM.");
-});
-
-
-
-/* ================= STATS ================= */
-
-function buildStatsCard(displayName, stats, bat, bowl) {
-  const line = "─────────────────────";
-  return (
-`╭─────────────────────╮
-  📊 Career Stats
-╰─────────────────────╯
-👤 ${displayName}
-${line}
-🏏 BATTING
-${line}
-🏟  Matches        ${stats.matches ?? 0}
-📋 Innings         ${stats.inningsBatting ?? 0}
-🏃 Runs            ${stats.runs ?? 0}  (${stats.balls ?? 0} balls)
-📊 Average         ${bat.average}
-⚡ Strike Rate     ${bat.strikeRate}
-🔥 4s / 6s / 5s   ${stats.fours ?? 0} / ${stats.sixes ?? 0} / ${stats.fives ?? 0}
-🏆 Best Score      ${stats.bestScore ?? 0}
-🌟 50s / 100s      ${stats.fifties ?? 0} / ${stats.hundreds ?? 0}
-🦆 Ducks           ${stats.ducks ?? 0}
-${line}
-🎯 BOWLING
-${line}
-📋 Innings         ${stats.inningsBowling ?? 0}
-🎳 Wickets         ${stats.wickets ?? 0}
-⚽ Balls           ${stats.ballsBowled ?? 0}
-💥 Runs Given      ${stats.runsConceded ?? 0}
-📈 Economy         ${bowl.economy}
-⚡ Strike Rate     ${bowl.strikeRate}
-📊 Average         ${bowl.average}
-🧘 Maidens         ${stats.maidens ?? 0}
-🎯 3w / 5w         ${stats.threeW ?? 0} / ${stats.fiveW ?? 0}
-🏅 Best Bowling    ${stats.bestBowlingWickets ?? 0}w / ${stats.bestBowlingRuns ?? 0}r
-${line}`
-  );
-}
-
-bot.command("mystats", async (ctx) => {
-  try {
-    const stats = await PlayerStats.findOne({ userId: String(ctx.from.id) });
-    if (!stats) return ctx.reply("📊 No stats yet\n──────────────\nPlay some matches first!");
-    const { calculateBatting, calculateBowling } = require("./utils/statsCalculator");
-    const bat  = calculateBatting(stats);
-    const bowl = calculateBowling(stats);
-    const name = ctx.from.username ? `@${ctx.from.username}` : ctx.from.first_name;
-    await ctx.reply(buildStatsCard(name, stats, bat, bowl));
-  } catch (err) {
-    console.error("mystats error:", err);
-    await ctx.reply("⚠️ Error: " + err.message);
-  }
-});
-
-bot.command("stats", async (ctx) => {
-  try {
-    const parts = ctx.message.text.trim().split(/\s+/);
-    if (parts.length < 2 || !parts[1].startsWith("@"))
-      return ctx.reply("ℹ️ Usage: /stats @username");
-    const username = parts[1].replace("@", "").toLowerCase();
-    const user = await User.findOne({ username });
-    if (!user) return ctx.reply(`❌ User @${username} not found.`);
-    const stats = await PlayerStats.findOne({ userId: user.telegramId });
-    if (!stats) return ctx.reply(`📊 @${username} has no stats yet.`);
-    const { calculateBatting, calculateBowling } = require("./utils/statsCalculator");
-    const bat  = calculateBatting(stats);
-    const bowl = calculateBowling(stats);
-    await ctx.reply(buildStatsCard(`@${username}`, stats, bat, bowl));
-  } catch (err) {
-    console.error("stats error:", err);
-    await ctx.reply("⚠️ Error: " + err.message);
-  }
-});
 
 /* ================= SET BATTER ================= */
 
@@ -675,11 +588,13 @@ async function announceBall(match) {
   );
 
   try {
+    const strikerName = getName(match, match.striker);
     await bot.telegram.sendMessage(
       match.bowler,
 `╭───────────╮
    🎯 Your Turn — Bowl
 ╰───────────╯
+🏏 Facing: ${strikerName}
 Send your number 1 – 6`
     );
   } catch (e) {
@@ -882,6 +797,9 @@ Cannot play 0 — two wickets in a row!`
       match.currentBall++;
       match.currentPartnershipBalls++;
       match.bowlerStats[match.bowler].wickets++;
+
+      if (match.batterStats[match.striker])
+        match.batterStats[match.striker].dismissedBy = match.bowler;
 
       const lastOver = match.overHistory[match.overHistory.length - 1];
       if (lastOver) lastOver.balls.push("W");
@@ -1121,16 +1039,108 @@ async function endInnings(match) {
     await endMatchTie(match);
   }
 
+  await announceMotm(match);
   clearActiveMatchPlayers(match);
   matches.delete(match.groupId);
 }
 
+
+
+
+/* ================= MAN OF THE MATCH ================= */
+
+function calculateMOTM(match) {
+  const allPlayers = [...match.teamA, ...match.teamB];
+  const allBatStats = {};
+  const inn1Bat = match.firstInningsData?.batterStats || {};
+  for (const id in inn1Bat) {
+    if (!allBatStats[id]) allBatStats[id] = { runs: 0, balls: 0 };
+    allBatStats[id].runs  += inn1Bat[id].runs  || 0;
+    allBatStats[id].balls += inn1Bat[id].balls || 0;
+  }
+  for (const id in match.batterStats) {
+    if (!allBatStats[id]) allBatStats[id] = { runs: 0, balls: 0 };
+    allBatStats[id].runs  += match.batterStats[id].runs  || 0;
+    allBatStats[id].balls += match.batterStats[id].balls || 0;
+  }
+  const allBowlStats = {};
+  const inn1Bowl = match.firstInningsData?.bowlerStats || {};
+  for (const id in inn1Bowl) {
+    if (!allBowlStats[id]) allBowlStats[id] = { balls: 0, runs: 0, wickets: 0 };
+    allBowlStats[id].balls   += inn1Bowl[id].balls   || 0;
+    allBowlStats[id].runs    += inn1Bowl[id].runs    || 0;
+    allBowlStats[id].wickets += inn1Bowl[id].wickets || 0;
+  }
+  for (const id in match.bowlerStats) {
+    if (!allBowlStats[id]) allBowlStats[id] = { balls: 0, runs: 0, wickets: 0 };
+    allBowlStats[id].balls   += match.bowlerStats[id].balls   || 0;
+    allBowlStats[id].runs    += match.bowlerStats[id].runs    || 0;
+    allBowlStats[id].wickets += match.bowlerStats[id].wickets || 0;
+  }
+  const scores = {};
+  for (const p of allPlayers) {
+    const id = String(p.id);
+    let score = 0;
+    const bat = allBatStats[id];
+    if (bat && bat.balls > 0) {
+      score += bat.runs;
+      const sr = (bat.runs / bat.balls) * 100;
+      if (sr >= 150) score += 15;
+      else if (sr >= 100) score += 8;
+      else if (sr >= 75)  score += 3;
+    }
+    const bowl = allBowlStats[id];
+    if (bowl && bowl.balls > 0) {
+      score += bowl.wickets * 20;
+      const econ = (bowl.runs / bowl.balls) * 6;
+      if (econ <= 6)       score += 20;
+      else if (econ <= 8)  score += 12;
+      else if (econ <= 10) score += 6;
+      else if (econ <= 12) score += 2;
+    }
+    scores[id] = score;
+  }
+  let motmId = null, topScore = -1;
+  for (const [id, score] of Object.entries(scores)) {
+    if (score > topScore) { topScore = score; motmId = id; }
+  }
+  if (!motmId) return null;
+  const player = allPlayers.find(p => String(p.id) === motmId);
+  const bat    = allBatStats[motmId];
+  const bowl   = allBowlStats[motmId];
+  const batLine  = bat  && bat.balls  > 0 ? `🏏 ${bat.runs}(${bat.balls})  SR:${((bat.runs/bat.balls)*100).toFixed(0)}` : null;
+  const bowlLine = bowl && bowl.balls > 0 ? `🎾 ${Math.floor(bowl.balls/6)}.${bowl.balls%6}ov  ${bowl.wickets}w  ${bowl.runs}r  E:${((bowl.runs/bowl.balls)*6).toFixed(1)}` : null;
+  return { player, batLine, bowlLine };
+}
+
+async function announceMotm(match) {
+  const result = calculateMOTM(match);
+  if (!result) return;
+  const { player, batLine, bowlLine } = result;
+  try { await updatePlayerStats(player.id, { motm: 1 }); }
+  catch (e) { console.error("motm save error:", e.message); }
+  const lines = [
+    `━━━━━━━━━━━`,
+    `   🏅 Man of the Match`,
+    `━━━━━━━━━━━`,
+    `⭐ ${player.name}`,
+    `─────────────`,
+  ];
+  if (batLine)  lines.push(batLine);
+  if (bowlLine) lines.push(bowlLine);
+  lines.push(`━━━━━━━━━━━`);
+  await bot.telegram.sendMessage(match.groupId, lines.join("\n"));
+}
 
 /* ================= MATCH RESULT ================= */
 
 async function endMatchWithWinner(match, winningTeam) {
   const teamName   = winningTeam === "A" ? match.teamAName : match.teamBName;
   const teamLetter = winningTeam;
+  try {
+    const winners = winningTeam === "A" ? match.teamA : match.teamB;
+    for (const p of winners) await updatePlayerStats(p.id, { matchesWon: 1 });
+  } catch (e) { console.error("matchesWon error:", e.message); }
 
   let margin = "";
   if (match.innings === 2 && winningTeam === match.battingTeam) {
@@ -1205,10 +1215,13 @@ bot.use(async (ctx, next) => {
   return next();
 });
 
+registerStartHandler(bot);
+registerStatsHandler(bot);
+
 (async () => {
   await initializeApp();
   await initializeBot();
-      await bot.launch();
+  await bot.launch();
   console.log("🚀 Bot started successfully");
 })();
 

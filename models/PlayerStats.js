@@ -25,7 +25,9 @@ const playerStatsSchema = new mongoose.Schema({
   threeW: { type: Number, default: 0 },
   fiveW: { type: Number, default: 0 },
   bestBowlingWickets: { type: Number, default: 0 },
-  bestBowlingRuns: { type: Number, default: 0 }
+  bestBowlingRuns: { type: Number, default: 0 },
+  matchesWon: { type: Number, default: 0 },
+  motm: { type: Number, default: 0 }
 
 }, { timestamps: true });
 
