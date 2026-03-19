@@ -5,6 +5,14 @@ const { Telegraf, Markup } = require("telegraf");
 const initializeApp = require("./config/appInit");
 const { bot, initializeBot } = require("./config/bot");
 
+// Auto-answer all callback queries
+bot.use(async (ctx, next) => {
+  if (ctx.callbackQuery) {
+    try { await ctx.answerCbQuery(); } catch {}
+  }
+  return next();
+});
+
 const registerStartHandler = require("./handlers/startHandler");
 const registerStatsHandler = require("./handlers/statsHandler");
 const updatePlayerStats = require("./utils/updateStats");
@@ -1122,12 +1130,6 @@ bot.catch((err, ctx) => {
   console.error("Error:", err);
 });
 
-bot.use(async (ctx, next) => {
-  if (ctx.callbackQuery) {
-    try { await ctx.answerCbQuery(); } catch {}
-  }
-  return next();
-});
 
 
 /* ================= INLINE STATS (DEBUG) ================= */
@@ -1176,16 +1178,16 @@ Wickets: ${mine.wickets}  Econ: ${bowl.economy}`
   }
 });
 
+/* ================= CATCH ALL DEBUG ================= */
 registerStartHandler(bot);
 registerStatsHandler(bot);
 
-/* ================= CATCH ALL DEBUG ================= */
 bot.on("message", async (ctx, next) => {
   console.log("MSG RECEIVED:", ctx.chat.type, ctx.message?.text, "from:", ctx.from?.id);
   return next();
 });
 
-(async () => { 
+(async () => {
   await initializeApp();
   await initializeBot();
   await bot.launch();
