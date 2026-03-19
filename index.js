@@ -5,13 +5,6 @@ const { Telegraf, Markup } = require("telegraf");
 const initializeApp = require("./config/appInit");
 const { bot, initializeBot } = require("./config/bot");
 
-// Auto-answer all callback queries
-bot.use(async (ctx, next) => {
-  if (ctx.callbackQuery) {
-    try { await ctx.answerCbQuery(); } catch {}
-  }
-  return next();
-});
 
 const registerStartHandler = require("./handlers/startHandler");
 const registerStatsHandler = require("./handlers/statsHandler");
