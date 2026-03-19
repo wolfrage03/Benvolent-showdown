@@ -5,7 +5,6 @@ const { Telegraf, Markup } = require("telegraf");
 const initializeApp = require("./config/appInit");
 const { bot, initializeBot } = require("./config/bot");
 
-// Auto-answer all callback queries
 bot.use(async (ctx, next) => {
   if (ctx.callbackQuery) {
     try { await ctx.answerCbQuery(); } catch {}
@@ -950,6 +949,30 @@ async function endInnings(match) {
     match.firstInningsScore = match.score;
     match.firstInningsData = JSON.parse(JSON.stringify(match));
 
+    // Save innings 1 stats
+    try {
+      for (const playerId in match.batterStats) {
+        const b = match.batterStats[playerId];
+        const isNotOut = !b.dismissedBy && !match.timedOutBatters?.includes(Number(playerId));
+        await updatePlayerStats(playerId, {
+          runs: b.runs, balls: b.balls, inningsBatting: 1,
+          fours: b.fours ?? 0, fives: b.fives ?? 0, sixes: b.sixes ?? 0,
+          ...(isNotOut ? { notOuts: 1 } : {}),
+          ...(b.runs === 0 && !isNotOut ? { ducks: 1 } : {}),
+          ...(b.runs >= 50 && b.runs < 100 ? { fifties: 1 } : {}),
+          ...(b.runs >= 100 ? { hundreds: 1 } : {}),
+          bestScore: b.runs,
+        });
+      }
+      for (const playerId in match.bowlerStats) {
+        const b = match.bowlerStats[playerId];
+        await updatePlayerStats(playerId, {
+          wickets: b.wickets, ballsBowled: b.balls, runsConceded: b.runs, inningsBowling: 1,
+          bestBowlingWickets: b.wickets, bestBowlingRuns: b.runs,
+        });
+      }
+    } catch(e) { console.error("Innings 1 stats save error:", e); }
+
     try {
       await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName));
     } catch(e) { console.error("Scorecard send failed:", e.message); }
@@ -1026,16 +1049,33 @@ async function endInnings(match) {
   try {
     for (const playerId in match.batterStats) {
       const b = match.batterStats[playerId];
-      await updatePlayerStats(playerId, { runs: b.runs, balls: b.balls, inningsBatting: 1 });
+      const isNotOut = !b.dismissedBy && !match.timedOutBatters?.includes(Number(playerId));
+      await updatePlayerStats(playerId, {
+        runs: b.runs, balls: b.balls, inningsBatting: 1,
+        fours: b.fours ?? 0, fives: b.fives ?? 0, sixes: b.sixes ?? 0,
+        ...(isNotOut ? { notOuts: 1 } : {}),
+        ...(b.runs === 0 && !isNotOut ? { ducks: 1 } : {}),
+        ...(b.runs >= 50 && b.runs < 100 ? { fifties: 1 } : {}),
+        ...(b.runs >= 100 ? { hundreds: 1 } : {}),
+        bestScore: b.runs,
+      });
     }
     for (const playerId in match.bowlerStats) {
       const b = match.bowlerStats[playerId];
       await updatePlayerStats(playerId, {
-        wickets: b.wickets, ballsBowled: b.balls, runsConceded: b.runs, inningsBowling: 1
+        wickets: b.wickets, ballsBowled: b.balls, runsConceded: b.runs, inningsBowling: 1,
+        bestBowlingWickets: b.wickets, bestBowlingRuns: b.runs,
       });
     }
-    for (const p of [...match.teamA, ...match.teamB])
-      await updatePlayerStats(p.id, { matches: 1 });
+    // Only count matches for players who actually played
+    const activePlayers = new Set([
+      ...Object.keys(match.batterStats),
+      ...Object.keys(match.bowlerStats),
+      ...Object.keys(match.firstInningsData?.batterStats || {}),
+      ...Object.keys(match.firstInningsData?.bowlerStats || {}),
+    ]);
+    for (const playerId of activePlayers)
+      await updatePlayerStats(playerId, { matches: 1 });
   } catch (err) {
     console.error("Stats update error:", err);
   }
@@ -1132,6 +1172,7 @@ bot.catch((err, ctx) => {
 
 
 
+
 /* ================= INLINE STATS (DEBUG) ================= */
 bot.command("mystats", async (ctx) => {
   try {
@@ -1161,7 +1202,7 @@ bot.command("stats", async (ctx) => {
     const username = parts[1].replace("@","").toLowerCase();
     const user = await User.findOne({ username });
     if (!user) return ctx.reply(`❌ @${username} not found`);
-    const mine = await PlayerStats.findOne({ userId: user.telegramId });
+    const mine = await PlayerStats.findOne({ userId: String(user.telegramId) });
     if (!mine) return ctx.reply(`📊 @${username} has no stats yet`);
     const { calculateBatting, calculateBowling } = require("./utils/statsCalculator");
     const bat  = calculateBatting(mine);
