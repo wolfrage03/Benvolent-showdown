@@ -454,9 +454,9 @@ bot.command("score", async (ctx) => {
 
 /* ================= HANDLE INPUT ================= */
 
-bot.on("text", async (ctx, next) => {
+bot.on("text", async (ctx) => {
 
-  if (ctx.message.text.startsWith("/")) return next();
+  if (ctx.message.text.startsWith("/")) return(next);
 
   const match = getMatch(ctx);
   if (!match) return;
@@ -466,10 +466,10 @@ bot.on("text", async (ctx, next) => {
   /* GROUP BATTER INPUT */
   if (ctx.chat.type !== "private") {
 
-    const ballInProgress = match.awaitingBowl || match.awaitingBat;
-    if (!ballInProgress) return;
+    // Only accept batter input after bowler has already sent their number
+    if (!match.awaitingBat) return;
 
-    // ── FIX 3: silently ignore — no need to tell non-strikers they can't input ──
+    // Silently ignore non-strikers
     if (ctx.from.id !== match.striker) return;
 
     if (!/^[0-6]$/.test(text))
@@ -477,13 +477,8 @@ bot.on("text", async (ctx, next) => {
 
     if (match.batNumber !== null || match.ballLocked) return;
 
-    match.batNumber = Number(text);
+    match.batNumber   = Number(text);
     match.awaitingBat = false;
-
-    if (match.bowlNumber === null) {
-      await ctx.reply("✅ Shot queued — waiting for bowler");
-      return;
-    }
 
     if (match.ballLocked) {
       await ctx.reply("⏳ Processing previous ball — please wait");

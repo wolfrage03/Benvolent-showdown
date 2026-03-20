@@ -13,7 +13,6 @@ function isAdmin(ctx) {
 
 /* ================= HELPERS ================= */
 
-// Fixed-width columns: label left-padded to 16, value right-padded to 6
 function row(label, value, labelW = 16, valW = 7) {
   const lbl = `  ${label}`.padEnd(labelW + 2);
   const val = String(value ?? 0).padStart(valW);
@@ -81,16 +80,17 @@ function registerStatsHandler(bot) {
     try {
       const stats = await PlayerStats.findOne({ userId: String(ctx.from.id) });
       if (!stats) return ctx.reply(
-`📊 No stats yet
-──────────────
-Play some matches first!`
+`📊 No stats yet\n──────────────\nPlay some matches first!`
       );
       const bat  = calculateBatting(stats);
       const bowl = calculateBowling(stats);
       const name = ctx.from.username
         ? `@${ctx.from.username}`
         : ctx.from.first_name;
-      await ctx.reply(buildStatsCard(name, stats, bat, bowl));
+      await ctx.reply(
+        `\`\`\`\n${buildStatsCard(name, stats, bat, bowl)}\n\`\`\``,
+        { parse_mode: "MarkdownV2" }
+      );
     } catch (err) {
       console.error("mystats error:", err);
       ctx.reply("⚠️ Error: " + err.message);
@@ -111,7 +111,10 @@ Play some matches first!`
       if (!stats) return ctx.reply(`📊 @${username} has no stats yet.`);
       const bat  = calculateBatting(stats);
       const bowl = calculateBowling(stats);
-      await ctx.reply(buildStatsCard(`@${username}`, stats, bat, bowl));
+      await ctx.reply(
+        `\`\`\`\n${buildStatsCard(`@${username}`, stats, bat, bowl)}\n\`\`\``,
+        { parse_mode: "MarkdownV2" }
+      );
     } catch (err) {
       console.error("stats error:", err);
       ctx.reply("⚠️ Error: " + err.message);
@@ -122,7 +125,6 @@ Play some matches first!`
 
   bot.command("reset", async (ctx) => {
     try {
-      // Admin check
       if (!isAdmin(ctx))
         return ctx.reply("❌ You don't have permission to reset stats.");
 
@@ -140,9 +142,7 @@ Play some matches first!`
         const parts = ctx.message.text.trim().split(/\s+/);
         if (parts.length < 2 || !parts[1].startsWith("@"))
           return ctx.reply(
-`ℹ️ Usage:
-  • /reset @username
-  • Reply to a player's message with /reset`
+`ℹ️ Usage:\n  • /reset @username\n  • Reply to a player's message with /reset`
           );
 
         const username = parts[1].replace("@", "").toLowerCase();
@@ -152,21 +152,56 @@ Play some matches first!`
         displayHandle = `@${username}`;
       }
 
-      // Delete the stats document entirely (or use .deleteOne / .updateOne to zero out)
-      const result = await PlayerStats.deleteOne({ userId: targetUserId });
-
-      if (result.deletedCount === 0)
-        return ctx.reply(`⚠️ ${displayHandle} has no stats to reset.`);
-
       await ctx.reply(
-`✅ Stats Reset
-──────────────
-👤 ${displayHandle}'s career stats have been wiped.`
+`⚠️ Reset Stats\n──────────────\n👤 ${displayHandle}\nAre you sure you want to wipe all career stats?`,
+        {
+          reply_markup: {
+            inline_keyboard: [[
+              { text: "✅ Yes, Reset",  callback_data: `reset_confirm:${targetUserId}:${displayHandle}` },
+              { text: "❌ Cancel",      callback_data: `reset_cancel` }
+            ]]
+          }
+        }
       );
 
     } catch (err) {
       console.error("reset error:", err);
       ctx.reply("⚠️ Error: " + err.message);
+    }
+  });
+
+  /* ================= RESET CONFIRM / CANCEL ================= */
+
+  bot.action(/^reset_confirm:(\d+):(.+)$/, async (ctx) => {
+    try {
+      if (!isAdmin(ctx))
+        return ctx.answerCbQuery("❌ You don't have permission.", { show_alert: true });
+
+      const targetUserId  = ctx.match[1];
+      const displayHandle = ctx.match[2];
+
+      const result = await PlayerStats.deleteOne({ userId: targetUserId });
+
+      await ctx.editMessageText(
+        result.deletedCount === 0
+          ? `⚠️ ${displayHandle} has no stats to reset.`
+          : `✅ Stats Reset\n──────────────\n👤 ${displayHandle}'s career stats have been wiped.`
+      );
+      await ctx.answerCbQuery("Done!");
+
+    } catch (err) {
+      console.error("reset_confirm error:", err);
+      await ctx.answerCbQuery("⚠️ Error: " + err.message, { show_alert: true });
+    }
+  });
+
+  bot.action("reset_cancel", async (ctx) => {
+    try {
+      await ctx.editMessageText("❌ Reset cancelled.");
+      await ctx.answerCbQuery("Cancelled.");
+    } catch (err) {
+      console.error("reset_cancel error:", err);
+      await ctx.answerCbQuery("⚠️ Error: " + err.message, { show_alert: true });
     }
   });
 
