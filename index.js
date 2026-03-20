@@ -463,34 +463,32 @@ bot.on("text", async (ctx, next) => {
 
   const text = ctx.message.text.trim();
 
-  /* GROUP BATTER INPUT */
+ /* GROUP BATTER INPUT */
   if (ctx.chat.type !== "private") {
 
     const ballInProgress = match.awaitingBowl || match.awaitingBat;
     if (!ballInProgress) return;
 
-    // ── FIX 3: silently ignore — no need to tell non-strikers they can't input ──
     if (ctx.from.id !== match.striker) return;
 
     if (!/^[0-6]$/.test(text))
       return ctx.reply("❌ Send a number between 0–6.");
 
-    if (match.batNumber !== null || match.ballLocked) return;
+    // ✅ BLOCK early batting input
+    if (!match.awaitingBat) {
+      return ctx.reply("⏳ Wait for bowler to send the ball first.");
+    }
+
+    if (match.ballLocked) {
+      return ctx.reply("⏳ Processing previous ball — please wait");
+    }
 
     match.batNumber = Number(text);
     match.awaitingBat = false;
 
-    if (match.bowlNumber === null) {
-      await ctx.reply("✅ Shot queued — waiting for bowler");
-      return;
-    }
+    if (match.bowlNumber === null) return;
 
-    if (match.ballLocked) {
-      await ctx.reply("⏳ Processing previous ball — please wait");
-      return;
-    }
     match.ballLocked = true;
-
     clearTimers(match);
     return ballHandler.processBall(match);
   }

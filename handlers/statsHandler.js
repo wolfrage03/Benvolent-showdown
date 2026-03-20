@@ -14,10 +14,11 @@ function isAdmin(ctx) {
 /* ================= HELPERS ================= */
 
 // Fixed-width columns: label left-padded to 16, value right-padded to 6
-function row(label, value, labelW = 16, valW = 7) {
-  const lbl = `  ${label}`.padEnd(labelW + 2);
+function row(label, value, labelW = 20, valW = 8) {
+  const lbl = label.padEnd(labelW);
   const val = String(value ?? 0).padStart(valW);
-  return `${lbl}${val}`;
+  return `  ${lbl} : ${val}`;
+}
 }
 
 /* ================= CARD BUILDER ================= */
@@ -90,7 +91,7 @@ Play some matches first!`
       const name = ctx.from.username
         ? `@${ctx.from.username}`
         : ctx.from.first_name;
-      await ctx.reply(buildStatsCard(name, stats, bat, bowl));
+      await ctx.reply(`\`\`\`\n${buildStatsCard(name, stats, bat, bowl)}\n\`\`\``);
     } catch (err) {
       console.error("mystats error:", err);
       ctx.reply("⚠️ Error: " + err.message);
@@ -111,7 +112,7 @@ Play some matches first!`
       if (!stats) return ctx.reply(`📊 @${username} has no stats yet.`);
       const bat  = calculateBatting(stats);
       const bowl = calculateBowling(stats);
-      await ctx.reply(buildStatsCard(`@${username}`, stats, bat, bowl));
+      await ctx.reply(`\`\`\`\n${buildStatsCard(`@${username}`, stats, bat, bowl)}\n\`\`\``);
     } catch (err) {
       console.error("stats error:", err);
       ctx.reply("⚠️ Error: " + err.message);
