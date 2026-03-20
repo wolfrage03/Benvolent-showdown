@@ -18,7 +18,7 @@ function row(label, value, labelW = 20, valW = 8) {
   const lbl = label.padEnd(labelW);
   const val = String(value ?? 0).padStart(valW);
   return `  ${lbl} : ${val}`;
-}
+
 }
 
 /* ================= CARD BUILDER ================= */
