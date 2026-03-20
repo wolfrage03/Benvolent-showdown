@@ -17,8 +17,8 @@ const { sendAndPinPlayerList } = require("./commands/captainCommands");
 const {
   randomLine,
   randomGif,
-  randomBowlingPrompt,
-  randomBatterPrompt,
+  getBowlingCall,
+  getBattingCall,
   getRandomTeams,
   randomMilestoneLine
 } = require("./commentary");
@@ -532,7 +532,7 @@ bot.on("text", async (ctx, next) => {
     { parse_mode: "Markdown" }
   );
 
-  await bot.telegram.sendMessage(match.groupId, randomBatterPrompt());
+  await bot.telegram.sendMessage(match.groupId, getBattingCall().text);
   ballHandler.startTurnTimer(match, "bat");
 });
 
