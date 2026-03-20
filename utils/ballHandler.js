@@ -1,4 +1,4 @@
-const { randomLine, randomBowlingPrompt, randomBatterPrompt, randomMilestoneLine, randomGif } = require("../commentary");
+const { randomLine, getBowlingCall, getBattingCall, randomMilestoneLine, randomGif } = require("../commentary");
 
 /* ================= DEPS (injected via init) ================= */
 
@@ -189,11 +189,24 @@ async function announceBall(match) {
     { parse_mode: "Markdown" }
   );
 
-  await bot.telegram.sendMessage(
-    match.groupId,
-    randomBowlingPrompt(),
-    bowlDMButton()
-  );
+  const bowlingCall = getBowlingCall();
+  const bowlingGif  = bowlingCall.gif;
+  const bowlingOpts = bowlDMButton();
+
+  if (bowlingGif) {
+    try {
+      if (bowlingGif.startsWith("BAAC")) {
+        await bot.telegram.sendVideo(match.groupId, bowlingGif, { caption: bowlingCall.text, ...bowlingOpts });
+      } else {
+        await bot.telegram.sendAnimation(match.groupId, bowlingGif, { caption: bowlingCall.text, ...bowlingOpts });
+      }
+    } catch (e) {
+      console.error("Bowling gif failed:", e.message);
+      await bot.telegram.sendMessage(match.groupId, bowlingCall.text, bowlingOpts);
+    }
+  } else {
+    await bot.telegram.sendMessage(match.groupId, bowlingCall.text, bowlingOpts);
+  }
 
   try {
     const strikerName = getName(match, match.striker);
