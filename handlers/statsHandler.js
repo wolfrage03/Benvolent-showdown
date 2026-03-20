@@ -14,25 +14,25 @@ function isAdmin(ctx) {
 /* ================= HELPERS ================= */
 
 // Fixed-width columns: label left-padded to 16, value right-padded to 6
-function row(label, value, labelW = 20, valW = 8) {
+function row(label, value, labelW = 14, valW = 5) {
   const lbl = label.padEnd(labelW);
   const val = String(value ?? 0).padStart(valW);
-  return `  ${lbl} : ${val}`;
-
+  return `${lbl} : ${val}`;
 }
+
 
 /* ================= CARD BUILDER ================= */
 
 function buildStatsCard(displayName, stats, bat, bowl) {
-  const bold = `━━━━━━━━━━━━━━━━━━━━━━━`;
-  const thin = `───────────────────────`;
+  const bold = `━━━━━━━━━━━━━━`;
+  const thin = `──────────────`;
 
   return [
     bold,
     `  📊 Career Stats`,
     bold,
     ``,
-    `  👤 ${displayName}`,
+    `👤 ${displayName}`,
     row("🏟  Matches",      stats.matches ?? 0),
     row("🏆  Won",          stats.matchesWon ?? 0),
     row("🏅  MOM",          stats.motm ?? 0),
@@ -42,9 +42,9 @@ function buildStatsCard(displayName, stats, bat, bowl) {
     thin,
     row("Innings",          stats.inningsBatting ?? 0),
     row("Runs",             stats.runs ?? 0),
-    row("Balls faced",      stats.balls ?? 0),
-    row("Average",          bat.average),
-    row("Strike Rate",      bat.strikeRate),
+    row("Balls",            stats.balls ?? 0),
+    row("Avg",              bat.average),
+    row("SR",               bat.strikeRate),
     row("4s",               stats.fours ?? 0),
     row("5s",               stats.fives ?? 0),
     row("6s",               stats.sixes ?? 0),
@@ -59,13 +59,13 @@ function buildStatsCard(displayName, stats, bat, bowl) {
     row("Innings",          stats.inningsBowling ?? 0),
     row("Wickets",          stats.wickets ?? 0),
     row("Balls",            stats.ballsBowled ?? 0),
-    row("Runs given",       stats.runsConceded ?? 0),
+    row("Runs",             stats.runsConceded ?? 0),
     row("Economy",          bowl.economy),
     row("Strike Rate",      bowl.strikeRate),
-    row("Average",          bowl.average),
+    row("Avg",              bowl.average),
     row("Maidens",          stats.maidens ?? 0),
-    row("3-wkt hauls",      stats.threeW ?? 0),
-    row("5-wkt hauls",      stats.fiveW ?? 0),
+    row("3W",               stats.threeW ?? 0),
+    row("5W",               stats.fiveW ?? 0),
     row("Best",             `${stats.bestBowlingWickets ?? 0}w/${stats.bestBowlingRuns ?? 0}r`),
     ``,
     bold,
