@@ -466,7 +466,7 @@ bot.on("text", async (ctx) => {
   /* GROUP BATTER INPUT */
   if (ctx.chat.type !== "private") {
 
-    // Only accept batter input after bowler has already sent their number
+    // Only accept batter input after bowler has sent their number
     if (!match.awaitingBat) return;
 
     // Silently ignore non-strikers

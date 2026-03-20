@@ -79,9 +79,7 @@ Play some matches first!`
       const name = ctx.from.username
         ? `@${ctx.from.username}`
         : ctx.from.first_name;
-      await ctx.reply(````
-${buildStatsCard(name, stats, bat, bowl)}
-````, { parse_mode: "MarkdownV2" });
+      await ctx.reply("```\n" + buildStatsCard(name, stats, bat, bowl) + "\n```", { parse_mode: "MarkdownV2" });
     } catch (err) {
       console.error("mystats error:", err);
       ctx.reply("⚠️ Error: " + err.message);
@@ -102,9 +100,7 @@ ${buildStatsCard(name, stats, bat, bowl)}
       if (!stats) return ctx.reply(`📊 @${username} has no stats yet.`);
       const bat  = calculateBatting(stats);
       const bowl = calculateBowling(stats);
-      await ctx.reply(````
-${buildStatsCard(`@${username}`, stats, bat, bowl)}
-````, { parse_mode: "MarkdownV2" });
+      await ctx.reply("```\n" + buildStatsCard(`@${username}`, stats, bat, bowl) + "\n```", { parse_mode: "MarkdownV2" });
     } catch (err) {
       console.error("stats error:", err);
       ctx.reply("⚠️ Error: " + err.message);
