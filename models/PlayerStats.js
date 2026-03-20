@@ -31,4 +31,5 @@ const playerStatsSchema = new mongoose.Schema({
 
 }, { timestamps: true });
 
-module.exports = mongoose.model("PlayerStats", playerStatsSchema);
+module.exports =
+  mongoose.models.PlayerStats || mongoose.model("PlayerStats", playerStatsSchema);

@@ -261,18 +261,78 @@ async function endInnings(match) {
 
   /* ── SECOND INNINGS — SAVE STATS ── */
   try {
+    // ── Save innings 1 batter stats ──
+    const inn1Bat  = match.firstInningsData?.batterStats  || {};
+    const inn1Bowl = match.firstInningsData?.bowlerStats  || {};
+
+    for (const playerId in inn1Bat) {
+      const b = inn1Bat[playerId];
+      const sr = b.balls > 0 ? (b.runs / b.balls) * 100 : 0;
+      await updatePlayerStats(playerId, {
+        runs:          b.runs,
+        balls:         b.balls,
+        fours:         b.fours  ?? 0,
+        fives:         b.fives  ?? 0,
+        sixes:         b.sixes  ?? 0,
+        inningsBatting: 1,
+        ...(b.runs === 0          ? { ducks: 1 }   : {}),
+        ...(b.runs >= 50 && b.runs < 100 ? { fifties: 1 }  : {}),
+        ...(b.runs >= 100         ? { hundreds: 1 } : {}),
+        bestScore:     b.runs,
+      });
+    }
+
+    // ── Save innings 1 bowler stats ──
+    for (const playerId in inn1Bowl) {
+      const b = inn1Bowl[playerId];
+      await updatePlayerStats(playerId, {
+        wickets:      b.wickets,
+        ballsBowled:  b.balls,
+        runsConceded: b.runs,
+        inningsBowling: 1,
+        ...(b.wickets >= 3 ? { threeW: 1 } : {}),
+        ...(b.wickets >= 5 ? { fiveW:  1 } : {}),
+        bestBowlingWickets: b.wickets,
+        bestBowlingRuns:    b.runs,
+      });
+    }
+
+    // ── Save innings 2 batter stats ──
     for (const playerId in match.batterStats) {
       const b = match.batterStats[playerId];
-      await updatePlayerStats(playerId, { runs: b.runs, balls: b.balls, inningsBatting: 1 });
+      await updatePlayerStats(playerId, {
+        runs:          b.runs,
+        balls:         b.balls,
+        fours:         b.fours  ?? 0,
+        fives:         b.fives  ?? 0,
+        sixes:         b.sixes  ?? 0,
+        inningsBatting: 1,
+        ...(b.runs === 0          ? { ducks: 1 }   : {}),
+        ...(b.runs >= 50 && b.runs < 100 ? { fifties: 1 }  : {}),
+        ...(b.runs >= 100         ? { hundreds: 1 } : {}),
+        bestScore:     b.runs,
+      });
     }
+
+    // ── Save innings 2 bowler stats ──
     for (const playerId in match.bowlerStats) {
       const b = match.bowlerStats[playerId];
       await updatePlayerStats(playerId, {
-        wickets: b.wickets, ballsBowled: b.balls, runsConceded: b.runs, inningsBowling: 1
+        wickets:      b.wickets,
+        ballsBowled:  b.balls,
+        runsConceded: b.runs,
+        inningsBowling: 1,
+        ...(b.wickets >= 3 ? { threeW: 1 } : {}),
+        ...(b.wickets >= 5 ? { fiveW:  1 } : {}),
+        bestBowlingWickets: b.wickets,
+        bestBowlingRuns:    b.runs,
       });
     }
+
+    // ── Save match played for all players ──
     for (const p of [...match.teamA, ...match.teamB])
       await updatePlayerStats(p.id, { matches: 1 });
+
   } catch (err) { console.error("Stats update error:", err); }
 
   try {
