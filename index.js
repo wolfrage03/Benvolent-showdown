@@ -454,9 +454,9 @@ bot.command("score", async (ctx) => {
 
 /* ================= HANDLE INPUT ================= */
 
-bot.on("text", async (ctx) => {
+bot.on("text", async (ctx, next) => {
 
-  if (ctx.message.text.startsWith("/")) return(next);
+  if (ctx.message.text.startsWith("/")) return next();
 
   const match = getMatch(ctx);
   if (!match) return;
