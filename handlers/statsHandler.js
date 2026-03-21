@@ -13,10 +13,17 @@ function isAdmin(ctx) {
 
 /* ================= HELPERS ================= */
 
-// Fixed-width columns: label left-padded to 16, value right-padded to 6
+// Standard row: label left-padded to 14, single value right-padded to 5
 function row(label, value, labelW = 14, valW = 5) {
   const lbl = label.padEnd(labelW);
   const val = String(value ?? 0).padStart(valW);
+  return `${lbl} : ${val}`;
+}
+
+// Combined row: for "x / y" or "x / y / z" values — wider right column
+function rowCombined(label, value, labelW = 14, valW = 11) {
+  const lbl = label.padEnd(labelW);
+  const val = String(value).padStart(valW);
   return `${lbl} : ${val}`;
 }
 
@@ -26,6 +33,7 @@ function row(label, value, labelW = 14, valW = 5) {
 function buildStatsCard(displayName, stats, bat, bowl) {
   const bold = `━━━━━━━━━━━━━━`;
   const thin = `──────────────`;
+  const lost = (stats.matches ?? 0) - (stats.matchesWon ?? 0);
 
   return [
     bold,
@@ -33,40 +41,38 @@ function buildStatsCard(displayName, stats, bat, bowl) {
     bold,
     ``,
     `👤 ${displayName}`,
-    row("🏟  Matches",      stats.matches ?? 0),
-    row("🏆  Won",          stats.matchesWon ?? 0),
-    row("🏅  MOM",          stats.motm ?? 0),
+    row("🏟  Matches",    stats.matches ?? 0),
+    row("🏆  Won",        stats.matchesWon ?? 0),
+    row("❌ Lost",        lost),
+    row("🏅  MOM",        stats.motm ?? 0),
+    row("🎙  Hosted",     stats.hosted ?? 0),
     ``,
     thin,
     `  🏏 BATTING`,
     thin,
-    row("Innings",          stats.inningsBatting ?? 0),
-    row("Runs",             stats.runs ?? 0),
-    row("Balls",            stats.balls ?? 0),
-    row("Avg",              bat.average),
-    row("SR",               bat.strikeRate),
-    row("4s",               stats.fours ?? 0),
-    row("5s",               stats.fives ?? 0),
-    row("6s",               stats.sixes ?? 0),
-    row("Best Score",       stats.bestScore ?? 0),
-    row("50s",              stats.fifties ?? 0),
-    row("100s",             stats.hundreds ?? 0),
-    row("Ducks",            stats.ducks ?? 0),
+    row("Innings",        stats.inningsBatting ?? 0),
+    row("Runs",           stats.runs ?? 0),
+    row("Balls",          stats.balls ?? 0),
+    row("Avg",            bat.average),
+    row("SR",             bat.strikeRate),
+    rowCombined("4s / 5s / 6s", `${stats.fours ?? 0} / ${stats.fives ?? 0} / ${stats.sixes ?? 0}`),
+    row("Best Score",     stats.bestScore ?? 0),
+    rowCombined("50s / 100s",   `${stats.fifties ?? 0} / ${stats.hundreds ?? 0}`),
+    row("Ducks",          stats.ducks ?? 0),
     ``,
     thin,
     `  🎯 BOWLING`,
     thin,
-    row("Innings",          stats.inningsBowling ?? 0),
-    row("Wickets",          stats.wickets ?? 0),
-    row("Balls",            stats.ballsBowled ?? 0),
-    row("Runs",             stats.runsConceded ?? 0),
-    row("Economy",          bowl.economy),
-    row("Strike Rate",      bowl.strikeRate),
-    row("Avg",              bowl.average),
-    row("Maidens",          stats.maidens ?? 0),
-    row("3W",               stats.threeW ?? 0),
-    row("5W",               stats.fiveW ?? 0),
-    row("Best",             `${stats.bestBowlingWickets ?? 0}w/${stats.bestBowlingRuns ?? 0}r`),
+    row("Innings",        stats.inningsBowling ?? 0),
+    row("Wickets",        stats.wickets ?? 0),
+    row("Balls",          stats.ballsBowled ?? 0),
+    row("Runs",           stats.runsConceded ?? 0),
+    row("Economy",        bowl.economy),
+    row("Strike Rate",    bowl.strikeRate),
+    row("Avg",            bowl.average),
+    row("Maidens",        stats.maidens ?? 0),
+    rowCombined("3W / 5W",      `${stats.threeW ?? 0} / ${stats.fiveW ?? 0}`),
+    rowCombined("Best",         `${stats.bestBowlingWickets ?? 0} / ${stats.bestBowlingRuns ?? 0}`),
     ``,
     bold,
   ].join("\n");
@@ -91,7 +97,7 @@ Play some matches first!`
       const name = ctx.from.username
         ? `@${ctx.from.username}`
         : ctx.from.first_name;
-      await ctx.reply(`\`\`\`\n${buildStatsCard(name, stats, bat, bowl)}\n\`\`\``);
+      await ctx.reply(buildStatsCard(name, stats, bat, bowl), { parse_mode: "Markdown" });
     } catch (err) {
       console.error("mystats error:", err);
       ctx.reply("⚠️ Error: " + err.message);
@@ -112,7 +118,7 @@ Play some matches first!`
       if (!stats) return ctx.reply(`📊 @${username} has no stats yet.`);
       const bat  = calculateBatting(stats);
       const bowl = calculateBowling(stats);
-      await ctx.reply(`\`\`\`\n${buildStatsCard(`@${username}`, stats, bat, bowl)}\n\`\`\``);
+      await ctx.reply(buildStatsCard(`@${username}`, stats, bat, bowl), { parse_mode: "Markdown" });
     } catch (err) {
       console.error("stats error:", err);
       ctx.reply("⚠️ Error: " + err.message);
