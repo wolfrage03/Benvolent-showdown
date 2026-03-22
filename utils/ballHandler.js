@@ -1,4 +1,4 @@
-const { randomLine, getBowlingCall, getBattingCall, randomMilestoneLine, randomGif } = require("../commentary");
+const { randomLine, getBowlingCall, getBattingCall, getHattrickCall, randomMilestoneLine, randomGif } = require("../commentary");
 
 /* ================= DEPS (injected via init) ================= */
 
@@ -346,7 +346,21 @@ Cannot play 0 — two wickets in a row!`
 
       // ── Hattrick ──
       if (match.wicketStreak === 3) {
-        await bot.telegram.sendMessage(match.groupId, randomLine('hattrick'));
+        const hattrickCall = getHattrickCall();
+        if (hattrickCall.gif) {
+          try {
+            if (hattrickCall.gif.startsWith("BAAC")) {
+              await bot.telegram.sendVideo(match.groupId, hattrickCall.gif, { caption: hattrickCall.text });
+            } else {
+              await bot.telegram.sendAnimation(match.groupId, hattrickCall.gif, { caption: hattrickCall.text });
+            }
+          } catch (e) {
+            console.error("Hattrick gif failed:", e.message);
+            await bot.telegram.sendMessage(match.groupId, hattrickCall.text);
+          }
+        } else {
+          await bot.telegram.sendMessage(match.groupId, hattrickCall.text);
+        }
         match.wicketStreak = 0;
       }
 

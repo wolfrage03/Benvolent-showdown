@@ -19,6 +19,7 @@ const {
   randomGif,
   getBowlingCall,
   getBattingCall,
+  getHattrickCall,
   getRandomTeams,
   randomMilestoneLine
 } = require("./commentary");
