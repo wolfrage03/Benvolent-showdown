@@ -255,7 +255,7 @@ bot.command("batter", async (ctx) => {
   /* STRIKER */
   if (match.phase === "set_striker") {
 
-    if (!match.maxWickets) {
+    if (match.maxWickets == null) {
       match.maxWickets =
         (match.battingTeam === "A" ? match.teamA.length : match.teamB.length) - 1;
     }

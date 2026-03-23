@@ -371,7 +371,7 @@ Cannot play 0 — two wickets in a row!`
         match.wicketStreak = 0;
       }
 
-      if (match.wickets >= match.maxWickets || match.wickets === battingPlayers(match).length - 1) {
+      if (match.wickets >= match.maxWickets) {
         match.inningsEnded = true;
         match.awaitingBowl = false;
         match.awaitingBat  = false;

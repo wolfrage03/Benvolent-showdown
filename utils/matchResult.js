@@ -201,7 +201,7 @@ async function endInnings(match) {
 
     match.score                   = 0;
     match.wickets                 = 0;
-    match.maxWickets              = (match.battingTeam === "A" ? match.teamA.length : match.teamB.length) - 1;
+    match.maxWickets              = null;  // recalculated when /batter sets opener
     match.currentOver             = 0;
     match.currentBall             = 0;
     match.currentOverNumber       = 0;
