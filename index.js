@@ -395,15 +395,15 @@ function getLiveScore(match) {
   const totalBalls  = (match.totalOvers || 0) * 6;
   const ballsLeft   = Math.max(totalBalls - ballsBowled, 0);
   const runRate     = ballsBowled > 0
-    ? ((match.score / ballsBowled) * 6).toFixed(2) : "0.00";
+    ? esc(((match.score / ballsBowled) * 6).toFixed(2)) : "0\\.00";
 
   let chaseBlock = "";
   if (match.innings === 2) {
     const runsNeeded = (match.firstInningsScore + 1) - match.score;
     const rrr = (runsNeeded > 0 && ballsLeft > 0)
-      ? ((runsNeeded / ballsLeft) * 6).toFixed(2) : "\-";
+      ? esc(((runsNeeded / ballsLeft) * 6).toFixed(2)) : "\\-";
     chaseBlock = runsNeeded > 0
-      ? `🏹 *Need ${esc(runsNeeded)} from ${esc(ballsLeft)} balls*   *RRR: ${esc(rrr)}*`
+      ? `🏹 *Need ${esc(runsNeeded)} from ${esc(ballsLeft)} balls*   *RRR: ${rrr}*`
       : `✅ *Target achieved\!*`;
   }
 
@@ -413,8 +413,8 @@ function getLiveScore(match) {
   const nstSR = nst.balls > 0 ? ((nst.runs / nst.balls) * 100).toFixed(0) : "0";
 
   const bwl   = match.bowlerStats?.[match.bowler] || { balls: 0, runs: 0, wickets: 0, history: [] };
-  const bwlOv = `${Math.floor(bwl.balls / 6)}\.${bwl.balls % 6}`;
-  const econ  = bwl.balls > 0 ? ((bwl.runs / bwl.balls) * 6).toFixed(2) : "0\.00";
+  const bwlOv = `${Math.floor(bwl.balls / 6)}\\.${bwl.balls % 6}`;
+  const econ  = bwl.balls > 0 ? esc(((bwl.runs / bwl.balls) * 6).toFixed(2)) : "0\\.00";
 
   const partRuns  = match.currentPartnershipRuns  || 0;
   const partBalls = match.currentPartnershipBalls || 0;
@@ -434,7 +434,7 @@ function getLiveScore(match) {
     `🏏 *${battingTeamName}* \(Team ${battingTeamLetter}\)  batting`,
     `🎯 *${bowlingTeamName}* \(Team ${bowlingTeamLetter}\)  bowling`,
     ``,
-    `📊 *${match.score}/${match.wickets}*   ⚙️ *${match.currentOver}\.${match.currentBall}/${match.totalOvers}*   📈 *${esc(runRate)}*`,
+    `📊 *${match.score}/${match.wickets}*   ⚙️ *${match.currentOver}\.${match.currentBall}/${match.totalOvers}*   📈 *${runRate}*`,
   ];
 
   if (chaseBlock) lines.push(chaseBlock);
@@ -460,7 +460,7 @@ function getLiveScore(match) {
     `🤝 *Partnership:* ${partRuns}\(${partBalls}\)`,
     ``,
     `*─── 🎾 Bowling ───*`,
-    `🎾 *${short(bowlerName)}*  🔵*${bwlOv}*  🔴*${bwl.runs}*  💀*${bwl.wickets}w*  📉*${esc(econ)}*`,
+    `🎾 *${short(bowlerName)}*  🔵*${bwlOv}*  🔴*${bwl.runs}*  💀*${bwl.wickets}w*  📉*${econ}*`,
     `┗━ _This over:_ ${overBalls}`
   );
 

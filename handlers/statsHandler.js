@@ -11,6 +11,12 @@ function isAdmin(ctx) {
   return ADMIN_USERNAMES.includes(username);
 }
 
+/* ================= ESCAPE UTILITY ================= */
+
+function esc(v) {
+  return String(v ?? "").replace(/([_*[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
+}
+
 /* ================= CARD BUILDER ================= */
 
 function buildStatsCard(displayName, firstName, stats, bat, bowl) {
@@ -18,33 +24,33 @@ function buildStatsCard(displayName, firstName, stats, bat, bowl) {
 
   return [
     `*📊 Career Stats*`,
-    `*👤* ${firstName ? firstName + ' ' : ''}*${displayName}*`,
+    `*👤* ${firstName ? esc(firstName) + ' ' : ''}*${esc(displayName)}*`,
     ``,
-    `*🏟 Matches:* ${stats.matches ?? 0}`,
-    `*✅ Won:* ${stats.matchesWon ?? 0}  |  *❌ Lost:* ${lost}`,
-    `*🏅 MOM:* ${stats.motm ?? 0}`,
-    `*🎙 Hosted:* ${stats.hosted ?? 0}`,
+    `*🏟 Matches:* ${esc(stats.matches ?? 0)}`,
+    `*✅ Won:* ${esc(stats.matchesWon ?? 0)}  \\|  *❌ Lost:* ${esc(lost)}`,
+    `*🏅 MOM:* ${esc(stats.motm ?? 0)}`,
+    `*🎙 Hosted:* ${esc(stats.hosted ?? 0)}`,
     ``,
     `*─── 🏏 Batting ───*`,
-    `*🔢  Innings:* ${stats.inningsBatting ?? 0}`,
-    `*🏃  Runs:* ${stats.runs ?? 0}  |  *⚾ Balls:* ${stats.balls ?? 0}`,
-    `*📈  Avg:* ${bat.average}  |  *⚡ SR:* ${bat.strikeRate}`,
-    `*🏏  Fours:* ${stats.fours ?? 0}`,
-    `*💫  Fives:* ${stats.fives ?? 0}`,
-    `*🚀  Sixes:* ${stats.sixes ?? 0}`,
-    `*⑤⓪ Half Century:* ${stats.fifties ?? 0}`,
-    `*💯  Century:* ${stats.hundreds ?? 0}`,
-    `*🌟  Best:* ${stats.bestScore ?? 0}  |  *🦆 Ducks:* ${stats.ducks ?? 0}`,
+    `*🔢  Innings:* ${esc(stats.inningsBatting ?? 0)}`,
+    `*🏃  Runs:* ${esc(stats.runs ?? 0)}  \\|  *⚾ Balls:* ${esc(stats.balls ?? 0)}`,
+    `*📈  Avg:* ${esc(bat.average)}  \\|  *⚡ SR:* ${esc(bat.strikeRate)}`,
+    `*🏏  Fours:* ${esc(stats.fours ?? 0)}`,
+    `*💫  Fives:* ${esc(stats.fives ?? 0)}`,
+    `*🚀  Sixes:* ${esc(stats.sixes ?? 0)}`,
+    `*⑤⓪ Half Century:* ${esc(stats.fifties ?? 0)}`,
+    `*💯  Century:* ${esc(stats.hundreds ?? 0)}`,
+    `*🌟  Best:* ${esc(stats.bestScore ?? 0)}  \\|  *🦆 Ducks:* ${esc(stats.ducks ?? 0)}`,
     ``,
     `*─── 🎯 Bowling ───*`,
-    `*🔢 Innings:* ${stats.inningsBowling ?? 0}`,
-    `*🎳 Wickets:* ${stats.wickets ?? 0}  |  *⚾ Balls:* ${stats.ballsBowled ?? 0}`,
-    `*💸 Runs:* ${stats.runsConceded ?? 0}  |  *🔒 Maidens:* ${stats.maidens ?? 0}`,
-    `*📉 Econ:* ${bowl.economy}  |  *⚡ SR:* ${bowl.strikeRate}`,
-    `*📊 Avg:* ${bowl.average}`,
-    `*🎩 3\\-Wicket Haul:* ${stats.threeW ?? 0}`,
-    `*👑 5\\-Wicket Haul:* ${stats.fiveW ?? 0}`,
-    `*🏆 Best:* ${stats.bestBowlingWickets ?? 0} / ${stats.bestBowlingRuns ?? 0}`,
+    `*🔢 Innings:* ${esc(stats.inningsBowling ?? 0)}`,
+    `*🎳 Wickets:* ${esc(stats.wickets ?? 0)}  \\|  *⚾ Balls:* ${esc(stats.ballsBowled ?? 0)}`,
+    `*💸 Runs:* ${esc(stats.runsConceded ?? 0)}  \\|  *🔒 Maidens:* ${esc(stats.maidens ?? 0)}`,
+    `*📉 Econ:* ${esc(bowl.economy)}  \\|  *⚡ SR:* ${esc(bowl.strikeRate)}`,
+    `*📊 Avg:* ${esc(bowl.average)}`,
+    `*🎩 3\\-Wicket Haul:* ${esc(stats.threeW ?? 0)}`,
+    `*👑 5\\-Wicket Haul:* ${esc(stats.fiveW ?? 0)}`,
+    `*🏆 Best:* ${esc(stats.bestBowlingWickets ?? 0)} / ${esc(stats.bestBowlingRuns ?? 0)}`,
   ].join("\n");
 }
 
