@@ -143,7 +143,6 @@ Consecutive delays
         );
 
         if (match.wickets >= match.maxWickets) {
-          match.inningsEnded = true;
           match.awaitingBowl = false;
           match.awaitingBat  = false;
           await endInnings(match);
@@ -237,7 +236,6 @@ async function startBall(match) {
   if (match.phase === "new_batter") return;
   if (match.currentOver >= match.totalOvers) return;
   if (match.wickets >= match.maxWickets) {
-    match.inningsEnded = true;
     match.awaitingBowl = false;
     match.awaitingBat  = false;
     await endInnings(match);
@@ -372,7 +370,6 @@ Cannot play 0 — two wickets in a row!`
       }
 
       if (match.wickets >= match.maxWickets) {
-        match.inningsEnded = true;
         match.awaitingBowl = false;
         match.awaitingBat  = false;
         await endInnings(match);
