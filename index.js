@@ -91,10 +91,35 @@ function getName(match, id) {
 
 function clearTimers(match) {
   if (!match) return;
-  if (match.warning30) { clearTimeout(match.warning30); match.warning30 = null; }
-  if (match.warning10) { clearTimeout(match.warning10); match.warning10 = null; }
-  if (match.ballTimer)  { clearTimeout(match.ballTimer);  match.ballTimer  = null; }
+
+  if (match.warning30) {
+    clearTimeout(match.warning30);
+    match.warning30 = null;
+  }
+
+  if (match.warning10) {
+    clearTimeout(match.warning10);
+    match.warning10 = null;
+  }
+
+  if (match.ballTimer) {
+    clearTimeout(match.ballTimer);
+    match.ballTimer = null;
+  }
+
+
+  if (match.bowlerTimer) {
+    clearTimeout(match.bowlerTimer);
+    match.bowlerTimer = null;
+  }
+
+  match.teamTimerStart = null;
 }
+
+
+
+
+
 
 function bowlDMButton() {
   return {
@@ -186,6 +211,46 @@ async function checkOverEnd(match) {
 ───────────
 👉 /bowler [number] new bowler`
     );
+
+match.teamTimerStart = Date.now();
+
+const remaining = match.teamBowlerTimeLeft;
+
+if (match.bowlerTimer) clearTimeout(match.bowlerTimer);
+
+match.bowlerTimer = setTimeout(async () => {
+
+  const timeUsed = Date.now() - match.teamTimerStart;
+  match.teamBowlerTimeLeft -= timeUsed;
+  match.teamTimerStart = null;
+
+  if (match.teamBowlerTimeLeft <= 0) {
+    match.teamBowlerTimeLeft = 0;
+
+    await bot.telegram.sendMessage(
+      match.groupId,
+      `❌ Team time exhausted!\nNo more delay allowed.`
+    );
+    return;
+  }
+
+  await bot.telegram.sendMessage(
+    match.groupId,
+    `⚠️ Time running out!\n⏳ Remaining: ${Math.ceil(match.teamBowlerTimeLeft / 1000)} sec`
+  );
+
+  // 🔁 Restart timer with remaining time
+  match.teamTimerStart = Date.now();
+
+  match.bowlerTimer = setTimeout(async () => {
+    await bot.telegram.sendMessage(
+      match.groupId,
+      `❌ Final time over!`
+    );
+  }, match.teamBowlerTimeLeft);
+
+}, remaining);
+
   } catch (e) { console.error("Over message failed:", e.message); }
 
   return true;
@@ -334,6 +399,17 @@ bot.command("bowler", async (ctx) => {
 
   const match = getMatch(ctx);
   if (!match) return;
+  
+    clearTimers(match);
+
+  if (match.teamTimerStart) {
+    const timeUsed = Date.now() - match.teamTimerStart;
+    match.teamBowlerTimeLeft = Math.max(
+      0,
+      match.teamBowlerTimeLeft - timeUsed
+    );
+    match.teamTimerStart = null;
+  }
 
   if (match.phase !== "set_bowler")
     return ctx.reply("⚠️ You can set bowler only when bot asks.");
@@ -376,9 +452,32 @@ bot.command("bowler", async (ctx) => {
 ╰───────────╯
 🏐 ${player.name} is bowling
 ───────────
-Ball starting...`
-  );
-  await ballHandler.startBall(match);
+⏳ Match starts in 10 seconds...`
+);
+
+// 🎬 Random bowler intro GIF
+const bowlerGifs = [
+  "BAACAgUAAxkBAAIJfWnBelaThJee7yBAxXWNeOmhcCGCAAKGHAACs1cJVmqG-ZQwIu4hOgQ",
+  "BAACAgUAAxkBAAIJe2nBelXWMUZUY09vZGd9kYFPvy_BAAKFHAACs1cJVsF4_dM2pDpBOgQ",
+  "BAACAgUAAxkBAAIJeWnBelKKo4PdGcGOXTqhBtlpIqEYAAKEHAACs1cJVjgHBeYIhQIYOgQ",
+  "BAACAgUAAxkBAAIJd2nBelHvjYpcrQHMF3uICwqE5HatAAKDHAACs1cJVo_Wr43LJGhTOgQ"
+];
+
+const randomGif = bowlerGifs[Math.floor(Math.random() * bowlerGifs.length)];
+
+try {
+await ctx.reply(`⏳ Get ready...`);
+
+setTimeout(async () => {
+  try {
+    await ctx.telegram.sendVideo(match.groupId, randomGif);
+  } catch {}
+
+  setTimeout(() => {
+    ballHandler.startBall(match);
+  }, 10000);
+
+}, 1000);
 });
 
 

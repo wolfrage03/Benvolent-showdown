@@ -34,6 +34,8 @@ function resetMatch(groupId) {
     if (oldMatch.warning10)           clearTimeout(oldMatch.warning10);
     if (oldMatch.joinTimer)           clearTimeout(oldMatch.joinTimer);
     if (oldMatch.hostChange?.timeout) clearTimeout(oldMatch.hostChange.timeout);
+    if (oldMatch.bowlerTimer) clearTimeout(oldMatch.bowlerTimer);
+    oldMatch.teamTimerStart = null;
 
     for (const [userId, gid] of playerActiveMatch.entries()) {
       if (gid === groupId) playerActiveMatch.delete(userId);
@@ -120,6 +122,9 @@ function resetMatch(groupId) {
     warning10:              null,
     ballTimer:              null,
     joinTimer:              null,
+    bowlerTimer: null,
+    teamBowlerTimeLeft: 300000, // persists entire innings
+    teamTimerStart: null,
 
     // ── UI ──
     playerListMessageId:    null,
