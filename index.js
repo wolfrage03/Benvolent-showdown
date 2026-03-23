@@ -19,7 +19,6 @@ const {
   randomGif,
   getBowlingCall,
   getBattingCall,
-  getHattrickCall,
   getRandomTeams,
   randomMilestoneLine
 } = require("./commentary");
@@ -115,18 +114,17 @@ async function sendWithGif(groupId, gifType, text) {
   if (fileId) {
     try {
       if (fileId.startsWith("BAAC")) {
-        await bot.telegram.sendVideo(groupId, fileId, { caption: text });
+        await bot.telegram.sendVideo(groupId, fileId, { caption: text, parse_mode: "Markdown" });
       } else {
-        await bot.telegram.sendAnimation(groupId, fileId, { caption: text });
+        await bot.telegram.sendAnimation(groupId, fileId, { caption: text, parse_mode: "Markdown" });
       }
       return;
     } catch (e) {
       console.error("sendWithGif failed:", e.message);
-      // Fallback: text only
-      await bot.telegram.sendMessage(groupId, text);
+      await bot.telegram.sendMessage(groupId, text, { parse_mode: "Markdown" });
     }
   } else {
-    await bot.telegram.sendMessage(groupId, text);
+    await bot.telegram.sendMessage(groupId, text, { parse_mode: "Markdown" });
   }
 }
 async function advanceGame(match) {
@@ -166,7 +164,7 @@ async function checkOverEnd(match) {
   }
 
   try {
-    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName));
+    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "MarkdownV2" });
   } catch (e) { console.error("Scorecard failed:", e.message); }
 
   match.lastOverBowler = match.bowler;
@@ -386,6 +384,10 @@ Ball starting...`
 
 /* ================= LIVE SCORE ================= */
 
+function esc(text) {
+  return String(text).replace(/[_*[\]()~`>#+\-=|{}.!\\]/g, '\\$&');
+}
+
 function getLiveScore(match) {
   if (!match) return "⚠️ No active match.";
 
@@ -399,10 +401,10 @@ function getLiveScore(match) {
   if (match.innings === 2) {
     const runsNeeded = (match.firstInningsScore + 1) - match.score;
     const rrr = (runsNeeded > 0 && ballsLeft > 0)
-      ? ((runsNeeded / ballsLeft) * 6).toFixed(2) : "-";
+      ? ((runsNeeded / ballsLeft) * 6).toFixed(2) : "\-";
     chaseBlock = runsNeeded > 0
-      ? `🏹 Need ${runsNeeded} from ${ballsLeft} balls   RRR: ${rrr}`
-      : `✅ Target achieved!`;
+      ? `🏹 *Need ${esc(runsNeeded)} from ${esc(ballsLeft)} balls*   *RRR: ${esc(rrr)}*`
+      : `✅ *Target achieved\!*`;
   }
 
   const st  = match.batterStats?.[match.striker]    || { runs: 0, balls: 0 };
@@ -411,43 +413,64 @@ function getLiveScore(match) {
   const nstSR = nst.balls > 0 ? ((nst.runs / nst.balls) * 100).toFixed(0) : "0";
 
   const bwl   = match.bowlerStats?.[match.bowler] || { balls: 0, runs: 0, wickets: 0, history: [] };
-  const bwlOv = `${Math.floor(bwl.balls / 6)}.${bwl.balls % 6}`;
-  const econ  = bwl.balls > 0 ? ((bwl.runs / bwl.balls) * 6).toFixed(2) : "0.00";
+  const bwlOv = `${Math.floor(bwl.balls / 6)}\.${bwl.balls % 6}`;
+  const econ  = bwl.balls > 0 ? ((bwl.runs / bwl.balls) * 6).toFixed(2) : "0\.00";
 
   const partRuns  = match.currentPartnershipRuns  || 0;
   const partBalls = match.currentPartnershipBalls || 0;
 
-  const strikerName    = getName(match, match.striker);
-  const nonStrikerName = getName(match, match.nonStriker);
-  const bowlerName     = getName(match, match.bowler);
+  const strikerName    = esc(getName(match, match.striker));
+  const nonStrikerName = esc(getName(match, match.nonStriker));
+  const bowlerName     = esc(getName(match, match.bowler));
 
   const battingTeamLetter = match.battingTeam;
   const bowlingTeamLetter = match.bowlingTeam;
-  const battingTeamName = battingTeamLetter === "A" ? match.teamAName : match.teamBName;
-  const bowlingTeamName = bowlingTeamLetter === "A" ? match.teamAName : match.teamBName;
+  const battingTeamName = esc(battingTeamLetter === "A" ? match.teamAName : match.teamBName);
+  const bowlingTeamName = esc(bowlingTeamLetter === "A" ? match.teamAName : match.teamBName);
 
-  return (
-`╭───────────╮
-   📊 Live Score
-╰───────────╯
-🏏 〔Team ${battingTeamLetter}〕 ${battingTeamName}  batting
-🎯 〔Team ${bowlingTeamLetter}〕 ${bowlingTeamName}  bowling
-───────────
-📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}.${match.currentBall}/${match.totalOvers}   📈 ${runRate}
-${chaseBlock ? chaseBlock + "\n" : ""}───────────
-─────⊱ 〔 🏏 BATTING 〕⊰─────
-🏏 ${strikerName}   ${st.runs}(${st.balls})   SR:${stSR}
-🪄 ${nonStrikerName}   ${nst.runs}(${nst.balls})   SR:${nstSR}
-🤝 Partnership   ${partRuns}(${partBalls})
-─────⊱ 〔 🏐 BOWLING 〕⊰─────
-🏐 ${bowlerName}   ${bwlOv}ov   ${bwl.runs}r   ${bwl.wickets}w   E:${econ}`
+  const lines = [
+    `*📊 Live Score*`,
+    ``,
+    `🏏 *${battingTeamName}* \(Team ${battingTeamLetter}\)  batting`,
+    `🎯 *${bowlingTeamName}* \(Team ${bowlingTeamLetter}\)  bowling`,
+    ``,
+    `📊 *${match.score}/${match.wickets}*   ⚙️ *${match.currentOver}\.${match.currentBall}/${match.totalOvers}*   📈 *${esc(runRate)}*`,
+  ];
+
+  if (chaseBlock) lines.push(chaseBlock);
+
+  // Current over history
+  const currentOverHistory = (match.overHistory || []).find(
+    o => o.bowler === match.bowler && o.over === match.currentOver + 1
   );
+  const overBalls = currentOverHistory
+    ? currentOverHistory.balls.map(x => x === "W" ? "🎳" : esc(String(x))).join("  ")
+    : "—";
+
+  // Truncate name for mobile
+  function short(name) {
+    return name.length > 10 ? name.substring(0, 9) + "…" : name;
+  }
+
+  lines.push(
+    ``,
+    `*─── 🏏 Batting ───*`,
+    `🏏 *${short(strikerName)}*  *${st.runs}\(${st.balls}\)*  ⚡*SR:${stSR}*`,
+    `🪄 *${short(nonStrikerName)}*  *${nst.runs}\(${nst.balls}\)*  ⚡*SR:${nstSR}*`,
+    `🤝 *Partnership:* ${partRuns}\(${partBalls}\)`,
+    ``,
+    `*─── 🎾 Bowling ───*`,
+    `🎾 *${short(bowlerName)}*  🔵*${bwlOv}*  🔴*${bwl.runs}*  💀*${bwl.wickets}w*  📉*${esc(econ)}*`,
+    `┗━ _This over:_ ${overBalls}`
+  );
+
+  return lines.join("\n");
 }
 
 bot.command("score", async (ctx) => {
   const match = getMatch(ctx);
   if (!match) return ctx.reply("⚠️ No active match.");
-  await ctx.reply(getLiveScore(match));
+  await ctx.reply(getLiveScore(match), { parse_mode: "MarkdownV2" });
 });
 
 

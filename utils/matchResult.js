@@ -3,15 +3,12 @@ const updatePlayerStats   = require("../utils/updateStats");
 const { sendAndPinPlayerList } = require("../commands/captainCommands");
 const { matches, playerActiveMatch } = require("../matchManager");
 
-/* ================= HELPERS (injected from index.js) ================= */
-// getName, clearTimers, clearActiveMatchPlayers are passed in via init()
-
 let bot, getName, clearTimers, clearActiveMatchPlayers;
 
 function init(deps) {
-  bot                  = deps.bot;
-  getName              = deps.getName;
-  clearTimers          = deps.clearTimers;
+  bot                     = deps.bot;
+  getName                 = deps.getName;
+  clearTimers             = deps.clearTimers;
   clearActiveMatchPlayers = deps.clearActiveMatchPlayers;
 }
 
@@ -19,12 +16,12 @@ function init(deps) {
 /* ================= MAN OF THE MATCH ================= */
 
 function calculateMOTM(match) {
-  const allPlayers = [...match.teamA, ...match.teamB];
+  const allPlayers   = [...match.teamA, ...match.teamB];
   const allBatStats  = {};
   const allBowlStats = {};
 
-  const inn1Bat  = match.firstInningsData?.batterStats  || {};
-  const inn1Bowl = match.firstInningsData?.bowlerStats   || {};
+  const inn1Bat  = match.firstInningsData?.batterStats || {};
+  const inn1Bowl = match.firstInningsData?.bowlerStats || {};
 
   for (const id in inn1Bat) {
     if (!allBatStats[id]) allBatStats[id] = { runs: 0, balls: 0 };
@@ -55,7 +52,6 @@ function calculateMOTM(match) {
     let score  = 0;
     const bat  = allBatStats[id];
     const bowl = allBowlStats[id];
-
     if (bat && bat.balls > 0) {
       score += bat.runs;
       const sr = (bat.runs / bat.balls) * 100;
@@ -84,10 +80,10 @@ function calculateMOTM(match) {
   const bat      = allBatStats[motmId];
   const bowl     = allBowlStats[motmId];
   const batLine  = bat  && bat.balls  > 0
-    ? `🏏 ${bat.runs}(${bat.balls})  SR:${((bat.runs / bat.balls) * 100).toFixed(0)}`
+    ? `🏏 ${bat.runs}(${bat.balls})  ⚡SR:${((bat.runs / bat.balls) * 100).toFixed(0)}`
     : null;
   const bowlLine = bowl && bowl.balls > 0
-    ? `🎾 ${Math.floor(bowl.balls/6)}.${bowl.balls%6}ov  ${bowl.wickets}w  ${bowl.runs}r  E:${((bowl.runs/bowl.balls)*6).toFixed(1)}`
+    ? `🎾 ${Math.floor(bowl.balls/6)}.${bowl.balls%6}ov  🎳${bowl.wickets}w  🔴${bowl.runs}r  📉${((bowl.runs/bowl.balls)*6).toFixed(1)}`
     : null;
 
   return { player, batLine, bowlLine };
@@ -103,15 +99,13 @@ async function announceMotm(match) {
   catch (e) { console.error("motm save error:", e.message); }
 
   const lines = [
-    `━━━━━━━━━━━`,
-    `   🏅 Man of the Match`,
-    `━━━━━━━━━━━`,
-    `⭐ ${player.name}`,
-    `─────────────`,
+    `─── 🌟🎖️ PLAYER OF THE MATCH ───`,
+    ``,
+    `🏅 ${player.name} — what a game!`,
   ];
   if (batLine)  lines.push(batLine);
   if (bowlLine) lines.push(bowlLine);
-  lines.push(`━━━━━━━━━━━`);
+  lines.push(``, `🎊 Congratulations!`);
 
   await bot.telegram.sendMessage(match.groupId, lines.join("\n"));
 }
@@ -123,7 +117,6 @@ async function endMatchWithWinner(match, winningTeam) {
   const teamName   = winningTeam === "A" ? match.teamAName : match.teamBName;
   const teamLetter = winningTeam;
 
-  // Save matchesWon for winning team
   try {
     const winners = winningTeam === "A" ? match.teamA : match.teamB;
     for (const p of winners) await updatePlayerStats(p.id, { matchesWon: 1 });
@@ -140,15 +133,12 @@ async function endMatchWithWinner(match, winningTeam) {
 
   await bot.telegram.sendMessage(
     match.groupId,
-`━━━━━━━━━━━
-   🏆 Match Result
-━━━━━━━━━━━
-🏆 〔Team ${teamLetter}〕 ${teamName} won
-   ${margin}
-─────────────
-1st innings   ${match.firstInningsScore}
-2nd innings   ${match.score}/${match.wickets}
-━━━━━━━━━━━`
+`─── 🏆🎊 WE HAVE A WINNER! ───
+
+👑 ${teamName} wins!
+💪 ${margin}!
+
+1st 🏏 ${match.firstInningsScore}  vs  2nd 🏏 ${match.score}/${match.wickets}`
   );
 
   clearTimers(match);
@@ -157,11 +147,10 @@ async function endMatchWithWinner(match, winningTeam) {
 async function endMatchTie(match) {
   await bot.telegram.sendMessage(
     match.groupId,
-`━━━━━━━━━━━
-   🤝 Match Tied
-━━━━━━━━━━━
-Both teams scored ${match.score}
-━━━━━━━━━━━`
+`─── 🤝 IT'S A TIE! ───
+
+😲 What a match — both teams level!
+📊 Both scored ${match.score}`
   );
   clearTimers(match);
 }
@@ -189,20 +178,17 @@ async function endInnings(match) {
     match.firstInningsData  = JSON.parse(JSON.stringify(match));
 
     try {
-      await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName));
+      await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "MarkdownV2" });
     } catch (e) { console.error("Scorecard send failed:", e.message); }
 
     try {
       await bot.telegram.sendMessage(
         match.groupId,
-`━━━━━━━━━━━
-   ✅ Innings 1 Complete
-━━━━━━━━━━━
-📊 ${match.score}/${match.wickets}
-🏹 Target ${match.score + 1}
-⚙️ ${match.currentOver}/${match.totalOvers} overs
-─────────────
-🔄 Switching innings...`
+`─── ✅ INNINGS 1 DONE! ───
+
+📊 ${match.score}/${match.wickets}  |  ⚙️ ${match.currentOver}/${match.totalOvers} overs
+🏹 Target set: ${match.score + 1} runs
+🔄 Teams switching...`
       );
     } catch (e) { console.error("Innings message failed:", e.message); }
 
@@ -213,45 +199,46 @@ async function endInnings(match) {
 
     [match.battingTeam, match.bowlingTeam] = [match.bowlingTeam, match.battingTeam];
 
-    match.score                 = 0;
-    match.wickets               = 0;
-    match.maxWickets            = (match.battingTeam === "A" ? match.teamA.length : match.teamB.length) - 1;
-    match.currentOver           = 0;
-    match.currentBall           = 0;
-    match.currentOverNumber     = 0;
+    match.score                   = 0;
+    match.wickets                 = 0;
+    match.maxWickets              = (match.battingTeam === "A" ? match.teamA.length : match.teamB.length) - 1;
+    match.currentOver             = 0;
+    match.currentBall             = 0;
+    match.currentOverNumber       = 0;
     match.currentPartnershipRuns  = 0;
     match.currentPartnershipBalls = 0;
-    match.currentOverRuns       = 0;
-    match.wicketStreak          = 0;
-    match.bowlerMissCount       = 0;
-    match.batterMissCount       = 0;
-    match.usedBatters           = [];
-    match.battingOrder          = [];
-    match.batterStats           = {};
-    match.bowlerStats           = {};
-    match.striker               = null;
-    match.nonStriker            = null;
-    match.bowler                = null;
-    match.lastOverBowler        = null;
-    match.suspendedBowlers      = {};
-    match.overHistory           = [];
-    match.currentOverBalls      = [];
-    match.awaitingBat           = false;
-    match.awaitingBowl          = false;
-    match.phase                 = "set_striker";
+    match.currentOverRuns         = 0;
+    match.wicketStreak            = 0;
+    match.bowlerMissCount         = 0;
+    match.batterMissCount         = 0;
+    match.usedBatters             = [];
+    match.battingOrder            = [];
+    match.batterStats             = {};
+    match.bowlerStats             = {};
+    match.striker                 = null;
+    match.nonStriker              = null;
+    match.bowler                  = null;
+    match.lastOverBowler          = null;
+    match.suspendedBowlers        = {};
+    match.overHistory             = [];
+    match.currentOverBalls        = [];
+    match.awaitingBat             = false;
+    match.awaitingBowl            = false;
+    match.phase                   = "set_striker";
 
     try { await sendAndPinPlayerList(match, bot.telegram); }
     catch (e) { console.error("PinList failed:", e.message); }
 
+    const battingTeamName = match.battingTeam === "A" ? match.teamAName : match.teamBName;
+
     try {
       await bot.telegram.sendMessage(
         match.groupId,
-`━━━━━━━━━━━
-   🏏 Innings 2
-━━━━━━━━━━━
-🏏 〔Team ${match.battingTeam}〕 ${match.battingTeam === "A" ? match.teamAName : match.teamBName}  batting
-🏹 Target ${match.firstInningsScore + 1}
-─────────────
+`─── ⚡🔥 INNINGS 2 — LET'S GO! ───
+
+🏏 ${battingTeamName} to bat
+🎯 Target: ${match.firstInningsScore + 1} — can they chase it?
+
 👉 /batter [number] set opener`
       );
     } catch (e) { console.error("Innings 2 message failed:", e.message); }
@@ -261,34 +248,30 @@ async function endInnings(match) {
 
   /* ── SECOND INNINGS — SAVE STATS ── */
   try {
-    // ── Save innings 1 batter stats ──
-    const inn1Bat  = match.firstInningsData?.batterStats  || {};
-    const inn1Bowl = match.firstInningsData?.bowlerStats  || {};
+    const inn1Bat  = match.firstInningsData?.batterStats || {};
+    const inn1Bowl = match.firstInningsData?.bowlerStats || {};
 
     for (const playerId in inn1Bat) {
       const b = inn1Bat[playerId];
-      const sr = b.balls > 0 ? (b.runs / b.balls) * 100 : 0;
       await updatePlayerStats(playerId, {
-        runs:          b.runs,
-        balls:         b.balls,
-        fours:         b.fours  ?? 0,
-        fives:         b.fives  ?? 0,
-        sixes:         b.sixes  ?? 0,
+        runs:           b.runs,
+        balls:          b.balls,
+        fours:          b.fours  ?? 0,
+        fives:          b.fives  ?? 0,
+        sixes:          b.sixes  ?? 0,
         inningsBatting: 1,
-        ...(b.runs === 0          ? { ducks: 1 }   : {}),
-        ...(b.runs >= 50 && b.runs < 100 ? { fifties: 1 }  : {}),
-        ...(b.runs >= 100         ? { hundreds: 1 } : {}),
-        bestScore:     b.runs,
+        ...(b.runs === 0                     ? { ducks:    1 } : {}),
+        ...(b.runs >= 50 && b.runs < 100     ? { fifties:  1 } : {}),
+        ...(b.runs >= 100                    ? { hundreds: 1 } : {}),
+        bestScore: b.runs,
       });
     }
-
-    // ── Save innings 1 bowler stats ──
     for (const playerId in inn1Bowl) {
       const b = inn1Bowl[playerId];
       await updatePlayerStats(playerId, {
-        wickets:      b.wickets,
-        ballsBowled:  b.balls,
-        runsConceded: b.runs,
+        wickets:        b.wickets,
+        ballsBowled:    b.balls,
+        runsConceded:   b.runs,
         inningsBowling: 1,
         ...(b.wickets >= 3 ? { threeW: 1 } : {}),
         ...(b.wickets >= 5 ? { fiveW:  1 } : {}),
@@ -296,31 +279,27 @@ async function endInnings(match) {
         bestBowlingRuns:    b.runs,
       });
     }
-
-    // ── Save innings 2 batter stats ──
     for (const playerId in match.batterStats) {
       const b = match.batterStats[playerId];
       await updatePlayerStats(playerId, {
-        runs:          b.runs,
-        balls:         b.balls,
-        fours:         b.fours  ?? 0,
-        fives:         b.fives  ?? 0,
-        sixes:         b.sixes  ?? 0,
+        runs:           b.runs,
+        balls:          b.balls,
+        fours:          b.fours  ?? 0,
+        fives:          b.fives  ?? 0,
+        sixes:          b.sixes  ?? 0,
         inningsBatting: 1,
-        ...(b.runs === 0          ? { ducks: 1 }   : {}),
-        ...(b.runs >= 50 && b.runs < 100 ? { fifties: 1 }  : {}),
-        ...(b.runs >= 100         ? { hundreds: 1 } : {}),
-        bestScore:     b.runs,
+        ...(b.runs === 0                     ? { ducks:    1 } : {}),
+        ...(b.runs >= 50 && b.runs < 100     ? { fifties:  1 } : {}),
+        ...(b.runs >= 100                    ? { hundreds: 1 } : {}),
+        bestScore: b.runs,
       });
     }
-
-    // ── Save innings 2 bowler stats ──
     for (const playerId in match.bowlerStats) {
       const b = match.bowlerStats[playerId];
       await updatePlayerStats(playerId, {
-        wickets:      b.wickets,
-        ballsBowled:  b.balls,
-        runsConceded: b.runs,
+        wickets:        b.wickets,
+        ballsBowled:    b.balls,
+        runsConceded:   b.runs,
         inningsBowling: 1,
         ...(b.wickets >= 3 ? { threeW: 1 } : {}),
         ...(b.wickets >= 5 ? { fiveW:  1 } : {}),
@@ -328,16 +307,14 @@ async function endInnings(match) {
         bestBowlingRuns:    b.runs,
       });
     }
-
-    // ── Save match played for all players ──
     for (const p of [...match.teamA, ...match.teamB])
       await updatePlayerStats(p.id, { matches: 1 });
 
   } catch (err) { console.error("Stats update error:", err); }
 
   try {
-    await bot.telegram.sendMessage(match.groupId, generateScorecard(match.firstInningsData, getName));
-    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName));
+    await bot.telegram.sendMessage(match.groupId, generateScorecard(match.firstInningsData, getName), { parse_mode: "MarkdownV2" });
+    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "MarkdownV2" });
   } catch (e) { console.error("Final scorecard failed:", e.message); }
 
   if (match.score > match.firstInningsScore) {
