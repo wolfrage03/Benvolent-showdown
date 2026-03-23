@@ -466,19 +466,25 @@ const bowlerGifs = [
 const randomGif = bowlerGifs[Math.floor(Math.random() * bowlerGifs.length)];
 
 try {
-await ctx.reply(`⏳ Get ready...`);
+try {
+  await ctx.reply(`⏳ Get ready...`);
 
-setTimeout(async () => {
-  try {
-    await ctx.telegram.sendVideo(match.groupId, randomGif);
-  } catch {}
+  setTimeout(async () => {
+    try {
+      await ctx.telegram.sendVideo(match.groupId, randomGif);
+    } catch (e) {
+      console.error("Bowler intro gif failed:", e.message);
+    }
 
-  setTimeout(() => {
-    ballHandler.startBall(match);
-  }, 10000);
+    setTimeout(() => {
+      ballHandler.startBall(match);
+    }, 10000);
 
-}, 1000);
-});
+  }, 1000);
+
+} catch (err) {
+  console.error("Bowler command error:", err);
+}
 
 
 /* ================= LIVE SCORE ================= */
