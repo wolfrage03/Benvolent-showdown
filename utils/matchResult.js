@@ -225,8 +225,6 @@ async function endInnings(match) {
     match.awaitingBat             = false;
     match.awaitingBowl            = false;
     match.phase                   = "set_striker";
-    match.teamBowlerTimeLeft      = 300000;
-    match.teamTimerStart          = null;
 
     try { await sendAndPinPlayerList(match, bot.telegram); }
     catch (e) { console.error("PinList failed:", e.message); }
@@ -234,38 +232,15 @@ async function endInnings(match) {
     const battingTeamName = match.battingTeam === "A" ? match.teamAName : match.teamBName;
 
     try {
-
-    await bot.telegram.sendMessage(
-      match.groupId,
-    `⏳ Break Time!
-
-    🏏 Innings 1 completed.
-    Take 15 seconds break...
-
-    🎯 Target: ${match.score + 1}
-    ⏱ Overs: ${match.totalOvers}
-
-    Next innings starting soon...`
-     );
-
-
-     setTimeout(async () => {
-
-  const battingTeamName = match.battingTeam === "A"
-    ? match.teamAName
-    : match.teamBName;
-
-  await bot.telegram.sendMessage(
-    match.groupId,
+      await bot.telegram.sendMessage(
+        match.groupId,
 `─── ⚡🔥 INNINGS 2 — LET'S GO! ───
 
 🏏 ${battingTeamName} to bat
-🎯 Target: ${match.firstInningsScore + 1}
+🎯 Target: ${match.firstInningsScore + 1} — can they chase it?
 
 👉 /batter [number] set opener`
-  );
-
-}, 15000);
+      );
     } catch (e) { console.error("Innings 2 message failed:", e.message); }
 
     return;

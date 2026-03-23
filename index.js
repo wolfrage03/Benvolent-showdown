@@ -91,35 +91,10 @@ function getName(match, id) {
 
 function clearTimers(match) {
   if (!match) return;
-
-  if (match.warning30) {
-    clearTimeout(match.warning30);
-    match.warning30 = null;
-  }
-
-  if (match.warning10) {
-    clearTimeout(match.warning10);
-    match.warning10 = null;
-  }
-
-  if (match.ballTimer) {
-    clearTimeout(match.ballTimer);
-    match.ballTimer = null;
-  }
-
-
-  if (match.bowlerTimer) {
-    clearTimeout(match.bowlerTimer);
-    match.bowlerTimer = null;
-  }
-
-  match.teamTimerStart = null;
+  if (match.warning30) { clearTimeout(match.warning30); match.warning30 = null; }
+  if (match.warning10) { clearTimeout(match.warning10); match.warning10 = null; }
+  if (match.ballTimer)  { clearTimeout(match.ballTimer);  match.ballTimer  = null; }
 }
-
-
-
-
-
 
 function bowlDMButton() {
   return {
@@ -211,46 +186,6 @@ async function checkOverEnd(match) {
 ───────────
 👉 /bowler [number] new bowler`
     );
-
-match.teamTimerStart = Date.now();
-
-const remaining = match.teamBowlerTimeLeft;
-
-if (match.bowlerTimer) clearTimeout(match.bowlerTimer);
-
-match.bowlerTimer = setTimeout(async () => {
-
-  const timeUsed = Date.now() - match.teamTimerStart;
-  match.teamBowlerTimeLeft -= timeUsed;
-  match.teamTimerStart = null;
-
-  if (match.teamBowlerTimeLeft <= 0) {
-    match.teamBowlerTimeLeft = 0;
-
-    await bot.telegram.sendMessage(
-      match.groupId,
-      `❌ Team time exhausted!\nNo more delay allowed.`
-    );
-    return;
-  }
-
-  await bot.telegram.sendMessage(
-    match.groupId,
-    `⚠️ Time running out!\n⏳ Remaining: ${Math.ceil(match.teamBowlerTimeLeft / 1000)} sec`
-  );
-
-  // 🔁 Restart timer with remaining time
-  match.teamTimerStart = Date.now();
-
-  match.bowlerTimer = setTimeout(async () => {
-    await bot.telegram.sendMessage(
-      match.groupId,
-      `❌ Final time over!`
-    );
-  }, match.teamBowlerTimeLeft);
-
-}, remaining);
-
   } catch (e) { console.error("Over message failed:", e.message); }
 
   return true;
@@ -399,17 +334,6 @@ bot.command("bowler", async (ctx) => {
 
   const match = getMatch(ctx);
   if (!match) return;
-  
-    clearTimers(match);
-
-  if (match.teamTimerStart) {
-    const timeUsed = Date.now() - match.teamTimerStart;
-    match.teamBowlerTimeLeft = Math.max(
-      0,
-      match.teamBowlerTimeLeft - timeUsed
-    );
-    match.teamTimerStart = null;
-  }
 
   if (match.phase !== "set_bowler")
     return ctx.reply("⚠️ You can set bowler only when bot asks.");
@@ -452,39 +376,10 @@ bot.command("bowler", async (ctx) => {
 ╰───────────╯
 🏐 ${player.name} is bowling
 ───────────
-⏳ Match starts in 10 seconds...`
-);
-
-// 🎬 Random bowler intro GIF
-const bowlerGifs = [
-  "BAACAgUAAxkBAAIJfWnBelaThJee7yBAxXWNeOmhcCGCAAKGHAACs1cJVmqG-ZQwIu4hOgQ",
-  "BAACAgUAAxkBAAIJe2nBelXWMUZUY09vZGd9kYFPvy_BAAKFHAACs1cJVsF4_dM2pDpBOgQ",
-  "BAACAgUAAxkBAAIJeWnBelKKo4PdGcGOXTqhBtlpIqEYAAKEHAACs1cJVjgHBeYIhQIYOgQ",
-  "BAACAgUAAxkBAAIJd2nBelHvjYpcrQHMF3uICwqE5HatAAKDHAACs1cJVo_Wr43LJGhTOgQ"
-];
-
-const randomGif = bowlerGifs[Math.floor(Math.random() * bowlerGifs.length)];
-
-try {
-try {
-  await ctx.reply(`⏳ Get ready...`);
-
-  setTimeout(async () => {
-    try {
-      await ctx.telegram.sendVideo(match.groupId, randomGif);
-    } catch (e) {
-      console.error("Bowler intro gif failed:", e.message);
-    }
-
-    setTimeout(() => {
-      ballHandler.startBall(match);
-    }, 10000);
-
-  }, 1000);
-
-} catch (err) {
-  console.error("Bowler command error:", err);
-}
+Ball starting...`
+  );
+  await ballHandler.startBall(match);
+});
 
 
 /* ================= LIVE SCORE ================= */
@@ -500,15 +395,15 @@ function getLiveScore(match) {
   const totalBalls  = (match.totalOvers || 0) * 6;
   const ballsLeft   = Math.max(totalBalls - ballsBowled, 0);
   const runRate     = ballsBowled > 0
-    ? esc(((match.score / ballsBowled) * 6).toFixed(2)) : "0\\.00";
+    ? ((match.score / ballsBowled) * 6).toFixed(2) : "0.00";
 
   let chaseBlock = "";
   if (match.innings === 2) {
     const runsNeeded = (match.firstInningsScore + 1) - match.score;
     const rrr = (runsNeeded > 0 && ballsLeft > 0)
-      ? esc(((runsNeeded / ballsLeft) * 6).toFixed(2)) : "\\-";
+      ? ((runsNeeded / ballsLeft) * 6).toFixed(2) : "\-";
     chaseBlock = runsNeeded > 0
-      ? `🏹 *Need ${esc(runsNeeded)} from ${esc(ballsLeft)} balls*   *RRR: ${rrr}*`
+      ? `🏹 *Need ${esc(runsNeeded)} from ${esc(ballsLeft)} balls*   *RRR: ${esc(rrr)}*`
       : `✅ *Target achieved\!*`;
   }
 
@@ -518,8 +413,8 @@ function getLiveScore(match) {
   const nstSR = nst.balls > 0 ? ((nst.runs / nst.balls) * 100).toFixed(0) : "0";
 
   const bwl   = match.bowlerStats?.[match.bowler] || { balls: 0, runs: 0, wickets: 0, history: [] };
-  const bwlOv = `${Math.floor(bwl.balls / 6)}\\.${bwl.balls % 6}`;
-  const econ  = bwl.balls > 0 ? esc(((bwl.runs / bwl.balls) * 6).toFixed(2)) : "0\\.00";
+  const bwlOv = `${Math.floor(bwl.balls / 6)}\.${bwl.balls % 6}`;
+  const econ  = bwl.balls > 0 ? ((bwl.runs / bwl.balls) * 6).toFixed(2) : "0\.00";
 
   const partRuns  = match.currentPartnershipRuns  || 0;
   const partBalls = match.currentPartnershipBalls || 0;
@@ -539,7 +434,7 @@ function getLiveScore(match) {
     `🏏 *${battingTeamName}* \(Team ${battingTeamLetter}\)  batting`,
     `🎯 *${bowlingTeamName}* \(Team ${bowlingTeamLetter}\)  bowling`,
     ``,
-    `📊 *${match.score}/${match.wickets}*   ⚙️ *${match.currentOver}\.${match.currentBall}/${match.totalOvers}*   📈 *${runRate}*`,
+    `📊 *${match.score}/${match.wickets}*   ⚙️ *${match.currentOver}\.${match.currentBall}/${match.totalOvers}*   📈 *${esc(runRate)}*`,
   ];
 
   if (chaseBlock) lines.push(chaseBlock);
@@ -565,7 +460,7 @@ function getLiveScore(match) {
     `🤝 *Partnership:* ${partRuns}\(${partBalls}\)`,
     ``,
     `*─── 🎾 Bowling ───*`,
-    `🎾 *${short(bowlerName)}*  🔵*${bwlOv}*  🔴*${bwl.runs}*  💀*${bwl.wickets}w*  📉*${econ}*`,
+    `🎾 *${short(bowlerName)}*  🔵*${bwlOv}*  🔴*${bwl.runs}*  💀*${bwl.wickets}w*  📉*${esc(econ)}*`,
     `┗━ _This over:_ ${overBalls}`
   );
 

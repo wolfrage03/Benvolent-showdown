@@ -19,26 +19,10 @@ function init(deps) {
 }
 
 
-/* ================= TEAM TIMER HELPERS ================= */
-
-function stopTeamTimer(match) {
-  if (match.bowlerTimer) {
-    clearTimeout(match.bowlerTimer);
-    match.bowlerTimer = null;
-  }
-
-  if (match.teamTimerStart) {
-    const used = Date.now() - match.teamTimerStart;
-    match.teamBowlerTimeLeft = Math.max(0, (match.teamBowlerTimeLeft || 0) - used);
-    match.teamTimerStart = null;
-  }
-}
-
 
 /* ================= TIMER CONTROLLER ================= */
 
 function startTurnTimer(match, type) {
-  clearTimers(match);
 
   match.warning30 = setTimeout(() => {
     if ((type === "bowl" && match.awaitingBowl) ||
@@ -70,9 +54,7 @@ async function ballTimeout(match) {
 
   if (!match || match.phase === "idle") return;
   if (match.phase !== "play") return;
-  if (match.phase === "set_bowler") return; // ✅ FIX
   if (match.ballLocked) return;
-
   match.ballLocked = true;
 
   try {
@@ -105,6 +87,9 @@ Ball does not count`
 `╭───────────╮
    🚫 Bowler Suspended
 ╰───────────╯
+Consecutive delays
+Cannot bowl this over or next
+───────────
 👉 /bowler [number] new bowler`
         );
         return;
@@ -122,18 +107,14 @@ Ball does not count`
       match.batterMissCount = (match.batterMissCount || 0) + 1;
 
       match.currentBall++;
-
-      // ✅ FIX: prevent negative score
-      match.score = Math.max(0, match.score - 6);
+      match.score -= 6;
 
       if (!match.batterStats[match.striker])
         match.batterStats[match.striker] = { runs: 0, balls: 0, fours: 0, fives: 0, sixes: 0 };
 
-      match.batterStats[match.striker].runs =
-        Math.max(0, match.batterStats[match.striker].runs - 6);
-
+      match.batterStats[match.striker].runs  -= 6;
       match.batterStats[match.striker].balls++;
-      match.currentPartnershipRuns -= 6;
+      match.currentPartnershipRuns  -= 6;
       match.currentPartnershipBalls++;
 
       await bot.telegram.sendMessage(
@@ -153,14 +134,18 @@ Ball counted`
         match.timedOutBatters.push(match.striker);
 
         await bot.telegram.sendMessage(
-  match.groupId,
+          match.groupId,
 `╭───────────╮
    💥 Batter Dismissed
 ╰───────────╯
+Consecutive delays
+───────────
 👉 /batter [number] new batter`
-);
+        );
 
         if (match.wickets >= match.maxWickets) {
+          match.awaitingBowl = false;
+          match.awaitingBat  = false;
           await endInnings(match);
           return;
         }
@@ -187,9 +172,6 @@ Ball counted`
 /* ================= ANNOUNCE BALL ================= */
 
 async function announceBall(match) {
-  
-  clearTimers(match);
-
   if (!match || !match.bowler || !match.striker) return;
   if (match.phase === "switch") return;
   if (match.inningsEnded) return;
@@ -250,37 +232,29 @@ Send your number 1 – 6`
 
 async function startBall(match) {
   if (!match) return;
-  if (match.phase === "switch") return;
+  if (match.phase === "switch")     return;
   if (match.phase === "set_bowler") return;
   if (match.phase === "new_batter") return;
-
-  // ✅ STOP TEAM TIMER WHEN BALL STARTS
-  stopTeamTimer(match);
-
   if (match.currentOver >= match.totalOvers) return;
   if (match.wickets >= match.maxWickets) {
+    match.awaitingBowl = false;
+    match.awaitingBat  = false;
     await endInnings(match);
     return;
   }
 
   if (!match.overHistory) match.overHistory = [];
-
   if (match.bowler) {
     const lastEntry = match.overHistory[match.overHistory.length - 1];
     if (!lastEntry || lastEntry.over !== match.currentOver + 1) {
-      match.overHistory.push({
-        over: match.currentOver + 1,
-        bowler: match.bowler,
-        balls: []
-      });
+      match.overHistory.push({ over: match.currentOver + 1, bowler: match.bowler, balls: [] });
     }
   }
 
   clearTimers(match);
-  match.phase = "play";
+  match.phase        = "play";
   match.awaitingBowl = true;
-  match.awaitingBat = false;
-
+  match.awaitingBat  = false;
   await announceBall(match);
   startTurnTimer(match, "bowl");
 }
@@ -419,6 +393,46 @@ Cannot play 0 — two wickets in a row!`
 ╰───────────╯
 👉 /batter [number] new batter`
       );
+
+if (match.currentBall === 0) {
+  // new over → bowler needed
+
+  if (!match.teamBowlerTimeLeft) {
+    match.teamBowlerTimeLeft = 300000; // 5 min
+  }
+
+  match.teamTimerStart = Date.now();
+
+  match.bowlerTimer = setTimeout(async () => {
+
+    const used = Date.now() - match.teamTimerStart;
+    match.teamBowlerTimeLeft -= used;
+    match.teamTimerStart = null;
+
+    if (match.teamBowlerTimeLeft <= 0) {
+      match.teamBowlerTimeLeft = 0;
+
+      await bot.telegram.sendMessage(
+        match.groupId,
+        `❌ Team time exhausted!`
+      );
+      return;
+    }
+
+    await bot.telegram.sendMessage(
+      match.groupId,
+      `⚠️ Time left: ${Math.ceil(match.teamBowlerTimeLeft / 1000)} sec`
+    );
+
+    match.teamTimerStart = Date.now();
+
+    match.bowlerTimer = setTimeout(async () => {
+      await bot.telegram.sendMessage(match.groupId, `❌ Final time over!`);
+    }, match.teamBowlerTimeLeft);
+
+  }, match.teamBowlerTimeLeft);
+}
+
       return;
     }
 
