@@ -163,7 +163,7 @@ async function endInnings(match) {
   if (match.inningsEnded) return;
   match.inningsEnded = true;
   match.ballLocked   = true;
-A	
+
   console.log("endInnings called, innings:", match.innings);
 
   clearTimers(match);
@@ -178,7 +178,7 @@ A
     match.firstInningsData  = JSON.parse(JSON.stringify(match));
 
     try {
-      await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "MarkdownV2" });
+      await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName));
     } catch (e) { console.error("Scorecard send failed:", e.message); }
 
     try {
@@ -313,8 +313,8 @@ A
   } catch (err) { console.error("Stats update error:", err); }
 
   try {
-    await bot.telegram.sendMessage(match.groupId, generateScorecard(match.firstInningsData, getName), { parse_mode: "MarkdownV2" });
-    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "MarkdownV2" });
+    await bot.telegram.sendMessage(match.groupId, generateScorecard(match.firstInningsData, getName));
+    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName));
   } catch (e) { console.error("Final scorecard failed:", e.message); }
 
   if (match.score > match.firstInningsScore) {
