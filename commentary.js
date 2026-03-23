@@ -84,73 +84,73 @@ const commentary = {
   ],
 
   fifty: [
-    '*🥈 FIFTY!*\n💯 Brilliant half-century!\n👏 Pure timing and control!',
-    '*🥈 50 RUNS*\n🔥 Raises the bat — well played!\n🎯 Holding the innings together!',
-    '*🥈 HALF CENTURY*\n👑 A classy knock under pressure!\n💪 Leading from the front!',
-    '*🥈 50 UP!*\n🚀 Reaches fifty in style!\n🏏 Crowd appreciates the effort!'
+    '🥈 FIFTY!\n💯 Brilliant half-century!\n👏 Pure timing and control!',
+    '🥈 50 RUNS\n🔥 Raises the bat — well played!\n🎯 Holding the innings together!',
+    '🥈 HALF CENTURY\n👑 A classy knock under pressure!\n💪 Leading from the front!',
+    '🥈 50 UP!\n🚀 Reaches fifty in style!\n🏏 Crowd appreciates the effort!'
   ],
 
   hundred: [
-    '*🥇 CENTURY!*\n💯🔥 WHAT A HUNDRED!\n🏏 Absolute batting masterclass!',
-    '*🥇 100 RUNS*\n👑 Raises the bat proudly!\n🎆 A knock to remember!',
-    '*🥇 TON UP!*\n🚀 Century in grand fashion!\n🏟 Crowd on its feet!',
-    '*🥇 HUNDRED!*\n💥 Dominating performance!\n🔥 Bowlers had no answers!'
+    '🥇 CENTURY!\n💯🔥 WHAT A HUNDRED!\n🏏 Absolute batting masterclass!',
+    '🥇 100 RUNS\n👑 Raises the bat proudly!\n🎆 A knock to remember!',
+    '🥇 TON UP!\n🚀 Century in grand fashion!\n🏟 Crowd on its feet!',
+    '🥇 HUNDRED!\n💥 Dominating performance!\n🔥 Bowlers had no answers!'
   ],
 
   partnership50: [
-    '*🤝 50 PARTNERSHIP*\n📈 Solid stand building up!\n💪 Momentum shifting!',
-    '*🤝 FIFTY STAND*\n🧱 Strong foundation laid!\n👏 Excellent teamwork!',
-    '*🤝 PARTNERSHIP 50*\n🔄 Rotating strike brilliantly!\n🎯 Bowlers under pressure!',
-    '*🤝 50 TOGETHER*\n💪 Building a crucial partnership!\n🏏 Smart cricket on display!'
+    '🤝 50 PARTNERSHIP\n📈 Solid stand building up!\n💪 Momentum shifting!',
+    '🤝 FIFTY STAND\n🧱 Strong foundation laid!\n👏 Excellent teamwork!',
+    '🤝 PARTNERSHIP 50\n🔄 Rotating strike brilliantly!\n🎯 Bowlers under pressure!',
+    '🤝 50 TOGETHER\n💪 Building a crucial partnership!\n🏏 Smart cricket on display!'
   ],
 
   partnership100: [
-    '*🔥 100 PARTNERSHIP*\n💥 Massive stand!\n🏏 Bowlers completely dominated!',
-    '*🔥 CENTURY STAND*\n👑 Incredible partnership!\n🎆 Pure domination!',
-    '*🔥 100 TOGETHER*\n🚀 Big partnership milestone!\n💪 Rock-solid batting!',
-    '*🔥 PARTNERSHIP 100*\n📈 Game slipping away from bowlers!\n🔥 What a stand!'
+    '🔥 100 PARTNERSHIP\n💥 Massive stand!\n🏏 Bowlers completely dominated!',
+    '🔥 CENTURY STAND\n👑 Incredible partnership!\n🎆 Pure domination!',
+    '🔥 100 TOGETHER\n🚀 Big partnership milestone!\n💪 Rock-solid batting!',
+    '🔥 PARTNERSHIP 100\n📈 Game slipping away from bowlers!\n🔥 What a stand!'
   ],
 
   duck: [
-    '*🦆 DUCK!*\n😬 Gone without scoring!\nNot his day today!',
-    '*🦆 OUT FOR 0*\n💥 Big blow for the team!\n😓 Early disappointment!',
-    '*🦆 GOLDEN DUCK*\n⚡ First ball — gone!\n😱 Shock dismissal!',
-    '*🦆 DUCK!*\n🧊 Pressure got to him!\n💔 Walks back empty-handed!'
+    '🦆 DUCK!\n😬 Gone without scoring!\nNot his day today!',
+    '🦆 OUT FOR 0\n💥 Big blow for the team!\n😓 Early disappointment!',
+    '🦆 GOLDEN DUCK\n⚡ First ball — gone!\n😱 Shock dismissal!',
+    '🦆 DUCK!\n🧊 Pressure got to him!\n💔 Walks back empty-handed!'
   ],
 
   duckHattrick: [
-    '*🦆🦆🦆 DUCK HATTRICK!*\nThree ducks in a row!\n😱 Total batting collapse!',
-    '*💀 TRIPLE DUCKS*\nDisaster for the batting side!\n🔥 Bowler on fire!',
-    '*😵 3 DUCKS*\nUnreal scenes out there!\n🧨 Batting in ruins!',
-    '*😈 DUCK HATTRICK*\n⚡ Three wickets, no runs!\nBrutal spell!'
+    '🦆🦆🦆 DUCK HATTRICK!\nThree ducks in a row!\n😱 Total batting collapse!',
+    '💀 TRIPLE DUCKS\nDisaster for the batting side!\n🔥 Bowler on fire!',
+    '😵 3 DUCKS\nUnreal scenes out there!\n🧨 Batting in ruins!',
+    '😈 DUCK HATTRICK\n⚡ Three wickets, no runs!\nBrutal spell!'
   ],
 
   threeFer: [
-    '*🎩 3-WICKET HAUL*\n🔥 Bowler on fire!\n🎯 Precision bowling!',
-    '*🎩 3-FER*\n💪 Excellent spell!\n🏏 Breaking the backbone!',
-    '*🎩 THREE WICKETS*\n⚡ Strikes again!\n😈 Total control!',
-    '*🎩 3 DOWN*\n📉 Batting under pressure!\n🔥 What a performance!'
+    '🎩 3-WICKET HAUL\n🔥 Bowler on fire!\n🎯 Precision bowling!',
+    '🎩 3-FER\n💪 Excellent spell!\n🏏 Breaking the backbone!',
+    '🎩 THREE WICKETS\n⚡ Strikes again!\n😈 Total control!',
+    '🎩 3 DOWN\n📉 Batting under pressure!\n🔥 What a performance!'
   ],
 
   fourFer: [
-    '*👑 4-WICKET HAUL*\n💪 Destroying the lineup!\n🔥 Unstoppable today!',
-    '*👑 4-FER*\n🎯 Clinical bowling!\n👏 Brilliant effort!',
-    '*👑 FOUR WICKETS*\n⚡ Another one bites the dust!\n😱 What a spell!',
-    '*👑 4 DOWN*\n📉 Batting collapsing fast!\n🔥 Bowler dominating!'
+    '👑 4-WICKET HAUL\n💪 Destroying the lineup!\n🔥 Unstoppable today!',
+    '👑 4-FER\n🎯 Clinical bowling!\n👏 Brilliant effort!',
+    '👑 FOUR WICKETS\n⚡ Another one bites the dust!\n😱 What a spell!',
+    '👑 4 DOWN\n📉 Batting collapsing fast!\n🔥 Bowler dominating!'
   ],
 
   fiveFer: [
-    '*🏆 5-WICKET HAUL*\n🎉 LEGENDARY SPELL!\n👑 Historic performance!',
-    '*🏆 5-FER*\n🔥 Absolute domination!\n💥 Too hot to handle!',
-    '*🏆 FIVE WICKETS*\n🚀 History made!\n🏏 Pure brilliance!',
-    '*🏆 5 DOWN*\n😱 Team in deep trouble!\n🔥 Bowler unstoppable!'
+    '🏆 5-WICKET HAUL\n🎉 LEGENDARY SPELL!\n👑 Historic performance!',
+    '🏆 5-FER\n🔥 Absolute domination!\n💥 Too hot to handle!',
+    '🏆 FIVE WICKETS\n🚀 History made!\n🏏 Pure brilliance!',
+    '🏆 5 DOWN\n😱 Team in deep trouble!\n🔥 Bowler unstoppable!'
   ],
 
   sixFer: [
-    '*💀 6-WICKET HAUL*\n😱 Unbelievable spell!\nSingle-handed destruction!',
-    '*💀 6-FER*\n🔥 Total carnage!\n🏏 Batters clueless!',
-    '*💀 SIX WICKETS*\n⚡ Wickets falling like dominoes!\n😈 Ruthless bowling!',
-    '*💀 6 DOWN*\n📉 Complete collapse!\n🔥 What a spell!'
+    '💀 6-WICKET HAUL\n😱 Unbelievable spell!\nSingle-handed destruction!',
+    '💀 6-FER\n🔥 Total carnage!\n🏏 Batters clueless!',
+    '💀 SIX WICKETS\n⚡ Wickets falling like dominoes!\n😈 Ruthless bowling!',
+    '💀 6 DOWN\n📉 Complete collapse!\n🔥 What a spell!'
   ]
 };
 

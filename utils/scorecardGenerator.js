@@ -1,8 +1,3 @@
-// Escape special MarkdownV2 chars in plain text (names, numbers, etc.)
-function esc(text) {
-  return String(text).replace(/[_*[\]()~`>#+\-=|{}.!\\]/g, '\\$&');
-}
-
 function generateScorecard(match, getName) {
   if (!match) return "No match data.";
 
@@ -31,7 +26,7 @@ function generateScorecard(match, getName) {
     const stats = match.batterStats?.[id];
     if (!stats) continue;
 
-    const name  = esc(getName(match, id));
+    const name  = getName(match, id);
     const sr    = stats.balls > 0 ? ((stats.runs / stats.balls) * 100).toFixed(0) : "0";
     const fours = stats.fours ?? 0;
     const fives = stats.fives ?? 0;
@@ -40,16 +35,16 @@ function generateScorecard(match, getName) {
     const isTimedOut  = match.timedOutBatters?.includes(id);
     const isDismissed = !!stats.dismissedBy || isTimedOut;
     const isNotOut    = (id === match.striker || id === match.nonStriker) && !isDismissed;
-    const notOutMark  = isNotOut ? "\\*" : "";
+    const notOutMark  = isNotOut ? "*" : "";
 
-    battingRows += `🏏 *${name}*${notOutMark}  *${stats.runs}R*  *${stats.balls}B*  ⚡*SR:${sr}*\n`;
-    battingRows += `┗━ 🏏*${fours}*  💫*${fives}*  🚀*${sixes}*\n`;
+    battingRows += `🏏 ${name}${notOutMark}  ${stats.runs}R  ${stats.balls}B  ⚡SR:${sr}\n`;
+    battingRows += `┗━ 🏏${fours}  💫${fives}  🚀${sixes}\n`;
 
     if (isTimedOut) {
-      battingRows += `   ┗━ ⏱ _timed out_\n`;
+      battingRows += `   ┗━ ⏱ timed out\n`;
     } else if (isDismissed && stats.dismissedBy) {
-      const bowlerName = esc(getName(match, stats.dismissedBy));
-      battingRows += `   ┗━ 🎾 _b ${bowlerName}_\n`;
+      const bowlerName = getName(match, stats.dismissedBy);
+      battingRows += `   ┗━ 🎾 b ${bowlerName}\n`;
     }
 
     battingRows += "\n";
@@ -57,7 +52,7 @@ function generateScorecard(match, getName) {
 
   const battingTeamPlayers = battingTeamLetter === "A" ? match.teamA : match.teamB;
   const didNotBat = (battingTeamPlayers || []).filter(p => !allBatted.includes(p.id));
-  const dnbBat = `🪑 *DNB:* ${didNotBat.length ? didNotBat.map(p => esc(p.name)).join(", ") : "—"}`;
+  const dnbBat = `🪑 DNB: ${didNotBat.length ? didNotBat.map(p => p.name).join(", ") : "—"}`;
 
   /* ── BOWLING ── */
 
@@ -68,21 +63,21 @@ function generateScorecard(match, getName) {
 
   for (const id of bowlerIds) {
     const b    = match.bowlerStats[id];
-    const name = esc(getName(match, id));
+    const name = getName(match, id);
     const econ = b.balls > 0 ? ((b.runs / b.balls) * 6).toFixed(1) : "0.0";
     const ovW  = Math.floor(b.balls / 6);
     const ovB  = b.balls % 6;
 
-    bowlingRows += `🎾 *${name}*  *${ovW}\\.${ovB}ov*  🏏*${b.runs}*  ⚾*${b.wickets}*  📉*${esc(econ)}*\n`;
+    bowlingRows += `🎾 ${name}  ${ovW}.${ovB}ov  🏏${b.runs}  ⚾${b.wickets}  📉${econ}\n`;
 
     const theirOvers = (match.overHistory || []).filter(
       o => String(o.bowler) === String(id)
     );
     for (let i = 0; i < theirOvers.length; i++) {
       const o      = theirOvers[i];
-      const balls  = o.balls.map(x => x === "W" ? "⚾" : esc(String(x))).join("  ");
+      const balls  = o.balls.map(x => x === "W" ? "⚾" : String(x)).join("  ");
       const indent = "   ".repeat(i + 1);
-      bowlingRows += `${indent}┗━ _Ov ${o.over}:_ ${balls}\n`;
+      bowlingRows += `${indent}┗━ Ov ${o.over}: ${balls}\n`;
     }
 
     bowlingRows += "\n";
@@ -90,31 +85,31 @@ function generateScorecard(match, getName) {
 
   const didNotBowl = (bowlingTeamPlayers || []).filter(p => !bowlerIds.includes(p.id));
   const dnbBowl = didNotBowl.length
-    ? `🪑 *DNB:* ${didNotBowl.map(p => esc(p.name)).join(", ")}`
+    ? `🪑 DNB: ${didNotBowl.map(p => p.name).join(", ")}`
     : "";
 
   /* ── ASSEMBLE ── */
 
   const inningsNum   = match.innings ?? 1;
-  const oversDisplay = `${match.currentOver}\\.${match.currentBall}/${match.totalOvers}`;
+  const oversDisplay = `${match.currentOver}.${match.currentBall}/${match.totalOvers}`;
   const targetLine   = match.innings === 2
-    ? `🏹 *Target:* ${(match.firstInningsScore ?? 0) + 1}`
+    ? `🏹 Target: ${(match.firstInningsScore ?? 0) + 1}`
     : "";
 
   return [
-    `*─── 📋 Innings ${inningsNum} ───*`,
-    `🏏 *${esc(battingTeam)}*  vs  🎯 *${esc(bowlingTeam)}*`,
+    `─── 📋 Innings ${inningsNum} ───`,
+    `🏏 ${battingTeam}  vs  🎯 ${bowlingTeam}`,
     ``,
-    `📊 *${match.score}/${match.wickets}*  |  ⚙️ *${oversDisplay}*  |  📈 *RR: ${esc(crr)}*`,
+    `📊 ${match.score}/${match.wickets}  |  ⚙️ ${oversDisplay}  |  📈 RR: ${crr}`,
     ...(targetLine ? [targetLine] : []),
     ``,
-    `*─── 🏏 Batting ───*`,
+    `─── 🏏 Batting ───`,
     ``,
     battingRows.trimEnd(),
     ``,
     dnbBat,
     ``,
-    `*─── 🎾 Bowling ───*`,
+    `─── 🎾 Bowling ───`,
     ``,
     bowlingRows.trimEnd(),
     ...(dnbBowl ? [``, dnbBowl] : []),

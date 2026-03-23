@@ -334,7 +334,7 @@ Cannot play 0 — two wickets in a row!`
       if (isDuck) {
         match.duckStreak = (match.duckStreak || 0) + 1;
         if (match.duckStreak >= 3) {
-          await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('duckHattrick'), { parse_mode: 'Markdown' });
+          await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('duckHattrick'));
           match.duckStreak = 0;
         } else {
           await sendWithGif(match.groupId, 'duck', randomMilestoneLine('duck'));
@@ -345,10 +345,10 @@ Cannot play 0 — two wickets in a row!`
 
       // ── Bowling fer milestones ──
       const bowlerWkts = match.bowlerStats[match.bowler]?.wickets ?? 0;
-      if      (bowlerWkts === 3) await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('threeFer'), { parse_mode: 'Markdown' });
-      else if (bowlerWkts === 4) await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('fourFer'), { parse_mode: 'Markdown' });
-      else if (bowlerWkts === 5) await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('fiveFer'), { parse_mode: 'Markdown' });
-      else if (bowlerWkts >= 6)  await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('sixFer'), { parse_mode: 'Markdown' });
+      if      (bowlerWkts === 3) await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('threeFer'));
+      else if (bowlerWkts === 4) await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('fourFer'));
+      else if (bowlerWkts === 5) await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('fiveFer'));
+      else if (bowlerWkts >= 6)  await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('sixFer'));
 
       // ── Hattrick (replaces wicket gif) ──
       if (isHattrick) {
