@@ -321,11 +321,18 @@ Cannot play 0 — two wickets in a row!`
       match.currentPartnershipRuns  = 0;
       match.currentPartnershipBalls = 0;
 
-      await sendWithGif(match.groupId, "wicket", randomLine("wicket"));
-
       // ── Duck check ──
       const batterRunsAtDismissal = match.batterStats[match.striker]?.runs ?? 0;
-      if (batterRunsAtDismissal === 0) {
+      const isDuck = batterRunsAtDismissal === 0;
+      const isHattrick = match.wicketStreak === 3;
+
+      // Only show wicket gif if it's NOT a duck and NOT a hattrick
+      if (!isDuck && !isHattrick) {
+        await sendWithGif(match.groupId, "wicket", randomLine("wicket"));
+      }
+
+      // Duck gif (replaces wicket gif)
+      if (isDuck) {
         match.duckStreak = (match.duckStreak || 0) + 1;
         if (match.duckStreak >= 3) {
           await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('duckHattrick'));
@@ -344,8 +351,8 @@ Cannot play 0 — two wickets in a row!`
       else if (bowlerWkts === 5) await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('fiveFer'));
       else if (bowlerWkts >= 6)  await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('sixFer'));
 
-      // ── Hattrick ──
-      if (match.wicketStreak === 3) {
+      // ── Hattrick (replaces wicket gif) ──
+      if (isHattrick) {
         const hattrickCall = getHattrickCall();
         if (hattrickCall.gif) {
           try {
