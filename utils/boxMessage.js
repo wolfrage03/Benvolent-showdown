@@ -4,8 +4,9 @@ function displayWidth(str) {
   for (const ch of [...str]) {
     const cp = ch.codePointAt(0);
     if (!cp) continue;
-    // variation selectors are zero-width
+    // Variation selectors are zero-width — skip
     if (cp >= 0xFE00 && cp <= 0xFE0F) continue;
+    // Emoji, symbols, CJK → width 2
     if (
       (cp >= 0x1F000 && cp <= 0x1FFFF) ||
       (cp >= 0x2600  && cp <= 0x27BF)  ||
@@ -24,9 +25,12 @@ function displayWidth(str) {
 }
 
 function box(title, ...bodyLines) {
-  const w    = displayWidth(title);
-  const line = "─".repeat(w + 2);
-  const parts = [line, ` ${title}`, line];
+  const w     = displayWidth(title);
+  const dashes = "─".repeat(w + 2);
+  const top   = `╭${dashes}╮`;
+  const mid   = ` ${title} `;
+  const bot   = `╰${dashes}╯`;
+  const parts = [top, mid, bot];
   if (bodyLines.length > 0) {
     parts.push(...bodyLines);
   }
