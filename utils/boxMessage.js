@@ -1,4 +1,3 @@
-
 function displayWidth(str) {
   let w = 0;
   for (const ch of [...str]) {
@@ -25,11 +24,12 @@ function displayWidth(str) {
 }
 
 function box(title, ...bodyLines) {
-  const w     = displayWidth(title);
+  const w      = displayWidth(title);
   const dashes = "─".repeat(w + 2);
-  const top   = `╭${dashes}╮`;
-  const mid   = ` ${title} `;
-  const bot   = `╰${dashes}╯`;
+  const top    = `╭${dashes}╮`;
+  const mid    = `│ ${title} │`;
+  const bot    = `╰${dashes}╯`;
+
   const parts = [top, mid, bot];
   if (bodyLines.length > 0) {
     parts.push(...bodyLines);
