@@ -1,5 +1,5 @@
 function box(title, ...bodyLines) {
-  const dashes = "─".repeat([...title].length);
+  const dashes = "─".repeat(Math.floor([...title].length * 0.6));
   const top    = `╭${dashes}╮`;
   const mid    = ` ${title} `;
   const bot    = `╰${dashes}╯`;
