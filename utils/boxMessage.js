@@ -26,7 +26,7 @@ function displayWidth(str) {
 }
 
 function box(title, ...bodyLines) {
-  const w      = displayWidth(title);
+  const w      = [...title].length;
   const dashes = "─".repeat(w + 2);
   const top    = `╭${dashes}╮`;
   const mid    = `│ ${title} │`;
