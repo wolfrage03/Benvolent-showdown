@@ -181,18 +181,14 @@ async function endInnings(match) {
     match.firstInningsData  = JSON.parse(JSON.stringify(match));
 
     try {
-      await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName));
+      await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "HTML" });
     } catch (e) { console.error("Scorecard send failed:", e.message); }
 
     try {
       await bot.telegram.sendMessage(
         match.groupId,
-        `──────── ✅ INNINGS 1 DONE! ────────
-
-      > 📊 ${match.score}/${match.wickets}  |  ⚙️ ${match.currentOver}/${match.totalOvers} overs
-      > 🏹 Target set: ${match.score + 1} runs
-
-      🔄 Teams switching...`
+        `──────── ✅ INNINGS 1 DONE! ────────\n\n<blockquote>📊 ${match.score}/${match.wickets}  |  ⚙️ ${match.currentOver}/${match.totalOvers} overs\n🏹 Target set: ${match.score + 1} runs</blockquote>\n\n🔄 Teams switching...`,
+        { parse_mode: "HTML" }
       );
 
     } catch (e) { console.error("Innings message failed:", e.message); }
@@ -262,13 +258,8 @@ async function endInnings(match) {
     try {
         await bot.telegram.sendMessage(
           match.groupId,
-          `──── ⚡🔥 INNINGS 2 — LET'S GO! ────
-
-          🏏 ${battingTeamName} to bat
-
-          > 🎯 Target: ${match.firstInningsScore + 1} runs
-
-          👉 /batter [number] set opener`
+          `──── ⚡🔥 INNINGS 2 — LET'S GO! ────\n\n🏏 ${battingTeamName} to bat\n\n<blockquote>🎯 Target: ${match.firstInningsScore + 1} runs</blockquote>\n\n👉 /batter [number] set opener`,
+          { parse_mode: "HTML" }
           );
     } catch (e) { console.error("Innings 2 message failed:", e.message); }
 
@@ -342,8 +333,8 @@ async function endInnings(match) {
   } catch (err) { console.error("Stats update error:", err); }
 
   try {
-    await bot.telegram.sendMessage(match.groupId, generateScorecard(match.firstInningsData, getName));
-    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName));
+    await bot.telegram.sendMessage(match.groupId, generateScorecard(match.firstInningsData, getName), { parse_mode: "HTML" });
+    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "HTML" });
   } catch (e) { console.error("Final scorecard failed:", e.message); }
 
   if (match.score > match.firstInningsScore) {
