@@ -589,10 +589,10 @@ bot.command("score", async (ctx) => {
 
 bot.on("text", async (ctx, next) => {
 
-  if (ctx.message.text.startsWith("/")) return;
+  if (ctx.message.text.startsWith("/")) return next();
 
   const match = getMatch(ctx);
-  if (!match) return;
+  if (!match) return next();
 
   const text = ctx.message.text.trim();
 
