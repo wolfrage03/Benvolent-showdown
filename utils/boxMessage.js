@@ -5,6 +5,8 @@ function displayWidth(str) {
     if (!cp) continue;
     // Variation selectors are zero-width — skip
     if (cp >= 0xFE00 && cp <= 0xFE0F) continue;
+    // Box-drawing chars (U+2500–U+257F) are single-width in Telegram — exclude before double-width check
+    if (cp >= 0x2500 && cp <= 0x257F) { w += 1; continue; }
     // Emoji, symbols, CJK → width 2
     if (
       (cp >= 0x1F000 && cp <= 0x1FFFF) ||
