@@ -582,7 +582,12 @@ function getLiveScore(match) {
 bot.command("score", async (ctx) => {
   const match = getMatch(ctx);
   if (!match) return ctx.reply("⚠️ No active match.");
-  await ctx.reply(getLiveScore(match), { parse_mode: "MarkdownV2" });
+  try {
+    await ctx.reply(getLiveScore(match), { parse_mode: "MarkdownV2" });
+  } catch (e) {
+    console.error("Score command failed:", e.message);
+    await ctx.reply("⚠️ Score error: " + e.message);
+  }
 });
 
 
@@ -592,7 +597,7 @@ bot.command("score", async (ctx) => {
 
 bot.on("text", async (ctx, next) => {
 
-  if (ctx.message.text.startsWith("/")) return next();
+  if (ctx.message.text.startsWith("/")) return;
 
   const match = getMatch(ctx);
   if (!match) return;
