@@ -496,10 +496,6 @@ box("🏐 Bowler Set", `🏐 ${player.name} is bowling`, "───────�
 
 /* ================= LIVE SCORE ================= */
 
-function esc(text) {
-  return String(text).replace(/[_*[\]()~`>#+\-=|{}.!\\]/g, '\\$&');
-}
-
 function getLiveScore(match) {
   if (!match) return "⚠️ No active match.";
 
@@ -509,71 +505,67 @@ function getLiveScore(match) {
   const runRate     = ballsBowled > 0
     ? ((match.score / ballsBowled) * 6).toFixed(2) : "0.00";
 
-  let chaseBlock = "";
-  if (match.innings === 2) {
-    const runsNeeded = (match.firstInningsScore + 1) - match.score;
-    const rrr = (runsNeeded > 0 && ballsLeft > 0)
-      ? ((runsNeeded / ballsLeft) * 6).toFixed(2) : "\-";
-    chaseBlock = runsNeeded > 0
-      ? `🏹 *Need ${esc(runsNeeded)} from ${esc(ballsLeft)} balls*   *RRR: ${esc(rrr)}*`
-      : `✅ *Target achieved\!*`;
-  }
+  const battingTeamLetter = match.battingTeam;
+  const bowlingTeamLetter = match.bowlingTeam;
+  const battingTeamName = battingTeamLetter === "A" ? match.teamAName : match.teamBName;
+  const bowlingTeamName = bowlingTeamLetter === "A" ? match.teamAName : match.teamBName;
 
   const st  = match.batterStats?.[match.striker]    || { runs: 0, balls: 0 };
   const nst = match.batterStats?.[match.nonStriker] || { runs: 0, balls: 0 };
   const stSR  = st.balls  > 0 ? ((st.runs  / st.balls)  * 100).toFixed(0) : "0";
   const nstSR = nst.balls > 0 ? ((nst.runs / nst.balls) * 100).toFixed(0) : "0";
 
-  const bwl   = match.bowlerStats?.[match.bowler] || { balls: 0, runs: 0, wickets: 0, history: [] };
-  const bwlOv = `${Math.floor(bwl.balls / 6)}\.${bwl.balls % 6}`;
-  const econ  = bwl.balls > 0 ? ((bwl.runs / bwl.balls) * 6).toFixed(2) : "0\.00";
+  const bwl  = match.bowlerStats?.[match.bowler] || { balls: 0, runs: 0, wickets: 0 };
+  const bwlOv = `${Math.floor(bwl.balls / 6)}.${bwl.balls % 6}`;
+  const econ  = bwl.balls > 0 ? ((bwl.runs / bwl.balls) * 6).toFixed(2) : "0.00";
 
   const partRuns  = match.currentPartnershipRuns  || 0;
   const partBalls = match.currentPartnershipBalls || 0;
 
-  const strikerName    = esc(getName(match, match.striker));
-  const nonStrikerName = esc(getName(match, match.nonStriker));
-  const bowlerName     = esc(getName(match, match.bowler));
+  const strikerName    = getName(match, match.striker);
+  const nonStrikerName = getName(match, match.nonStriker);
+  const bowlerName     = getName(match, match.bowler);
 
-  const battingTeamLetter = match.battingTeam;
-  const bowlingTeamLetter = match.bowlingTeam;
-  const battingTeamName = esc(battingTeamLetter === "A" ? match.teamAName : match.teamBName);
-  const bowlingTeamName = esc(bowlingTeamLetter === "A" ? match.teamAName : match.teamBName);
-
-  const lines = [
-    `*📊 Live Score*`,
-    ``,
-    `🏏 *${battingTeamName}* \(Team ${battingTeamLetter}\)  batting`,
-    `🎯 *${bowlingTeamName}* \(Team ${bowlingTeamLetter}\)  bowling`,
-    ``,
-    `📊 *${match.score}/${match.wickets}*   ⚙️ *${match.currentOver}\.${match.currentBall}/${match.totalOvers}*   📈 *${esc(runRate)}*`,
-  ];
-
-  if (chaseBlock) lines.push(chaseBlock);
-
-  // Current over history
-  const currentOverHistory = (match.overHistory || []).find(
-    o => o.bowler === match.bowler && o.over === match.currentOver + 1
-  );
-  const overBalls = currentOverHistory
-    ? currentOverHistory.balls.map(x => x === "W" ? "🎳" : esc(String(x))).join("  ")
-    : "—";
-
-  // Truncate name for mobile
   function short(name) {
     return name.length > 10 ? name.substring(0, 9) + "…" : name;
   }
 
+  const currentOverHistory = (match.overHistory || []).find(
+    o => o.bowler === match.bowler && o.over === match.currentOver + 1
+  );
+  const overBalls = currentOverHistory
+    ? currentOverHistory.balls.map(x => x === "W" ? "W" : String(x)).join(" ")
+    : "-";
+
+  const lines = [
+    `📊 Live Score`,
+    ``,
+    `🏏 ${battingTeamName} (Team ${battingTeamLetter})  batting`,
+    `🎯 ${bowlingTeamName} (Team ${bowlingTeamLetter})  bowling`,
+    ``,
+    `📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}.${match.currentBall}/${match.totalOvers}   📈 ${runRate}`,
+  ];
+
+  if (match.innings === 2) {
+    const runsNeeded = (match.firstInningsScore + 1) - match.score;
+    if (runsNeeded > 0) {
+      const rrr = ballsLeft > 0 ? ((runsNeeded / ballsLeft) * 6).toFixed(2) : "-";
+      lines.push(`🏹 Need ${runsNeeded} from ${ballsLeft} balls   RRR: ${rrr}`);
+    } else {
+      lines.push(`✅ Target achieved!`);
+    }
+  }
+
   lines.push(
     ``,
-    `*─── 🏏 Batting ───*`,
-    `🏏 *${short(strikerName)}*  *${st.runs}\(${st.balls}\)*  ⚡*SR:${stSR}*`,
-    `🪄 *${short(nonStrikerName)}*  *${nst.runs}\(${nst.balls}\)*  ⚡*SR:${nstSR}*`,
-    `🤝 *Partnership:* ${partRuns}\(${partBalls}\)`,
+    `─── 🏏 Batting ───`,
+    `🏏 ${short(strikerName)}  ${st.runs}(${st.balls})  SR:${stSR}`,
+    `🪄 ${short(nonStrikerName)}  ${nst.runs}(${nst.balls})  SR:${nstSR}`,
+    `🤝 Partnership: ${partRuns}(${partBalls})`,
     ``,
-    `*─── 🎾 Bowling ───*`,
-    `🎾 *${short(bowlerName)}*  🔵*${bwlOv}*  🔴*${bwl.runs}*  💀*${bwl.wickets}w*  📉*${esc(econ)}*`,
-    `┗━ _This over:_ ${overBalls}`
+    `─── 🎾 Bowling ───`,
+    `🎾 ${short(bowlerName)}  ${bwlOv}ov  ${bwl.runs}r  ${bwl.wickets}w  econ:${econ}`,
+    `This over: ${overBalls}`
   );
 
   return lines.join("\n");
@@ -583,7 +575,7 @@ bot.command("score", async (ctx) => {
   const match = getMatch(ctx);
   if (!match) return ctx.reply("⚠️ No active match.");
   try {
-    await ctx.reply(getLiveScore(match), { parse_mode: "MarkdownV2" });
+    await ctx.reply(getLiveScore(match));
   } catch (e) {
     console.error("Score command failed:", e.message);
     await ctx.reply("⚠️ Score error: " + e.message);
