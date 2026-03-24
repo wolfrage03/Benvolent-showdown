@@ -3,13 +3,15 @@ const updatePlayerStats   = require("../utils/updateStats");
 const { sendAndPinPlayerList } = require("../commands/captainCommands");
 const { matches, playerActiveMatch } = require("../matchManager");
 
-let bot, getName, clearTimers, clearActiveMatchPlayers;
+let bot, getName, clearTimers, clearActiveMatchPlayers, initTimerState, getCountdownCall;
 
 function init(deps) {
   bot                     = deps.bot;
   getName                 = deps.getName;
   clearTimers             = deps.clearTimers;
   clearActiveMatchPlayers = deps.clearActiveMatchPlayers;
+  initTimerState          = deps.initTimerState;
+  getCountdownCall        = deps.getCountdownCall;
 }
 
 
@@ -225,6 +227,29 @@ async function endInnings(match) {
     match.awaitingBat             = false;
     match.awaitingBowl            = false;
     match.phase                   = "set_striker";
+
+    // ── Reset pool timer for innings 2 (extraUsed carries over) ──
+    if (initTimerState) initTimerState(match);
+
+    // ── 15 sec break between innings with countdown GIF ──
+    try {
+      const call = getCountdownCall ? getCountdownCall() : null;
+      if (call?.gif) {
+        try {
+          if (call.gif.startsWith("BAAC")) {
+            await bot.telegram.sendVideo(match.groupId, call.gif, { caption: "⏳ 15 seconds — innings 2 starting soon!" });
+          } else {
+            await bot.telegram.sendAnimation(match.groupId, call.gif, { caption: "⏳ 15 seconds — innings 2 starting soon!" });
+          }
+        } catch (e) {
+          await bot.telegram.sendMessage(match.groupId, "⏳ 15 seconds — innings 2 starting soon!");
+        }
+      } else {
+        await bot.telegram.sendMessage(match.groupId, "⏳ 15 seconds — innings 2 starting soon!");
+      }
+    } catch (e) { console.error("Countdown failed:", e.message); }
+
+    await new Promise(resolve => setTimeout(resolve, 15000));
 
     try { await sendAndPinPlayerList(match, bot.telegram); }
     catch (e) { console.error("PinList failed:", e.message); }

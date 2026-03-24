@@ -289,6 +289,13 @@ const gifs = {
   partnership: [
     "BAACAgUAAxkBAAIJLGnAPdgxPEW02sdURNaEt-UnebrSAAJYHwACs1cBVpKEM21YZd_FOgQ",
     "BAACAgUAAxkBAAIJLmnAPeqDbi4_SoRfuOcOC4vtMQs9AAJZHwACs1cBVp5jTpPSZPSZOgQ"
+  ],
+
+  countdownCall: [
+    "BAACAgUAAxkBAAIJfWnBelaThJee7yBAxXWNeOmhcCGCAAKGHAACs1cJVmqG-ZQwIu4hOgQ",
+    "BAACAgUAAxkBAAIJe2nBelXWMUZUY09vZGd9kYFPvy_BAAKFHAACs1cJVsF4_dM2pDpBOgQ",
+    "BAACAgUAAxkBAAIJeWnBelKKo4PdGcGOXTqhBtlpIqEYAAKEHAACs1cJVjgHBeYIhQIYOgQ",
+    "BAACAgUAAxkBAAIJd2nBelHvjYpcrQHMF3uICwqE5HatAAKDHAACs1cJVo_Wr43LJGhTOgQ"
   ]
 
 };
@@ -426,6 +433,13 @@ function getHattrickCall() {
   };
 }
 
+function getCountdownCall() {
+  return {
+    text: `⏳ Get ready...`,
+    gif:  pick(gifs.countdownCall)
+  };
+}
+
 function getRandomTeams() {
   const shuffled = [...teams].sort(() => 0.5 - Math.random());
   return shuffled.slice(0, 2);
@@ -443,9 +457,10 @@ function randomMilestoneLine(type) {
 module.exports = {
   randomLine,
   randomGif,
-  getBowlingCall,   
+  getBowlingCall,
   getBattingCall,
   getHattrickCall,
+  getCountdownCall,
   getRandomTeams,
   randomMilestoneLine
 };

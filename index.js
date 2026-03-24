@@ -19,6 +19,7 @@ const {
   randomGif,
   getBowlingCall,
   getBattingCall,
+  getCountdownCall,
   getRandomTeams,
   randomMilestoneLine
 } = require("./commentary");
@@ -94,6 +95,136 @@ function clearTimers(match) {
   if (match.warning30) { clearTimeout(match.warning30); match.warning30 = null; }
   if (match.warning10) { clearTimeout(match.warning10); match.warning10 = null; }
   if (match.ballTimer)  { clearTimeout(match.ballTimer);  match.ballTimer  = null; }
+}
+
+/* ================= DELAY TIMER SYSTEM ================= */
+
+const POOL_MS  = 5 * 60 * 1000;  // 5 min pool per innings per team
+const EXTRA_MS = 5 * 60 * 1000;  // 5 min extra per team per match
+const EVENT_MS = 5 * 60 * 1000;  // 5 min per-event (over/wicket)
+
+function msToMin(ms) {
+  const m = Math.floor(ms / 60000);
+  const s = Math.floor((ms % 60000) / 1000);
+  return `${m}m ${s}s`;
+}
+
+function initTimerState(match) {
+  // reset pool for new innings — extraUsed carries across innings (per team per match)
+  clearDelayTimers(match);
+  match.poolRemaining   = POOL_MS;
+  match.poolTimerStart  = null;
+  match.poolTimerActive = false;
+  match.eventTimer      = null;
+  match.poolTimer       = null;
+  match.extraTimer      = null;
+}
+
+function clearDelayTimers(match) {
+  if (!match) return;
+  if (match.eventTimer) { clearTimeout(match.eventTimer); match.eventTimer = null; }
+  if (match.poolTimer)  { clearTimeout(match.poolTimer);  match.poolTimer  = null; }
+  if (match.extraTimer) { clearTimeout(match.extraTimer); match.extraTimer = null; }
+  // if pool was running, save consumed ms
+  if (match.poolTimerActive && match.poolTimerStart) {
+    const consumed = Date.now() - match.poolTimerStart;
+    match.poolRemaining = Math.max(0, (match.poolRemaining || POOL_MS) - consumed);
+    match.poolTimerStart  = null;
+    match.poolTimerActive = false;
+  }
+}
+
+async function startDelayTimer(match, type) {
+  clearDelayTimers(match);
+
+  const delayedTeam = type === "bowler" ? match.bowlingTeam : match.battingTeam;
+
+  // ── Per-event 5 min ──
+  match.eventTimer = setTimeout(async () => {
+    match.eventTimer = null;
+    const phase = type === "bowler" ? "set_bowler" : "new_batter";
+    if (match.phase !== phase || match.inningsEnded) return;
+
+    const poolLeft = match.poolRemaining || POOL_MS;
+    await bot.telegram.sendMessage(match.groupId,
+`⚠️ 5 min event time up — no ${type} set!
+⏳ Team innings pool starting: ${msToMin(poolLeft)} remaining.
+👉 /${type === "bowler" ? "bowler [number]" : "batter [number]"}`
+    );
+
+    if (poolLeft <= 0) {
+      // pool already empty — go straight to extra or forfeit
+      await handlePoolExhausted(match, type, delayedTeam);
+      return;
+    }
+
+    // ── Pool timer ──
+    match.poolTimerStart  = Date.now();
+    match.poolTimerActive = true;
+
+    match.poolTimer = setTimeout(async () => {
+      match.poolTimer       = null;
+      match.poolTimerActive = false;
+      if (match.phase !== phase || match.inningsEnded) return;
+      match.poolRemaining = 0;
+      await handlePoolExhausted(match, type, delayedTeam);
+    }, poolLeft);
+
+  }, EVENT_MS);
+}
+
+async function handlePoolExhausted(match, type, delayedTeam) {
+  const phase = type === "bowler" ? "set_bowler" : "new_batter";
+  if (match.phase !== phase || match.inningsEnded) return;
+
+  if (!match.extraUsed) match.extraUsed = { A: false, B: false };
+
+  if (!match.extraUsed[delayedTeam]) {
+    // Grant one-time 5 min extra for this team
+    match.extraUsed[delayedTeam] = true;
+    await bot.telegram.sendMessage(match.groupId,
+`🚨 Team pool exhausted!
+⚠️ One-time 5 min extra granted to 〔Team ${delayedTeam}〕
+⛔ This is the FINAL chance — opposition wins if time runs out!
+👉 /${type === "bowler" ? "bowler [number]" : "batter [number]"}`
+    );
+
+    match.extraTimer = setTimeout(async () => {
+      match.extraTimer = null;
+      if (match.phase !== phase || match.inningsEnded) return;
+      await declareTimeout(match, delayedTeam);
+    }, EXTRA_MS);
+
+  } else {
+    // Extra already used — opposition wins immediately
+    await declareTimeout(match, delayedTeam);
+  }
+}
+
+async function declareTimeout(match, timedOutTeam) {
+  if (match.inningsEnded || match.matchEnded) return;
+  match.matchEnded = true;
+
+  const winningTeam = timedOutTeam === "A" ? "B" : "A";
+  const winningName = winningTeam === "A" ? match.teamAName : match.teamBName;
+  const losingName  = timedOutTeam === "A" ? match.teamAName : match.teamBName;
+
+  clearDelayTimers(match);
+  clearTimers(match);
+
+  await bot.telegram.sendMessage(
+    match.groupId,
+`╭─────────────────────╮
+   ⏱ Time Out!
+╰─────────────────────╯
+〔Team ${timedOutTeam}〕 ${losingName}
+failed to respond in time.
+─────────────────────
+🏆 〔Team ${winningTeam}〕 ${winningName} wins!`
+  );
+
+  clearActiveMatchPlayers(match);
+  matches.delete(match.groupId);
 }
 
 function bowlDMButton() {
@@ -188,6 +319,9 @@ async function checkOverEnd(match) {
     );
   } catch (e) { console.error("Over message failed:", e.message); }
 
+  // ── Start 5 min event timer for bowler selection ──
+  await startDelayTimer(match, "bowler");
+
   return true;
 }
 
@@ -201,12 +335,12 @@ const helpers = {
   startToss: null
 };
 
-matchResult.init({ bot, getName, clearTimers, clearActiveMatchPlayers });
+matchResult.init({ bot, getName, clearTimers, clearActiveMatchPlayers, initTimerState, getCountdownCall });
 ballHandler.init({
   bot, getName, clearTimers, swapStrike, sendWithGif,
   battingPlayers, checkOverEnd, advanceGame,
   endInnings: (m) => matchResult.endInnings(m),
-  bowlDMButton
+  bowlDMButton, startDelayTimer
 });
 
 require("./commands/matchCommands")(bot, helpers);
@@ -316,6 +450,9 @@ bot.command("batter", async (ctx) => {
     await sendAndPinPlayerList(match, ctx.telegram);
     match.phase = "play";
 
+    // ── Clear delay timers, save pool remaining ──
+    clearDelayTimers(match);
+
     await ctx.reply(
 `╭───────────╮
    🏏 New Batter
@@ -370,13 +507,16 @@ bot.command("bowler", async (ctx) => {
   match.phase = "play";
   playerActiveMatch.set(player.id, match.groupId);
 
+  // ── Clear delay timers, save pool remaining ──
+  clearDelayTimers(match);
+
   await ctx.reply(
 `╭───────────╮
    🏐 Bowler Set
 ╰───────────╯
 🏐 ${player.name} is bowling
 ───────────
-Ball starting...`
+Ball starting in 10s...`
   );
   await ballHandler.startBall(match);
 });

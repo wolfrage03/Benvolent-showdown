@@ -3,19 +3,20 @@ const { randomLine, getBowlingCall, getBattingCall, getHattrickCall, randomMiles
 /* ================= DEPS (injected via init) ================= */
 
 let bot, getName, clearTimers, swapStrike, checkOverEnd, advanceGame,
-    endInnings, sendWithGif, battingPlayers, bowlDMButton;
+    endInnings, sendWithGif, battingPlayers, bowlDMButton, startDelayTimer;
 
 function init(deps) {
-  bot           = deps.bot;
-  getName       = deps.getName;
-  clearTimers   = deps.clearTimers;
-  swapStrike    = deps.swapStrike;
-  checkOverEnd  = deps.checkOverEnd;
-  advanceGame   = deps.advanceGame;
-  endInnings    = deps.endInnings;
-  sendWithGif   = deps.sendWithGif;
-  battingPlayers = deps.battingPlayers;
-  bowlDMButton  = deps.bowlDMButton;
+  bot             = deps.bot;
+  getName         = deps.getName;
+  clearTimers     = deps.clearTimers;
+  swapStrike      = deps.swapStrike;
+  checkOverEnd    = deps.checkOverEnd;
+  advanceGame     = deps.advanceGame;
+  endInnings      = deps.endInnings;
+  sendWithGif     = deps.sendWithGif;
+  battingPlayers  = deps.battingPlayers;
+  bowlDMButton    = deps.bowlDMButton;
+  startDelayTimer = deps.startDelayTimer;
 }
 
 
@@ -255,6 +256,11 @@ async function startBall(match) {
   match.phase        = "play";
   match.awaitingBowl = true;
   match.awaitingBat  = false;
+
+  // ── 10 sec gap after bowler set before ball starts ──
+  await new Promise(resolve => setTimeout(resolve, 10000));
+  if (match.phase !== "play" || match.inningsEnded) return;
+
   await announceBall(match);
   startTurnTimer(match, "bowl");
 }
@@ -394,45 +400,8 @@ Cannot play 0 — two wickets in a row!`
 👉 /batter [number] new batter`
       );
 
-if (match.currentBall === 0) {
-  // new over → bowler needed
-
-  if (!match.teamBowlerTimeLeft) {
-    match.teamBowlerTimeLeft = 300000; // 5 min
-  }
-
-  match.teamTimerStart = Date.now();
-
-  match.bowlerTimer = setTimeout(async () => {
-
-    const used = Date.now() - match.teamTimerStart;
-    match.teamBowlerTimeLeft -= used;
-    match.teamTimerStart = null;
-
-    if (match.teamBowlerTimeLeft <= 0) {
-      match.teamBowlerTimeLeft = 0;
-
-      await bot.telegram.sendMessage(
-        match.groupId,
-        `❌ Team time exhausted!`
-      );
-      return;
-    }
-
-    await bot.telegram.sendMessage(
-      match.groupId,
-      `⚠️ Time left: ${Math.ceil(match.teamBowlerTimeLeft / 1000)} sec`
-    );
-
-    match.teamTimerStart = Date.now();
-
-    match.bowlerTimer = setTimeout(async () => {
-      await bot.telegram.sendMessage(match.groupId, `❌ Final time over!`);
-    }, match.teamBowlerTimeLeft);
-
-  }, match.teamBowlerTimeLeft);
-}
-
+      // ── Start 5 min event timer for batter selection ──
+      if (startDelayTimer) await startDelayTimer(match, "batter");
       return;
     }
 
