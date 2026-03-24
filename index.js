@@ -697,20 +697,7 @@ bot.on("text", async (ctx, next) => {
   );
 
   const battingCall = getBattingCall();
-  if (battingCall.gif) {
-    try {
-      if (battingCall.gif.startsWith("BAAC")) {
-        await bot.telegram.sendVideo(match.groupId, battingCall.gif, { caption: battingCall.text });
-      } else {
-        await bot.telegram.sendAnimation(match.groupId, battingCall.gif, { caption: battingCall.text });
-      }
-    } catch (e) {
-      console.error("Batting gif failed:", e.message);
-      await bot.telegram.sendMessage(match.groupId, battingCall.text);
-    }
-  } else {
-    await bot.telegram.sendMessage(match.groupId, battingCall.text);
-  }
+  await bot.telegram.sendMessage(match.groupId, battingCall.text);
   ballHandler.startTurnTimer(match, "bat");
 });
 

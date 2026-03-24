@@ -257,10 +257,6 @@ async function startBall(match) {
   match.awaitingBowl = true;
   match.awaitingBat  = false;
 
-  // ── 10 sec gap after bowler set before ball starts ──
-  await new Promise(resolve => setTimeout(resolve, 10000));
-  if (match.phase !== "play" || match.inningsEnded) return;
-
   await announceBall(match);
   startTurnTimer(match, "bowl");
 }
