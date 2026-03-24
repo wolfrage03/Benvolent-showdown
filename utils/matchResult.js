@@ -1,4 +1,5 @@
 const generateScorecard   = require("../utils/scorecardGenerator");
+const box               = require("../utils/boxMessage");
 const updatePlayerStats   = require("../utils/updateStats");
 const { sendAndPinPlayerList } = require("../commands/captainCommands");
 const { matches, playerActiveMatch } = require("../matchManager");
@@ -186,12 +187,14 @@ async function endInnings(match) {
     try {
       await bot.telegram.sendMessage(
         match.groupId,
-`──────── ✅ INNINGS 1 DONE! ────────
+        `──────── ✅ INNINGS 1 DONE! ────────
 
-📊 ${match.score}/${match.wickets}  |  ⚙️ ${match.currentOver}/${match.totalOvers} overs
-🏹 Target set: ${match.score + 1} runs
-🔄 Teams switching...`
+      > 📊 ${match.score}/${match.wickets}  |  ⚙️ ${match.currentOver}/${match.totalOvers} overs
+      > 🏹 Target set: ${match.score + 1} runs
+
+      🔄 Teams switching...`
       );
+
     } catch (e) { console.error("Innings message failed:", e.message); }
 
     match.innings      = 2;
@@ -257,15 +260,16 @@ async function endInnings(match) {
     const battingTeamName = match.battingTeam === "A" ? match.teamAName : match.teamBName;
 
     try {
-      await bot.telegram.sendMessage(
-        match.groupId,
-`──── ⚡🔥 INNINGS 2 — LET'S GO! ────
+        await bot.telegram.sendMessage(
+          match.groupId,
+          `──── ⚡🔥 INNINGS 2 — LET'S GO! ────
 
-🏏 ${battingTeamName} to bat
-🎯 Target: ${match.firstInningsScore + 1} — can they chase it?
+          🏏 ${battingTeamName} to bat
 
-👉 /batter [number] set opener`
-      );
+          > 🎯 Target: ${match.firstInningsScore + 1} runs
+
+          👉 /batter [number] set opener`
+          );
     } catch (e) { console.error("Innings 2 message failed:", e.message); }
 
     return;

@@ -1,5 +1,6 @@
 const { getMatch, matches } = require("../matchManager");
 const { getRandomTeams } = require("../commentary");
+const box = require("../utils/boxMessage");
 
 module.exports = function (bot, helpers) {
 
@@ -28,14 +29,7 @@ bot.action("select_host", async (ctx) => {
   try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
 
   await ctx.reply(
-`╭───────────╮
-   👑 Host Assigned
-╰───────────╯
-${ctx.from.first_name}
-🔵 〔Team A〕 ${match.teamAName}
-🔴 〔Team B〕 ${match.teamBName}
-───────────
-👉 /createteam to open lobby`
+box("👑 Host Assigned", `${ctx.from.first_name}`, `🔵 〔Team A〕 ${match.teamAName}`, `🔴 〔Team B〕 ${match.teamBName}`, "───────────", "👉 /createteam to open lobby")
   );
 });
 
@@ -108,10 +102,7 @@ async function startHostVoting(match, ctx) {
 
     await bot.telegram.sendMessage(
       m.groupId,
-`╭───────────╮
-   ⏱ Voting Expired
-╰───────────╯
-No host change made.`
+box("⏱ Voting Expired", "No host change made.")
     );
 
     m.hostChange = null;
@@ -125,14 +116,7 @@ function getVoteText(match) {
   const bVotes = match.hostChange.teamVotes.teamB.size;
 
   return (
-`╭───────────╮
-   🗳 Host Change Vote
-╰───────────╯
-🔵 〔Team A〕 ${match.teamAName}   ${aVotes}/2
-🔴 〔Team B〕 ${match.teamBName}   ${bVotes}/2
-───────────
-Need 2 votes from each team
-⏱ Closes in 60s`
+box("🗳 Host Change Vote", `🔵 〔Team A〕 ${match.teamAName}   ${aVotes}/2`, `🔴 〔Team B〕 ${match.teamBName}   ${bVotes}/2`, "───────────", "Need 2 votes from each team", "⏱ Closes in 60s")
   );
 }
 
@@ -216,10 +200,7 @@ async function showHostSelection(match) {
 
   const msg = await bot.telegram.sendMessage(
     match.groupId,
-`╭───────────╮
-   ✅ Voting Passed
-╰───────────╯
-A non-playing member can now take host.`,
+box("✅ Voting Passed", "A non-playing member can now take host."),
     {
       reply_markup: {
         inline_keyboard: [
@@ -265,10 +246,7 @@ bot.action("take_host", async (ctx) => {
 
   await bot.telegram.sendMessage(
     match.groupId,
-`╭───────────╮
-   👑 New Host
-╰───────────╯
-${getDisplayName(ctx.from)}`
+box("👑 New Host", `${getDisplayName(ctx.from)}`)
   );
 
   ctx.answerCbQuery("You are now host 👑");
@@ -295,9 +273,7 @@ bot.action("cancel_host_vote", async (ctx) => {
   } catch {}
 
   await bot.telegram.sendMessage(match.groupId,
-`╭───────────╮
-   ✖️ Host Change Cancelled
-╰───────────╯`
+box("✖️ Host Change Cancelled")
   );
 
   match.hostChange = null;

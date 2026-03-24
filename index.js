@@ -11,6 +11,7 @@ const updatePlayerStats = require("./utils/updateStats");
 const PlayerStats = require("./models/PlayerStats");
 const generateScorecard = require("./utils/scorecardGenerator");
 const matchResult       = require("./utils/matchResult");
+const box               = require("./utils/boxMessage");
 const ballHandler       = require("./utils/ballHandler");
 const { sendAndPinPlayerList } = require("./commands/captainCommands");
 
@@ -214,13 +215,7 @@ async function declareTimeout(match, timedOutTeam) {
 
   await bot.telegram.sendMessage(
     match.groupId,
-`╭───────────╮
-   ⏱ Time Out!
-╰───────────╯
-〔Team ${timedOutTeam}〕 ${losingName}
-failed to respond in time.
-───────────
-🏆 〔Team ${winningTeam}〕 ${winningName} wins!`
+box("⏱ Time Out!", `〔Team ${timedOutTeam}〕 ${losingName}`, "failed to respond in time.", "───────────", `🏆 〔Team ${winningTeam}〕 ${winningName} wins!`)
   );
 
   clearActiveMatchPlayers(match);
@@ -310,12 +305,7 @@ async function checkOverEnd(match) {
   try {
     await bot.telegram.sendMessage(
       match.groupId,
-`╭───────────╮
-   ✅ Over ${match.currentOver} Complete
-╰───────────╯
-📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}/${match.totalOvers} ov   📈 ${rr}
-───────────
-👉 /bowler [number] new bowler`
+box(`✅ Over ${match.currentOver} Complete`, `📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}/${match.totalOvers} ov   📈 ${rr}`, "───────────", "👉 /bowler [number] new bowler")
     );
   } catch (e) { console.error("Over message failed:", e.message); }
 
@@ -406,12 +396,7 @@ bot.command("batter", async (ctx) => {
     await sendAndPinPlayerList(match, ctx.telegram);
 
     return ctx.reply(
-`╭───────────╮
-   🏏 Striker Set
-╰───────────╯
-🏏 ${name}   ${ordinal(orderNumber)} batter
-───────────
-👉 /batter [number] set non-striker`
+box("🏏 Striker Set", `🏏 ${name}   ${ordinal(orderNumber)} batter`, "───────────", "👉 /batter [number] set non-striker")
     );
   }
 
@@ -427,12 +412,7 @@ bot.command("batter", async (ctx) => {
     await sendAndPinPlayerList(match, ctx.telegram);
 
     return ctx.reply(
-`╭───────────╮
-   🪄 Non-Striker Set
-╰───────────╯
-🪄 ${name}   ${ordinal(orderNumber)} batter
-───────────
-👉 /bowler [number] set bowler`
+box("🪄 Non-Striker Set", `🪄 ${name}   ${ordinal(orderNumber)} batter`, "───────────", "👉 /bowler [number] set bowler")
     );
   }
 
@@ -454,10 +434,7 @@ bot.command("batter", async (ctx) => {
     clearDelayTimers(match);
 
     await ctx.reply(
-`╭───────────╮
-   🏏 New Batter
-╰───────────╯
-🏏 ${name}   ${ordinal(orderNumber)} batter`
+box("🏏 New Batter", `🏏 ${name}   ${ordinal(orderNumber)} batter`)
     );
     return ballHandler.startBall(match);
   }
@@ -511,12 +488,7 @@ bot.command("bowler", async (ctx) => {
   clearDelayTimers(match);
 
   await ctx.reply(
-`╭───────────╮
-   🏐 Bowler Set
-╰───────────╯
-🏐 ${player.name} is bowling
-───────────
-Ball starting in 10s...`
+box("🏐 Bowler Set", `🏐 ${player.name} is bowling`, "───────────", "Ball starting in 10s...")
   );
   await ballHandler.startBall(match);
 });

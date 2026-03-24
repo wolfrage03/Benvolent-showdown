@@ -5,6 +5,7 @@ const {
   resetMatch,
   matches
 } = require("../matchManager");
+const box = require("../utils/boxMessage");
 
 module.exports = function (bot, helpers) {
 
@@ -45,11 +46,7 @@ module.exports = function (bot, helpers) {
     match.phase   = "host_select";
 
     ctx.reply(
-`╭───────────╮
-   🏏 Match Lobby
-╰───────────╯
-A new match is starting!
-First player to press becomes host.`,
+box("🏏 Match Lobby", "A new match is starting!", "First player to press becomes host."),
       Markup.inlineKeyboard([
         [Markup.button.callback("👑 Become Host", "select_host")]
       ])
@@ -75,10 +72,7 @@ First player to press becomes host.`,
       return ctx.reply("❌ Only host or admin can end the match.");
 
     ctx.reply(
-`╭───────────╮
-   ⚠️ End Match?
-╰───────────╯
-This cannot be undone.`,
+box("⚠️ End Match?", "This cannot be undone."),
       Markup.inlineKeyboard([
         [
           Markup.button.callback("✅ Confirm", "confirm_end"),
@@ -108,10 +102,7 @@ This cannot be undone.`,
     try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
 
     await ctx.reply(
-`╭───────────╮
-   🛑 Match Ended
-╰───────────╯
-👉 /start to begin a new match`
+box("🛑 Match Ended", "👉 /start to begin a new match")
     );
 
     clearTimers(match);

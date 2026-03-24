@@ -1,3 +1,4 @@
+const box = require("../utils/boxMessage");
 const User = require("../User");
 
 function registerStartHandler(bot) {
@@ -29,9 +30,7 @@ function registerStartHandler(bot) {
     }
 
     await ctx.reply(
-`✅ Bot connected
-──────────────
-When selected as bowler, send your number \`1–6\` here in DM.`
+box("✅ Bot connected", "When selected as bowler, send your number `1–6` here in DM.")
     );
 
   });

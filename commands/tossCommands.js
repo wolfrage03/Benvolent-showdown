@@ -1,6 +1,7 @@
 const { Markup } = require("telegraf");
 const { getMatch } = require("../matchManager");
 const { sendAndPinPlayerList } = require("./captainCommands");
+const box = require("../utils/boxMessage");
 
 module.exports = function (bot, helpers) {
 
@@ -15,16 +16,8 @@ async function startToss(match) {
 
   await bot.telegram.sendMessage(
     match.groupId,
-`╭───────────╮
-   🎲 <b>Toss Time</b>
-╰───────────╯
-🔵 〔<b>Team A</b>〕 ${match.teamAName}
-🔴 〔<b>Team B</b>〕 ${match.teamBName}
-───────────
-Captains choose odd or even.
-A number will be rolled.`,
+box("🎲 Toss Time", `🔵 〔Team A〕 ${match.teamAName}`, `🔴 〔Team B〕 ${match.teamBName}`, "───────────", "Captains choose odd or even.", "A number will be rolled."),
     {
-      parse_mode: "HTML",
       ...Markup.inlineKeyboard([
         [
           Markup.button.callback("⚫ Odd",  "toss_odd"),
@@ -85,15 +78,8 @@ bot.action(["toss_odd", "toss_even"], async (ctx) => {
 
   await bot.telegram.sendMessage(
     match.groupId,
-`╭───────────╮
-   🎲 <b>Toss Result</b>
-╰───────────╯
-🎯 Rolled <b>${rolledValue}</b>   <b>${diceResult}</b>
-🏆 〔<b>Team ${winnerTeamFinal}</b>〕 <b>${winnerTeamFinal === "A" ? match.teamAName : match.teamBName}</b> won!
-───────────
-Choose to bat or bowl:`,
+box("🎲 Toss Result", `🎯 Rolled ${rolledValue}   ${diceResult}`, `🏆 〔Team ${winnerTeamFinal}〕 ${winnerTeamFinal === "A" ? match.teamAName : match.teamBName} won!`, "───────────", "Choose to bat or bowl:"),
     {
-      parse_mode: "HTML",
       reply_markup: {
         inline_keyboard: [[
           { text: "🏏 Bat",  callback_data: "decision_bat"  },
@@ -145,14 +131,7 @@ bot.action(["decision_bat", "decision_bowl"], async (ctx) => {
 
   await bot.telegram.sendMessage(
     match.groupId,
-`╭───────────╮
-   ✅ <b>Match Setup</b>
-╰───────────╯
-🏏 〔<b>Team ${match.battingTeam}</b>〕 <b>${battingName}</b>  batting
-🎯 〔<b>Team ${match.bowlingTeam}</b>〕 <b>${bowlingName}</b>  bowling
-───────────
-👉 /setovers [1–25] to set overs`,
-    { parse_mode: "HTML" }
+box("✅ Match Setup", `🏏 〔Team ${match.battingTeam}〕 ${battingName}  batting`, `🎯 〔Team ${match.bowlingTeam}〕 ${bowlingName}  bowling`, "───────────", "👉 /setovers [1–25] to set overs"),
   );
 });
 
@@ -186,15 +165,7 @@ bot.command("setovers", (ctx) => {
   const bowlingName = match.bowlingTeam === "A" ? match.teamAName : match.teamBName;
 
   ctx.reply(
-`╭───────────╮
-   ⚙️ Overs Set
-╰───────────╯
-Overs: <b>${overs}</b>
-🏏 〔<b>Team ${match.battingTeam}</b>〕 <b>${battingName}</b>  batting
-🎯 〔<b>Team ${match.bowlingTeam}</b>〕 <b>${bowlingName}</b>  bowling
-───────────
-👉 /batter [number] set opener`,
-    { parse_mode: "HTML" }
+box("⚙️ Overs Set", `Overs: ${overs}`, `🏏 〔Team ${match.battingTeam}〕 ${battingName}  batting`, `🎯 〔Team ${match.bowlingTeam}〕 ${bowlingName}  bowling`, "───────────", "👉 /batter [number] set opener"),
   );
 });
 

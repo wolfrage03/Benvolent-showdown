@@ -1,5 +1,6 @@
 const { Markup } = require("telegraf");
 const { getMatch } = require("../matchManager");
+const box = require("../utils/boxMessage");
 
 
 // ═══════════════════════════════════════════════
@@ -102,11 +103,7 @@ module.exports = function (bot, helpers) {
     match.phase = "captain";
 
     ctx.reply(
-`╭───────────╮
-   👑 Captain Selection
-╰───────────╯
-Each team picks their own captain.
-Tap the button below.`,
+box("👑 Captain Selection", "Each team picks their own captain.", "Tap the button below."),
       Markup.inlineKeyboard([
         [Markup.button.callback("👑 Captain — Team A", "cap_A")],
         [Markup.button.callback("👑 Captain — Team B", "cap_B")]
@@ -135,11 +132,7 @@ Tap the button below.`,
 
     await ctx.answerCbQuery("You are Captain of Team A 👑");
     await ctx.reply(
-`╭───────────╮
-   👑 Captain Set
-╰───────────╯
-${getDisplayName(ctx.from)}
-🔵 〔Team A〕 Captain`
+box("👑 Captain Set", `${getDisplayName(ctx.from)}`, "🔵 〔Team A〕 Captain")
     );
 
     updateCaptainButtons(match, ctx);
@@ -166,11 +159,7 @@ ${getDisplayName(ctx.from)}
 
     await ctx.answerCbQuery("You are Captain of Team B 👑");
     await ctx.reply(
-`╭───────────╮
-   👑 Captain Set
-╰───────────╯
-${getDisplayName(ctx.from)}
-🔴 〔Team B〕 Captain`
+box("👑 Captain Set", `${getDisplayName(ctx.from)}`, "🔴 〔Team B〕 Captain")
     );
 
     updateCaptainButtons(match, ctx);
@@ -196,10 +185,7 @@ ${getDisplayName(ctx.from)}
       match.phase = "toss";
 
       ctx.reply(
-`╭───────────╮
-   ✅ Both Captains Set
-╰───────────╯
-Starting toss...`
+box("✅ Both Captains Set", "Starting toss...")
       );
 
       if (helpers.startToss) helpers.startToss(match);
@@ -271,10 +257,7 @@ Starting toss...`
     const name = getName(match, newCaptainId);
 
     await ctx.reply(
-`╭───────────╮
-   🔄 Change Captain?
-╰───────────╯
-〔Team ${teamLetter}〕 → ${name}`,
+box("🔄 Change Captain?", `〔Team ${teamLetter}〕 → ${name}`),
       Markup.inlineKeyboard([
         [
           Markup.button.callback("✅ Confirm", "confirm_cap_change"),
@@ -308,10 +291,7 @@ Starting toss...`
     const mention = `<a href="tg://user?id=${playerId}">${getName(match, playerId)}</a>`;
 
     await ctx.editMessageText(
-`╭───────────╮
-   👑 Captain Updated
-╰───────────╯
-${mention} → 〔Team ${team}〕`,
+box("👑 Captain Updated", `${mention} → 〔Team ${team}〕`),
       { parse_mode: "HTML" }
     );
 
@@ -331,9 +311,7 @@ ${mention} → 〔Team ${team}〕`,
 
     match.pendingCaptainChange = null;
     await ctx.editMessageText(
-`╭───────────╮
-   ✖️ Captain Change Cancelled
-╰───────────╯`
+box("✖️ Captain Change Cancelled")
     );
   });
 
