@@ -70,20 +70,26 @@ function generateScorecard(match, getName) {
     const isTimedOut = match.timedOutBatters?.includes(id);
     const isDismissed = !!stats.dismissedBy || isTimedOut;
 
+    const isStriker = id === match.striker;
+    const isNonStriker = id === match.nonStriker;
+
+    const indicator = isStriker ? "⭐ " : isNonStriker ? "• " : "";
+
     const isNotOut =
-      (id === match.striker || id === match.nonStriker) && !isDismissed;
+      (isStriker || isNonStriker) && !isDismissed;
 
     const notOutMark = isNotOut ? "*" : "";
 
-    battingRows += `"🏏 ${name}${notOutMark}  ${stats.runs}(${stats.balls})  ⚡SR:${sr}"\n`;
-    battingRows += `"┗━ ${fours}(4s)  ${fives}(5s)  ${sixes}(6s)"\n`;
+    battingRows += `🏏 ${indicator}${name}${notOutMark}\n`;
+    battingRows += `> ${stats.runs}(${stats.balls})  ⚡SR:${sr}\n`;
+    battingRows += `> ┗━ ${fours}(4s)  ${fives}(5s)  ${sixes}(6s)\n`;
 
     if (isTimedOut) {
-      battingRows += `"   ┗━ ⏱ timed out"\n`;
+      battingRows += `>    ┗━ ⏱ timed out\n`;
     } 
     else if (isDismissed && stats.dismissedBy) {
       const bowlerName = getName(match, stats.dismissedBy);
-      battingRows += `"   ┗━ 🎾 b ${bowlerName}"\n`;
+      battingRows += `>    ┗━ 🎾 b ${bowlerName}\n`;
     }
 
     battingRows += "\n";
@@ -121,7 +127,8 @@ function generateScorecard(match, getName) {
     const ovW = Math.floor(b.balls / 6);
     const ovB = b.balls % 6;
 
-    bowlingRows += `"🎾 ${name}  ${ovW}.${ovB}ov  🏏${b.runs}  ⚾${b.wickets}  📉${econ}"\n`;
+    bowlingRows += `🎾 ${name}\n`;
+    bowlingRows += `> ${ovW}.${ovB}ov  🏏${b.runs}  ⚾${b.wickets}  📉${econ}\n`;
 
     const theirOvers =
       (match.overHistory || []).filter(
@@ -135,9 +142,7 @@ function generateScorecard(match, getName) {
       const balls =
         o.balls.map(x => x === "W" ? "⚾" : String(x)).join("  ");
 
-      const indent = "   ".repeat(i + 1);
-
-      bowlingRows += `"${indent}┗━ Ov ${o.over}: ${balls}"\n`;
+      bowlingRows += `>    ┗━ Ov ${o.over}: ${balls}\n`;
     }
 
     bowlingRows += "\n";
@@ -163,7 +168,7 @@ function generateScorecard(match, getName) {
       ? `🏹 Target: ${(match.firstInningsScore ?? 0) + 1}`
       : "";
 
-  return [
+  return "```\n" + [
 
     hostName,
     "",
@@ -171,10 +176,10 @@ function generateScorecard(match, getName) {
     section(`📋 Innings ${inningsNum}`),
     "",
 
-    `"🏏 ${battingTeam}" (Team ${battingTeamLetter})  vs  "🎯 ${bowlingTeam}" (Team ${bowlingTeamLetter})`,
+    `🏏 ${battingTeam} (Team ${battingTeamLetter})  vs  🎯 ${bowlingTeam} (Team ${bowlingTeamLetter})`,
     "",
 
-    `"📊 ${match.score}/${match.wickets}  |  ⚙️ ${oversDisplay}"`,
+    `📊 ${match.score}/${match.wickets}  |  ⚙️ ${oversDisplay}`,
     `📈 RR: ${crr}${match.innings === 2 ? `  |  Req RR: ${requiredRR}` : ""}`,
     ...(targetLine ? [targetLine] : []),
 
@@ -195,7 +200,7 @@ function generateScorecard(match, getName) {
     bowlingRows.trimEnd(),
     ...(dnbBowl ? [``, dnbBowl] : []),
 
-  ].join("\n");
+  ].join("\n") + "\n```";
 }
 
 module.exports = generateScorecard;
