@@ -8,7 +8,7 @@ const {
 
 module.exports = function (bot, helpers) {
 
-  const { clearTimers, clearActiveMatchPlayers } = helpers;
+  const { clearTimers, clearActiveMatchPlayers, clearDelayTimers } = helpers;
 
 
   /* ================= START ================= */
@@ -115,6 +115,8 @@ This cannot be undone.`,
     );
 
     clearTimers(match);
+    clearDelayTimers(match);
+    match.matchEnded = true;
     clearActiveMatchPlayers(match);
     matches.delete(match.groupId);
   });
