@@ -85,12 +85,12 @@ bot.action(["toss_odd", "toss_even"], async (ctx) => {
 
   await bot.telegram.sendMessage(
     match.groupId,
-`╭──────────────────────╮
+`╭───────────╮
    🎲 <b>Toss Result</b>
-╰──────────────────────╯
+╰───────────╯
 🎯 Rolled <b>${rolledValue}</b>   <b>${diceResult}</b>
 🏆 〔<b>Team ${winnerTeamFinal}</b>〕 <b>${winnerTeamFinal === "A" ? match.teamAName : match.teamBName}</b> won!
-───────────────────────
+───────────
 Choose to bat or bowl:`,
     {
       parse_mode: "HTML",

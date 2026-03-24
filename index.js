@@ -143,7 +143,7 @@ async function startDelayTimer(match, type) {
   match.eventTimer = setTimeout(async () => {
     match.eventTimer = null;
     const phase = type === "bowler" ? "set_bowler" : "new_batter";
-    if (match.phase !== phase || match.inningsEnded || match.matchEnded) return;
+    if (match.phase !== phase || match.inningsEnded) return;
 
     const poolLeft = match.poolRemaining || POOL_MS;
     await bot.telegram.sendMessage(match.groupId,
@@ -165,7 +165,7 @@ async function startDelayTimer(match, type) {
     match.poolTimer = setTimeout(async () => {
       match.poolTimer       = null;
       match.poolTimerActive = false;
-      if (match.phase !== phase || match.inningsEnded || match.matchEnded) return;
+      if (match.phase !== phase || match.inningsEnded) return;
       match.poolRemaining = 0;
       await handlePoolExhausted(match, type, delayedTeam);
     }, poolLeft);
@@ -191,7 +191,7 @@ async function handlePoolExhausted(match, type, delayedTeam) {
 
     match.extraTimer = setTimeout(async () => {
       match.extraTimer = null;
-      if (match.phase !== phase || match.inningsEnded || match.matchEnded) return;
+      if (match.phase !== phase || match.inningsEnded) return;
       await declareTimeout(match, delayedTeam);
     }, EXTRA_MS);
 
@@ -214,12 +214,12 @@ async function declareTimeout(match, timedOutTeam) {
 
   await bot.telegram.sendMessage(
     match.groupId,
-`╭─────────────────────╮
+`╭───────────╮
    ⏱ Time Out!
-╰─────────────────────╯
+╰───────────╯
 〔Team ${timedOutTeam}〕 ${losingName}
 failed to respond in time.
-─────────────────────
+───────────
 🏆 〔Team ${winningTeam}〕 ${winningName} wins!`
   );
 
@@ -331,12 +331,11 @@ const helpers = {
   getName,
   getPlayerTeam,
   clearTimers,
-  clearDelayTimers,
   clearActiveMatchPlayers,
   startToss: null
 };
 
-matchResult.init({ bot, getName, clearTimers, clearActiveMatchPlayers, initTimerState });
+matchResult.init({ bot, getName, clearTimers, clearActiveMatchPlayers, initTimerState, getCountdownCall });
 ballHandler.init({
   bot, getName, clearTimers, swapStrike, sendWithGif,
   battingPlayers, checkOverEnd, advanceGame,
@@ -611,18 +610,7 @@ function getLiveScore(match) {
 bot.command("score", async (ctx) => {
   const match = getMatch(ctx);
   if (!match) return ctx.reply("⚠️ No active match.");
-  try {
-    const text = getLiveScore(match);
-    await ctx.reply(text, { parse_mode: "MarkdownV2" });
-  } catch (e) {
-    console.error("Score command error:", e.message);
-    // Fallback: plain text score without MarkdownV2
-    try {
-      const innings = match.innings || 1;
-      const plain = `📊 Score: ${match.score}/${match.wickets}  |  ⚙️ ${match.currentOver}.${match.currentBall}/${match.totalOvers} overs  |  Innings ${innings}`;
-      await ctx.reply(plain);
-    } catch (e2) { console.error("Score fallback error:", e2.message); }
-  }
+  await ctx.reply(getLiveScore(match), { parse_mode: "MarkdownV2" });
 });
 
 
@@ -709,21 +697,19 @@ bot.on("text", async (ctx, next) => {
   );
 
   const battingCall = getBattingCall();
-  // Send batting call to group (text only, instant)
-  await bot.telegram.sendMessage(match.groupId, battingCall.text);
-  // Send gif to batter DM non-blocking so it doesn't delay the game
   if (battingCall.gif) {
-    (async () => {
-      try {
-        if (battingCall.gif.startsWith("BAAC")) {
-          await bot.telegram.sendVideo(match.striker, battingCall.gif, { caption: "🏏 Your turn — bat!" });
-        } else {
-          await bot.telegram.sendAnimation(match.striker, battingCall.gif, { caption: "🏏 Your turn — bat!" });
-        }
-      } catch (e) {
-        console.log("Batting gif DM failed:", e.message);
+    try {
+      if (battingCall.gif.startsWith("BAAC")) {
+        await bot.telegram.sendVideo(match.groupId, battingCall.gif, { caption: battingCall.text });
+      } else {
+        await bot.telegram.sendAnimation(match.groupId, battingCall.gif, { caption: battingCall.text });
       }
-    })();
+    } catch (e) {
+      console.error("Batting gif failed:", e.message);
+      await bot.telegram.sendMessage(match.groupId, battingCall.text);
+    }
+  } else {
+    await bot.telegram.sendMessage(match.groupId, battingCall.text);
   }
   ballHandler.startTurnTimer(match, "bat");
 });

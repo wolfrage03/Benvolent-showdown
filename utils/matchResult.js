@@ -3,7 +3,7 @@ const updatePlayerStats   = require("../utils/updateStats");
 const { sendAndPinPlayerList } = require("../commands/captainCommands");
 const { matches, playerActiveMatch } = require("../matchManager");
 
-let bot, getName, clearTimers, clearActiveMatchPlayers, initTimerState;
+let bot, getName, clearTimers, clearActiveMatchPlayers, initTimerState, getCountdownCall;
 
 function init(deps) {
   bot                     = deps.bot;
@@ -11,6 +11,7 @@ function init(deps) {
   clearTimers             = deps.clearTimers;
   clearActiveMatchPlayers = deps.clearActiveMatchPlayers;
   initTimerState          = deps.initTimerState;
+  getCountdownCall        = deps.getCountdownCall;
 }
 
 
@@ -100,7 +101,7 @@ async function announceMotm(match) {
   catch (e) { console.error("motm save error:", e.message); }
 
   const lines = [
-    `─── 🌟🎖️ PLAYER OF THE MATCH ───`,
+    `───── 🌟🎖️ PLAYER OF THE MATCH ─────`,
     ``,
     `🏅 ${player.name} — what a game!`,
   ];
@@ -134,7 +135,7 @@ async function endMatchWithWinner(match, winningTeam) {
 
   await bot.telegram.sendMessage(
     match.groupId,
-`─── 🏆🎊 WE HAVE A WINNER! ───
+`────── 🏆🎊 WE HAVE A WINNER! ──────
 
 👑 ${teamName} wins!
 💪 ${margin}!
@@ -148,7 +149,7 @@ async function endMatchWithWinner(match, winningTeam) {
 async function endMatchTie(match) {
   await bot.telegram.sendMessage(
     match.groupId,
-`─── 🤝 IT'S A TIE! ───
+`────────── 🤝 IT'S A TIE! ──────────
 
 😲 What a match — both teams level!
 📊 Both scored ${match.score}`
@@ -185,7 +186,7 @@ async function endInnings(match) {
     try {
       await bot.telegram.sendMessage(
         match.groupId,
-`─── ✅ INNINGS 1 DONE! ───
+`──────── ✅ INNINGS 1 DONE! ────────
 
 📊 ${match.score}/${match.wickets}  |  ⚙️ ${match.currentOver}/${match.totalOvers} overs
 🏹 Target set: ${match.score + 1} runs
@@ -230,6 +231,26 @@ async function endInnings(match) {
     // ── Reset pool timer for innings 2 (extraUsed carries over) ──
     if (initTimerState) initTimerState(match);
 
+    // ── 15 sec break between innings with countdown GIF ──
+    try {
+      const call = getCountdownCall ? getCountdownCall() : null;
+      if (call?.gif) {
+        try {
+          if (call.gif.startsWith("BAAC")) {
+            await bot.telegram.sendVideo(match.groupId, call.gif, { caption: "⏳ 15 seconds — innings 2 starting soon!" });
+          } else {
+            await bot.telegram.sendAnimation(match.groupId, call.gif, { caption: "⏳ 15 seconds — innings 2 starting soon!" });
+          }
+        } catch (e) {
+          await bot.telegram.sendMessage(match.groupId, "⏳ 15 seconds — innings 2 starting soon!");
+        }
+      } else {
+        await bot.telegram.sendMessage(match.groupId, "⏳ 15 seconds — innings 2 starting soon!");
+      }
+    } catch (e) { console.error("Countdown failed:", e.message); }
+
+    await new Promise(resolve => setTimeout(resolve, 15000));
+
     try { await sendAndPinPlayerList(match, bot.telegram); }
     catch (e) { console.error("PinList failed:", e.message); }
 
@@ -238,7 +259,7 @@ async function endInnings(match) {
     try {
       await bot.telegram.sendMessage(
         match.groupId,
-`─── ⚡🔥 INNINGS 2 — LET'S GO! ───
+`──── ⚡🔥 INNINGS 2 — LET'S GO! ────
 
 🏏 ${battingTeamName} to bat
 🎯 Target: ${match.firstInningsScore + 1} — can they chase it?
