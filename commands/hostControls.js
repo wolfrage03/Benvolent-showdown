@@ -202,9 +202,9 @@ async function showHostSelection(match) {
 
   const msg = await bot.telegram.sendMessage(
     match.groupId,
-"✅ Voting Passed\n\n<blockquote>A non-playing member can now take host.</blockquote>",
-      { parse_mode: "HTML" },
+    "✅ Voting Passed\n\n<blockquote>A non-playing member can now take host.</blockquote>",
     {
+      parse_mode: "HTML",
       reply_markup: {
         inline_keyboard: [
           [{ text: "👑 Take Host", callback_data: "take_host"       }],

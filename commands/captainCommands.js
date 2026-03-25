@@ -103,12 +103,14 @@ module.exports = function (bot, helpers) {
     match.phase = "captain";
 
     ctx.reply(
-"👑 Captain Selection\n\n<blockquote>Each team picks their own captain.\nTap the button below.</blockquote>",
-      { parse_mode: "HTML" },
-      Markup.inlineKeyboard([
-        [Markup.button.callback("👑 Captain — Team A", "cap_A")],
-        [Markup.button.callback("👑 Captain — Team B", "cap_B")]
-      ])
+      "👑 Captain Selection\n\n<blockquote>Each team picks their own captain.\nTap the button below.</blockquote>",
+      {
+        parse_mode: "HTML",
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback("👑 Captain — Team A", "cap_A")],
+          [Markup.button.callback("👑 Captain — Team B", "cap_B")]
+        ])
+      }
     );
   });
 
@@ -264,14 +266,16 @@ module.exports = function (bot, helpers) {
     const name = getName(match, newCaptainId);
 
     await ctx.reply(
-`🔄 Change Captain?\n\n<blockquote>〔Team ${teamLetter}〕 → ${name}</blockquote>`,
-      { parse_mode: "HTML" },
-      Markup.inlineKeyboard([
-        [
-          Markup.button.callback("✅ Confirm", "confirm_cap_change"),
-          Markup.button.callback("❌ Cancel",  "cancel_cap_change")
-        ]
-      ])
+      `🔄 Change Captain?\n\n<blockquote>〔Team ${teamLetter}〕 → ${name}</blockquote>`,
+      {
+        parse_mode: "HTML",
+        ...Markup.inlineKeyboard([
+          [
+            Markup.button.callback("✅ Confirm", "confirm_cap_change"),
+            Markup.button.callback("❌ Cancel",  "cancel_cap_change")
+          ]
+        ])
+      }
     );
   });
 

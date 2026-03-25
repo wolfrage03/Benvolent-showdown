@@ -46,11 +46,13 @@ module.exports = function (bot, helpers) {
     match.phase   = "host_select";
 
     ctx.reply(
-"🏏 Match Lobby\n\n<blockquote>A new match is starting!\nFirst player to press becomes host.</blockquote>",
-      { parse_mode: "HTML" },
-      Markup.inlineKeyboard([
-        [Markup.button.callback("👑 Become Host", "select_host")]
-      ])
+      "🏏 Match Lobby\n\n<blockquote>A new match is starting!\nFirst player to press becomes host.</blockquote>",
+      {
+        parse_mode: "HTML",
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback("👑 Become Host", "select_host")]
+        ])
+      }
     );
   });
 
@@ -73,14 +75,16 @@ module.exports = function (bot, helpers) {
       return ctx.reply("❌ Only host or admin can end the match.");
 
     ctx.reply(
-"⚠️ End Match?\n\n<blockquote>This cannot be undone.</blockquote>",
-      { parse_mode: "HTML" },
-      Markup.inlineKeyboard([
-        [
-          Markup.button.callback("✅ Confirm", "confirm_end"),
-          Markup.button.callback("❌ Cancel",  "cancel_end")
-        ]
-      ])
+      "⚠️ End Match?\n\n<blockquote>This cannot be undone.</blockquote>",
+      {
+        parse_mode: "HTML",
+        ...Markup.inlineKeyboard([
+          [
+            Markup.button.callback("✅ Confirm", "confirm_end"),
+            Markup.button.callback("❌ Cancel",  "cancel_end")
+          ]
+        ])
+      }
     );
   });
 
