@@ -46,7 +46,8 @@ module.exports = function (bot, helpers) {
     match.phase   = "host_select";
 
     ctx.reply(
-box("🏏 Match Lobby", "A new match is starting!", "First player to press becomes host."),
+"🏏 Match Lobby\n\n<blockquote>A new match is starting!\nFirst player to press becomes host.</blockquote>",
+      { parse_mode: "HTML" },
       Markup.inlineKeyboard([
         [Markup.button.callback("👑 Become Host", "select_host")]
       ])
@@ -72,7 +73,8 @@ box("🏏 Match Lobby", "A new match is starting!", "First player to press becom
       return ctx.reply("❌ Only host or admin can end the match.");
 
     ctx.reply(
-box("⚠️ End Match?", "This cannot be undone."),
+"⚠️ End Match?\n\n<blockquote>This cannot be undone.</blockquote>",
+      { parse_mode: "HTML" },
       Markup.inlineKeyboard([
         [
           Markup.button.callback("✅ Confirm", "confirm_end"),
@@ -102,7 +104,8 @@ box("⚠️ End Match?", "This cannot be undone."),
     try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
 
     await ctx.reply(
-box("🛑 Match Ended", "👉 /start to begin a new match")
+"🛑 Match Ended\n\n<blockquote>👉 /start to begin a new match</blockquote>",
+      { parse_mode: "HTML" }
     );
 
     clearTimers(match);

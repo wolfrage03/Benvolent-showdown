@@ -27,7 +27,8 @@ bot.command("createteam", (ctx) => {
   match.phase = "join";
 
   ctx.reply(
-box("🟢 Lobby Open", `🔵 〔Team A〕 ${match.teamAName}   /joina`, `🔴 〔Team B〕 ${match.teamBName}   /joinb`, "───────────", "⏱ Closes in 60s   /closejoin")
+`🟢 Lobby Open\n\n<blockquote>🔵 ${match.teamAName} 〔Team A〕\n🔴 ${match.teamBName} 〔Team B〕</blockquote>\n\n/joina  /joinb\n⏱ Closes in 60s   /closejoin`,
+    { parse_mode: "HTML" }
   );
 
   match.joinTimer = setTimeout(async () => {
@@ -38,7 +39,8 @@ box("🟢 Lobby Open", `🔵 〔Team A〕 ${match.teamAName}   /joina`, `🔴 �
 
     await bot.telegram.sendMessage(
       match.groupId,
-box("🔒 Joining Closed", `🔵 〔Team A〕 ${match.teamAName}   ${match.teamA.length}p`, `🔴 〔Team B〕 ${match.teamBName}   ${match.teamB.length}p`, "───────────", "👉 /choosecap to continue")
+`🔒 Joining Closed\n\n<blockquote>🔵 ${match.teamAName} 〔Team A〕  ${match.teamA.length}p\n🔴 ${match.teamBName} 〔Team B〕  ${match.teamB.length}p</blockquote>\n\n👉 /choosecap to continue`,
+      { parse_mode: "HTML" }
     );
 
   }, 60000);
@@ -64,7 +66,8 @@ bot.command("closejoin", async (ctx) => {
   match.phase = "teams_set";
 
   await ctx.reply(
-box("🔒 Joining Closed", `🔵 〔Team A〕 ${match.teamAName}   ${match.teamA.length}p`, `🔴 〔Team B〕 ${match.teamBName}   ${match.teamB.length}p`, "───────────", "👉 /choosecap to continue")
+`🔒 Joining Closed\n\n<blockquote>🔵 ${match.teamAName} 〔Team A〕  ${match.teamA.length}p\n🔴 ${match.teamBName} 〔Team B〕  ${match.teamB.length}p</blockquote>\n\n👉 /choosecap to continue`,
+      { parse_mode: "HTML" }
   );
 
 });

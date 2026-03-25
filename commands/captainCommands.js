@@ -29,21 +29,18 @@ function buildPlayerListText(match) {
     }).join("\n");
   }
 
-  const lines = [
-    `╭───────────╮`,
-    `  👥 Players`,
-    `╰───────────╯`,
-    `🔵 〔Team A〕 ${match.teamAName}`,
-    `───────────`,
-    formatTeam(match.teamA, match.captains?.A),
-    ``,
-    `🔴 〔Team B〕 ${match.teamBName}`,
-    `───────────`,
-    formatTeam(match.teamB, match.captains?.B),
-    `───────────`,
-  ];
+  const teamAPlayers = formatTeam(match.teamA, match.captains?.A);
+  const teamBPlayers = formatTeam(match.teamB, match.captains?.B);
 
-  return lines.join("\n");
+  return [
+    `👥 Players`,
+    ``,
+    `🔵 ${match.teamAName} 〔Team A〕`,
+    teamAPlayers,
+    ``,
+    `🔴 ${match.teamBName} 〔Team B〕`,
+    teamBPlayers,
+  ].join("\n");
 }
 
 async function sendAndPinPlayerList(match, telegram) {
@@ -103,7 +100,8 @@ module.exports = function (bot, helpers) {
     match.phase = "captain";
 
     ctx.reply(
-box("👑 Captain Selection", "Each team picks their own captain.", "Tap the button below."),
+"👑 Captain Selection\n\n<blockquote>Each team picks their own captain.\nTap the button below.</blockquote>",
+      { parse_mode: "HTML" },
       Markup.inlineKeyboard([
         [Markup.button.callback("👑 Captain — Team A", "cap_A")],
         [Markup.button.callback("👑 Captain — Team B", "cap_B")]
@@ -132,7 +130,8 @@ box("👑 Captain Selection", "Each team picks their own captain.", "Tap the but
 
     await ctx.answerCbQuery("You are Captain of Team A 👑");
     await ctx.reply(
-box("👑 Captain Set", `${getDisplayName(ctx.from)}`, "🔵 〔Team A〕 Captain")
+`👑 Captain Set\n\n<blockquote>${ctx.from.first_name || ""}${ctx.from.username ? " @" + ctx.from.username : ""}\n🔵 ${match.teamAName} 〔Team A〕 Captain</blockquote>`,
+      { parse_mode: "HTML" }
     );
 
     updateCaptainButtons(match, ctx);
@@ -159,7 +158,8 @@ box("👑 Captain Set", `${getDisplayName(ctx.from)}`, "🔵 〔Team A〕 Captai
 
     await ctx.answerCbQuery("You are Captain of Team B 👑");
     await ctx.reply(
-box("👑 Captain Set", `${getDisplayName(ctx.from)}`, "🔴 〔Team B〕 Captain")
+`👑 Captain Set\n\n<blockquote>${ctx.from.first_name || ""}${ctx.from.username ? " @" + ctx.from.username : ""}\n🔴 ${match.teamBName} 〔Team B〕 Captain</blockquote>`,
+      { parse_mode: "HTML" }
     );
 
     updateCaptainButtons(match, ctx);
@@ -185,7 +185,8 @@ box("👑 Captain Set", `${getDisplayName(ctx.from)}`, "🔴 〔Team B〕 Captai
       match.phase = "toss";
 
       ctx.reply(
-box("✅ Both Captains Set", "Starting toss...")
+"✅ Both Captains Set\n\n<blockquote>Starting toss...</blockquote>",
+        { parse_mode: "HTML" }
       );
 
       if (helpers.startToss) helpers.startToss(match);
@@ -257,7 +258,8 @@ box("✅ Both Captains Set", "Starting toss...")
     const name = getName(match, newCaptainId);
 
     await ctx.reply(
-box("🔄 Change Captain?", `〔Team ${teamLetter}〕 → ${name}`),
+`🔄 Change Captain?\n\n<blockquote>〔Team ${teamLetter}〕 → ${name}</blockquote>`,
+      { parse_mode: "HTML" },
       Markup.inlineKeyboard([
         [
           Markup.button.callback("✅ Confirm", "confirm_cap_change"),
@@ -291,7 +293,7 @@ box("🔄 Change Captain?", `〔Team ${teamLetter}〕 → ${name}`),
     const mention = `<a href="tg://user?id=${playerId}">${getName(match, playerId)}</a>`;
 
     await ctx.editMessageText(
-box("👑 Captain Updated", `${mention} → 〔Team ${team}〕`),
+`👑 Captain Updated\n\n<blockquote>${mention} → 〔Team ${team}〕</blockquote>`,
       { parse_mode: "HTML" }
     );
 
@@ -311,7 +313,7 @@ box("👑 Captain Updated", `${mention} → 〔Team ${team}〕`),
 
     match.pendingCaptainChange = null;
     await ctx.editMessageText(
-box("✖️ Captain Change Cancelled")
+"✖️ Captain Change Cancelled"
     );
   });
 

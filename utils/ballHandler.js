@@ -71,7 +71,8 @@ async function ballTimeout(match) {
 
       await bot.telegram.sendMessage(
         match.groupId,
-box("⏱ Bowler Timed Out", "+6 runs to batting team", "Ball does not count")
+"⏱ Bowler Timed Out\n\n<blockquote>+6 runs to batting team\nBall does not count</blockquote>",
+      { parse_mode: "HTML" }
       );
 
       if (match.bowlerMissCount >= 2) {
@@ -82,7 +83,8 @@ box("⏱ Bowler Timed Out", "+6 runs to batting team", "Ball does not count")
 
         await bot.telegram.sendMessage(
           match.groupId,
-box("🚫 Bowler Suspended", "Consecutive delays", "Cannot bowl this over or next", "───────────", "👉 /bowler [number] new bowler")
+"🚫 Bowler Suspended\n\n<blockquote>Consecutive delays\nCannot bowl this over or next</blockquote>\n\n👉 /bowler [number] new bowler",
+      { parse_mode: "HTML" }
         );
         return;
       }
@@ -111,7 +113,8 @@ box("🚫 Bowler Suspended", "Consecutive delays", "Cannot bowl this over or nex
 
       await bot.telegram.sendMessage(
         match.groupId,
-box("⏱ Batter Timed Out", "-6 run penalty", "Ball counted")
+"⏱ Batter Timed Out\n\n<blockquote>-6 run penalty\nBall counted</blockquote>",
+      { parse_mode: "HTML" }
       );
 
       if (match.batterMissCount >= 2) {
@@ -123,7 +126,8 @@ box("⏱ Batter Timed Out", "-6 run penalty", "Ball counted")
 
         await bot.telegram.sendMessage(
           match.groupId,
-box("💥 Batter Dismissed", "Consecutive delays", "───────────", "👉 /batter [number] new batter")
+"💥 Batter Dismissed\n\n<blockquote>Consecutive delays</blockquote>\n\n👉 /batter [number] new batter",
+      { parse_mode: "HTML" }
         );
 
         if (match.wickets >= match.maxWickets) {
@@ -199,7 +203,8 @@ async function announceBall(match) {
     const strikerName = getName(match, match.striker);
     await bot.telegram.sendMessage(
       match.bowler,
-box("🎯 Your Turn — Bowl", `🏏 Facing: ${strikerName}`, "Send your number 1 – 6")
+`🎯 Your Turn — Bowl\n\n<blockquote>🏏 Facing: ${strikerName}\nSend your number 1 – 6</blockquote>`,
+      { parse_mode: "HTML" }
     );
   } catch (e) {
     console.log("Bowler DM failed:", e.message);
@@ -258,7 +263,8 @@ async function processBall(match) {
     if (match.wicketStreak === 2 && bat === 0) {
       await bot.telegram.sendMessage(
         match.groupId,
-box("⚠️ Hattrick Ball!", "Cannot play 0 — two wickets in a row!")
+"⚠️ Hattrick Ball!\n\n<blockquote>Cannot play 0 — two wickets in a row!</blockquote>",
+      { parse_mode: "HTML" }
       );
       match.batNumber  = null;
       match.awaitingBat  = true;
@@ -365,7 +371,8 @@ box("⚠️ Hattrick Ball!", "Cannot play 0 — two wickets in a row!")
 
       await bot.telegram.sendMessage(
         match.groupId,
-box("💥 Wicket!", "👉 /batter [number] new batter")
+`💥 Wicket!\n\n👉 /batter [number] new batter`,
+      { parse_mode: "HTML" }
       );
 
       // ── Start 5 min event timer for batter selection ──

@@ -290,7 +290,7 @@ async function checkOverEnd(match) {
   }
 
   try {
-    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "HTML" });
+    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "Markdown" });
   } catch (e) { console.error("Scorecard failed:", e.message); }
 
   match.lastOverBowler = match.bowler;
@@ -305,7 +305,8 @@ async function checkOverEnd(match) {
   try {
     await bot.telegram.sendMessage(
       match.groupId,
-box(`✅ Over ${match.currentOver} Complete`, `📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}/${match.totalOvers} ov   📈 ${rr}`, "───────────", "👉 /bowler [number] new bowler")
+`✅ Over ${match.currentOver} Complete\n\n<blockquote>📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}/${match.totalOvers} ov   📈 ${rr}</blockquote>\n\n👉 /bowler [number] new bowler`,
+      { parse_mode: "HTML" }
     );
   } catch (e) { console.error("Over message failed:", e.message); }
 
@@ -396,7 +397,8 @@ bot.command("batter", async (ctx) => {
     await sendAndPinPlayerList(match, ctx.telegram);
 
     return ctx.reply(
-box("🏏 Striker Set", `🏏 ${name}   ${ordinal(orderNumber)} batter`, "───────────", "👉 /batter [number] set non-striker")
+`🏏 Striker Set\n\n<blockquote>🏏 ${name}   ${ordinal(orderNumber)} batter</blockquote>\n\n👉 /batter [number] set non-striker`,
+      { parse_mode: "HTML" }
     );
   }
 
@@ -412,7 +414,8 @@ box("🏏 Striker Set", `🏏 ${name}   ${ordinal(orderNumber)} batter`, "──
     await sendAndPinPlayerList(match, ctx.telegram);
 
     return ctx.reply(
-box("🪄 Non-Striker Set", `🪄 ${name}   ${ordinal(orderNumber)} batter`, "───────────", "👉 /bowler [number] set bowler")
+`🪄 Non-Striker Set\n\n<blockquote>🪄 ${name}   ${ordinal(orderNumber)} batter</blockquote>\n\n👉 /bowler [number] set bowler`,
+      { parse_mode: "HTML" }
     );
   }
 
@@ -434,7 +437,8 @@ box("🪄 Non-Striker Set", `🪄 ${name}   ${ordinal(orderNumber)} batter`, "�
     clearDelayTimers(match);
 
     await ctx.reply(
-box("🏏 New Batter", `🏏 ${name}   ${ordinal(orderNumber)} batter`)
+`🏏 New Batter\n\n<blockquote>🏏 ${name}   ${ordinal(orderNumber)} batter</blockquote>`,
+      { parse_mode: "HTML" }
     );
     return ballHandler.startBall(match);
   }
@@ -488,7 +492,8 @@ bot.command("bowler", async (ctx) => {
   clearDelayTimers(match);
 
   await ctx.reply(
-box("🏐 Bowler Set", `🏐 ${player.name} is bowling`, "───────────", "Ball starting in 10s...")
+`🏐 Bowler Set\n\n<blockquote>🏐 ${player.name} is bowling</blockquote>`,
+      { parse_mode: "HTML" }
   );
   await ballHandler.startBall(match);
 });
@@ -537,54 +542,45 @@ function getLiveScore(match) {
     ? currentOverHistory.balls.map(x => x === "W" ? "W" : String(x)).join(" ")
     : "-";
 
-  // Teams blockquote
-  const teamsBlock = `<blockquote>🏏 ${battingTeamName} (Team ${battingTeamLetter})  batting\n🎯 ${bowlingTeamName} (Team ${bowlingTeamLetter})  bowling</blockquote>`;
+  const lines = [
+    `📊 Live Score`,
+    ``,
+    `🏏 ${battingTeamName} (Team ${battingTeamLetter})  batting`,
+    `🎯 ${bowlingTeamName} (Team ${bowlingTeamLetter})  bowling`,
+    ``,
+    `📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}.${match.currentBall}/${match.totalOvers}   📈 ${runRate}`,
+  ];
 
-  // Score blockquote
-  let scoreInner = `📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}.${match.currentBall}/${match.totalOvers}   📈 ${runRate}`;
   if (match.innings === 2) {
     const runsNeeded = (match.firstInningsScore + 1) - match.score;
     if (runsNeeded > 0) {
       const rrr = ballsLeft > 0 ? ((runsNeeded / ballsLeft) * 6).toFixed(2) : "-";
-      scoreInner += `\n🏹 Need ${runsNeeded} from ${ballsLeft} balls   RRR: ${rrr}`;
+      lines.push(`🏹 Need ${runsNeeded} from ${ballsLeft} balls   RRR: ${rrr}`);
     } else {
-      scoreInner += `\n✅ Target achieved!`;
+      lines.push(`✅ Target achieved!`);
     }
   }
-  const scoreBlock = `<blockquote>${scoreInner}</blockquote>`;
 
-  // Batters blockquote
-  const battersBlock = `<blockquote>🏏 ${short(strikerName)}  ${st.runs}(${st.balls})  SR:${stSR}\n🪄 ${short(nonStrikerName)}  ${nst.runs}(${nst.balls})  SR:${nstSR}</blockquote>`;
-
-  // Partnership blockquote
-  const partBlock = `<blockquote>🤝 Partnership: ${partRuns}(${partBalls})</blockquote>`;
-
-  // Bowler — name plain, stats + history in blockquotes
-  const bowlerStats = `<blockquote>${bwlOv}ov  ${bwl.runs}r  ${bwl.wickets}w  econ:${econ}</blockquote>`;
-  const bowlerHist  = `<blockquote>This over: ${overBalls}</blockquote>`;
-
-  return [
-    `📊 Live Score`,
+  lines.push(
     ``,
-    teamsBlock,
-    scoreBlock,
+    `─── 🏏 Batting ───`,
+    `🏏 ${short(strikerName)}  ${st.runs}(${st.balls})  SR:${stSR}`,
+    `🪄 ${short(nonStrikerName)}  ${nst.runs}(${nst.balls})  SR:${nstSR}`,
+    `🤝 Partnership: ${partRuns}(${partBalls})`,
     ``,
-    `• 🏏 Batting`,
-    battersBlock,
-    partBlock,
-    ``,
-    `• 🎾 Bowling`,
-    `🎾 ${short(bowlerName)}`,
-    bowlerStats,
-    bowlerHist,
-  ].join("\n");
+    `─── 🎾 Bowling ───`,
+    `🎾 ${short(bowlerName)}  ${bwlOv}ov  ${bwl.runs}r  ${bwl.wickets}w  econ:${econ}`,
+    `This over: ${overBalls}`
+  );
+
+  return lines.join("\n");
 }
 
 bot.command("score", async (ctx) => {
   const match = getMatch(ctx);
   if (!match) return ctx.reply("⚠️ No active match.");
   try {
-    await ctx.reply(getLiveScore(match), { parse_mode: "HTML" });
+    await ctx.reply(getLiveScore(match));
   } catch (e) {
     console.error("Score command failed:", e.message);
     await ctx.reply("⚠️ Score error: " + e.message);

@@ -29,7 +29,8 @@ bot.action("select_host", async (ctx) => {
   try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
 
   await ctx.reply(
-box("👑 Host Assigned", `${ctx.from.first_name}`, `🔵 〔Team A〕 ${match.teamAName}`, `🔴 〔Team B〕 ${match.teamBName}`, "───────────", "👉 /createteam to open lobby")
+`👑 Host Assigned\n\n${ctx.from.first_name}\n\n<blockquote>🔵 ${match.teamAName} 〔Team A〕\n🔴 ${match.teamBName} 〔Team B〕</blockquote>\n\n👉 /createteam to open lobby`,
+      { parse_mode: "HTML" }
   );
 });
 
@@ -102,7 +103,8 @@ async function startHostVoting(match, ctx) {
 
     await bot.telegram.sendMessage(
       m.groupId,
-box("⏱ Voting Expired", "No host change made.")
+"⏱ Voting Expired\n\n<blockquote>No host change made.</blockquote>",
+      { parse_mode: "HTML" }
     );
 
     m.hostChange = null;
@@ -200,7 +202,8 @@ async function showHostSelection(match) {
 
   const msg = await bot.telegram.sendMessage(
     match.groupId,
-box("✅ Voting Passed", "A non-playing member can now take host."),
+"✅ Voting Passed\n\n<blockquote>A non-playing member can now take host.</blockquote>",
+      { parse_mode: "HTML" },
     {
       reply_markup: {
         inline_keyboard: [
@@ -246,7 +249,8 @@ bot.action("take_host", async (ctx) => {
 
   await bot.telegram.sendMessage(
     match.groupId,
-box("👑 New Host", `${getDisplayName(ctx.from)}`)
+`👑 New Host\n\n<blockquote>${getDisplayName(ctx.from)}</blockquote>`,
+      { parse_mode: "HTML" }
   );
 
   ctx.answerCbQuery("You are now host 👑");
@@ -273,7 +277,7 @@ bot.action("cancel_host_vote", async (ctx) => {
   } catch {}
 
   await bot.telegram.sendMessage(match.groupId,
-box("✖️ Host Change Cancelled")
+"✖️ Host Change Cancelled"
   );
 
   match.hostChange = null;
