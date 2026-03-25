@@ -16,6 +16,9 @@ bot.command("createteam", (ctx) => {
   const match = getMatch(ctx);
   if (!match) return ctx.reply("⚠️ No active match.");
 
+  if (match.matchEnded || match.phase === "idle")
+    return ctx.reply("⚠️ No active match.");
+
   if (!isHost(match, ctx.from.id))
     return ctx.reply("❌ Only host can create teams.");
 
@@ -158,6 +161,9 @@ bot.command("add", async (ctx) => {
   const match = getMatch(ctx);
   if (!match) return ctx.reply("⚠️ No active match.");
 
+  if (match.matchEnded || match.phase === "idle")
+    return ctx.reply("⚠️ No active match.");
+
   if (!isHost(match, ctx.from.id))
     return ctx.reply("❌ Only host can add players.");
 
@@ -263,6 +269,9 @@ bot.command("remove", async (ctx) => {
   const match = getMatch(ctx);
   if (!match) return ctx.reply("⚠️ No active match.");
 
+  if (match.matchEnded || match.phase === "idle")
+    return ctx.reply("⚠️ No active match.");
+
   if (!isHost(match, ctx.from.id))
     return ctx.reply("❌ Only host can remove players.");
 
@@ -329,6 +338,9 @@ bot.command("changeteam", (ctx) => {
 
   const match = getMatch(ctx);
   if (!match) return ctx.reply("⚠️ No active match.");
+
+  if (match.matchEnded || match.phase === "idle")
+    return ctx.reply("⚠️ No active match.");
 
   if (!isHost(match, ctx.from.id))
     return ctx.reply("❌ Only host can move players.");

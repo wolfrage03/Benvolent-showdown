@@ -92,6 +92,9 @@ module.exports = function (bot, helpers) {
     const match = getMatch(ctx);
     if (!match) return ctx.reply("⚠️ No active match.");
 
+  if (match.matchEnded || match.phase === "idle")
+    return ctx.reply("⚠️ No active match.");
+
     if (!match.captains) match.captains = { A: null, B: null };
 
     if (!isHost(match, ctx.from.id))
@@ -204,6 +207,9 @@ module.exports = function (bot, helpers) {
     const match = getMatch(ctx);
     if (!match || ctx.chat.id !== match.groupId)
       return ctx.reply("⚠️ No active match in this group.");
+
+  if (match.matchEnded || match.phase === "idle")
+    return ctx.reply("⚠️ No active match.");
 
     if (!match.playerListMessageId) {
       await sendAndPinPlayerList(match, ctx.telegram);

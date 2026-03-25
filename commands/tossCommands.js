@@ -163,6 +163,9 @@ bot.command("setovers", (ctx) => {
   const match = getMatch(ctx);
   if (!match) return;
 
+  if (!match || match.matchEnded || match.phase === "idle")
+    return ctx.reply("⚠️ No active match.");
+
   if (!isHost(match, ctx.from.id))
     return ctx.reply("❌ Only host can set overs.");
 

@@ -348,7 +348,7 @@ module.exports = { getName };
 bot.command("batter", async (ctx) => {
 
   const match = getMatch(ctx);
-  if (!match) return;
+  if (!match || match.matchEnded || match.phase === "idle") return;
   if (!isHost(match, ctx.from.id)) return;
 
   if (ctx.chat.id !== match.groupId)
@@ -452,6 +452,9 @@ bot.command("bowler", async (ctx) => {
 
   const match = getMatch(ctx);
   if (!match) return;
+
+  if (!match || match.matchEnded)
+    return ctx.reply("⚠️ No active match.");
 
   if (match.phase !== "set_bowler")
     return ctx.reply("⚠️ You can set bowler only when bot asks.");
