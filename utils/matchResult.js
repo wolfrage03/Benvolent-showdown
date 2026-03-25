@@ -101,24 +101,26 @@ async function announceMotm(match) {
   try { await updatePlayerStats(player.id, { motm: 1 }); }
   catch (e) { console.error("motm save error:", e.message); }
 
-  const lines = [
-    `───── 🌟🎖️ PLAYER OF THE MATCH ─────`,
+  const statLines = [];
+  if (batLine)  statLines.push(batLine);
+  if (bowlLine) statLines.push(bowlLine);
+
+  const msg = [
+    `• 🌟🎖️ Player of the Match`,
     ``,
     `🏅 ${player.name} — what a game!`,
-  ];
-  if (batLine)  lines.push(batLine);
-  if (bowlLine) lines.push(bowlLine);
-  lines.push(``, `🎊 Congratulations!`);
+    `<blockquote>${statLines.join("\n")}</blockquote>`,
+    `🎊 Congratulations!`,
+  ].join("\n");
 
-  await bot.telegram.sendMessage(match.groupId, lines.join("\n"));
+  await bot.telegram.sendMessage(match.groupId, msg, { parse_mode: "HTML" });
 }
 
 
 /* ================= MATCH RESULT ================= */
 
 async function endMatchWithWinner(match, winningTeam) {
-  const teamName   = winningTeam === "A" ? match.teamAName : match.teamBName;
-  const teamLetter = winningTeam;
+  const teamName = winningTeam === "A" ? match.teamAName : match.teamBName;
 
   try {
     const winners = winningTeam === "A" ? match.teamA : match.teamB;
@@ -134,27 +136,27 @@ async function endMatchWithWinner(match, winningTeam) {
     margin = `by ${r} run${r !== 1 ? "s" : ""}`;
   }
 
-  await bot.telegram.sendMessage(
-    match.groupId,
-`────── 🏆🎊 WE HAVE A WINNER! ──────
+  const msg = [
+    `• 🏆🎊 We Have a Winner!`,
+    ``,
+    `👑 ${teamName} wins!`,
+    `<blockquote>💪 ${margin}\n1st 🏏 ${match.firstInningsScore}  vs  2nd 🏏 ${match.score}/${match.wickets}</blockquote>`,
+  ].join("\n");
 
-👑 ${teamName} wins!
-💪 ${margin}!
-
-1st 🏏 ${match.firstInningsScore}  vs  2nd 🏏 ${match.score}/${match.wickets}`
-  );
+  await bot.telegram.sendMessage(match.groupId, msg, { parse_mode: "HTML" });
 
   clearTimers(match);
 }
 
 async function endMatchTie(match) {
-  await bot.telegram.sendMessage(
-    match.groupId,
-`────────── 🤝 IT'S A TIE! ──────────
+  const msg = [
+    `• 🤝 It's a Tie!`,
+    ``,
+    `😲 What a match — both teams level!`,
+    `<blockquote>📊 Both scored ${match.score}</blockquote>`,
+  ].join("\n");
 
-😲 What a match — both teams level!
-📊 Both scored ${match.score}`
-  );
+  await bot.telegram.sendMessage(match.groupId, msg, { parse_mode: "HTML" });
   clearTimers(match);
 }
 
@@ -187,10 +189,9 @@ async function endInnings(match) {
     try {
       await bot.telegram.sendMessage(
         match.groupId,
-        `──────── ✅ INNINGS 1 DONE! ────────\n\n<blockquote>📊 ${match.score}/${match.wickets}  |  ⚙️ ${match.currentOver}/${match.totalOvers} overs\n🏹 Target set: ${match.score + 1} runs</blockquote>\n\n🔄 Teams switching...`,
+        `• ✅ Innings 1 Done!\n\n<blockquote>📊 ${match.score}/${match.wickets}  |  ⚙️ ${match.currentOver}/${match.totalOvers} overs\n🏹 Target set: ${match.score + 1} runs</blockquote>\n\n🔄 Teams switching...`,
         { parse_mode: "HTML" }
       );
-
     } catch (e) { console.error("Innings message failed:", e.message); }
 
     match.innings      = 2;
@@ -202,7 +203,7 @@ async function endInnings(match) {
 
     match.score                   = 0;
     match.wickets                 = 0;
-    match.maxWickets              = null;  // recalculated when /batter sets opener
+    match.maxWickets              = null;
     match.currentOver             = 0;
     match.currentBall             = 0;
     match.currentOverNumber       = 0;
@@ -227,10 +228,9 @@ async function endInnings(match) {
     match.awaitingBowl            = false;
     match.phase                   = "set_striker";
 
-    // ── Reset pool timer for innings 2 (extraUsed carries over) ──
     if (initTimerState) initTimerState(match);
 
-    // ── 15 sec break between innings with countdown GIF ──
+    // 15 sec countdown
     try {
       const call = getCountdownCall ? getCountdownCall() : null;
       if (call?.gif) {
@@ -256,11 +256,11 @@ async function endInnings(match) {
     const battingTeamName = match.battingTeam === "A" ? match.teamAName : match.teamBName;
 
     try {
-        await bot.telegram.sendMessage(
-          match.groupId,
-          `──── ⚡🔥 INNINGS 2 — LET'S GO! ────\n\n🏏 ${battingTeamName} to bat\n\n<blockquote>🎯 Target: ${match.firstInningsScore + 1} runs</blockquote>\n\n👉 /batter [number] set opener`,
-          { parse_mode: "HTML" }
-          );
+      await bot.telegram.sendMessage(
+        match.groupId,
+        `• ⚡🔥 Innings 2 — Let's Go!\n\n🏏 ${battingTeamName} to bat\n\n<blockquote>🎯 Target: ${match.firstInningsScore + 1} runs</blockquote>\n\n👉 /batter [number] set opener`,
+        { parse_mode: "HTML" }
+      );
     } catch (e) { console.error("Innings 2 message failed:", e.message); }
 
     return;
@@ -280,9 +280,9 @@ async function endInnings(match) {
         fives:          b.fives  ?? 0,
         sixes:          b.sixes  ?? 0,
         inningsBatting: 1,
-        ...(b.runs === 0                     ? { ducks:    1 } : {}),
-        ...(b.runs >= 50 && b.runs < 100     ? { fifties:  1 } : {}),
-        ...(b.runs >= 100                    ? { hundreds: 1 } : {}),
+        ...(b.runs === 0                 ? { ducks:    1 } : {}),
+        ...(b.runs >= 50 && b.runs < 100 ? { fifties:  1 } : {}),
+        ...(b.runs >= 100                ? { hundreds: 1 } : {}),
         bestScore: b.runs,
       });
     }
@@ -308,9 +308,9 @@ async function endInnings(match) {
         fives:          b.fives  ?? 0,
         sixes:          b.sixes  ?? 0,
         inningsBatting: 1,
-        ...(b.runs === 0                     ? { ducks:    1 } : {}),
-        ...(b.runs >= 50 && b.runs < 100     ? { fifties:  1 } : {}),
-        ...(b.runs >= 100                    ? { hundreds: 1 } : {}),
+        ...(b.runs === 0                 ? { ducks:    1 } : {}),
+        ...(b.runs >= 50 && b.runs < 100 ? { fifties:  1 } : {}),
+        ...(b.runs >= 100                ? { hundreds: 1 } : {}),
         bestScore: b.runs,
       });
     }

@@ -12,16 +12,6 @@ function generateScorecard(match, getName) {
   const bowlingTeam =
     bowlingTeamLetter === "A" ? match.teamAName : match.teamBName;
 
-  const LINE_WIDTH = 36;
-
-  function section(title) {
-    const text = ` ${title} `;
-    const dashCount = Math.max(0, LINE_WIDTH - text.length);
-    const left = "─".repeat(Math.floor(dashCount / 2));
-    const right = "─".repeat(Math.ceil(dashCount / 2));
-    return `${left}${text}${right}`;
-  }
-
   function h(str) {
     return String(str ?? "")
       .replace(/&/g, "&amp;")
@@ -58,7 +48,6 @@ function generateScorecard(match, getName) {
   /* ── BATTING ── */
 
   const battingOrder = match.battingOrder || [];
-
   const allBatted = [
     ...battingOrder,
     ...Object.keys(match.batterStats || {})
@@ -92,10 +81,10 @@ function generateScorecard(match, getName) {
     // Batter name — plain
     battingBlock += `\n🏏 ${indicator}${h(name)}${notOutMark}\n`;
 
-    // Runs/balls/SR — blockquote
+    // Box 1: runs/balls/SR
     battingBlock += bq(`${stats.runs}(${stats.balls})  ⚡SR:${sr}`);
 
-    // Boundaries line — blockquote
+    // Box 2: boundaries + dismissal
     let line2 = `┗━ ${fours}(4s)  ${fives}(5s)  ${sixes}(6s)`;
     if (isTimedOut) {
       line2 += `\n   ┗━ ⏱ timed out`;
@@ -140,16 +129,16 @@ function generateScorecard(match, getName) {
     // Bowler name — plain
     bowlingBlock += `\n🎾 ${h(name)}\n`;
 
-    // Stats — blockquote
+    // Box 1: stats
     bowlingBlock += bq(`${ovW}.${ovB}ov  🏏${b.runs}  ⚾${b.wickets}  📉${econ}`);
 
-    // Over history — blockquote
+    // Box 2: over history
     const theirOvers = (match.overHistory || []).filter(
       o => String(o.bowler) === String(id)
     );
     if (theirOvers.length) {
       const histLines = theirOvers.map(o => {
-        const balls = o.balls.map(x => x === "W" ? "⚾" : String(x)).join("  ");
+        const balls = o.balls.map(x => x === "W" ? "W" : String(x)).join("  ");
         return `┗━ Ov ${o.over}: ${balls}`;
       }).join("\n");
       bowlingBlock += bq(histLines);
@@ -173,15 +162,14 @@ function generateScorecard(match, getName) {
 
   parts.push(h(hostName));
   parts.push("");
-  parts.push(section(`📋 Innings ${inningsNum}`));
+  parts.push(`• 📋 Innings ${inningsNum}`);
   parts.push("");
 
-  // Teams — blockquote
+  // Teams blockquote
   parts.push(bq(`🏏 ${h(battingTeam)} (Team ${battingTeamLetter})  vs  🎯 ${h(bowlingTeam)} (Team ${bowlingTeamLetter})`));
 
-  // Score — blockquote
-  let scoreLine = `📊 ${match.score}/${match.wickets}  |  ⚙️ ${oversDisplay}\n`;
-  scoreLine += `📈 RR: ${crr}`;
+  // Score blockquote
+  let scoreLine = `📊 ${match.score}/${match.wickets}  |  ⚙️ ${oversDisplay}\n📈 RR: ${crr}`;
   if (match.innings === 2) {
     scoreLine += `  |  Req RR: ${requiredRR}`;
     scoreLine += `\n🏹 Target: ${(match.firstInningsScore ?? 0) + 1}`;
@@ -189,12 +177,12 @@ function generateScorecard(match, getName) {
   parts.push(bq(scoreLine));
 
   parts.push("");
-  parts.push(section(`🏏 Batting`));
+  parts.push(`• 🏏 Batting`);
   parts.push(battingBlock);
   parts.push("");
   parts.push(dnbBat);
   parts.push("");
-  parts.push(section(`🎾 Bowling`));
+  parts.push(`• 🎾 Bowling`);
   parts.push(bowlingBlock);
   if (dnbBowl) {
     parts.push("");
