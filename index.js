@@ -537,45 +537,54 @@ function getLiveScore(match) {
     ? currentOverHistory.balls.map(x => x === "W" ? "W" : String(x)).join(" ")
     : "-";
 
-  const lines = [
-    `📊 Live Score`,
-    ``,
-    `🏏 ${battingTeamName} (Team ${battingTeamLetter})  batting`,
-    `🎯 ${bowlingTeamName} (Team ${bowlingTeamLetter})  bowling`,
-    ``,
-    `📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}.${match.currentBall}/${match.totalOvers}   📈 ${runRate}`,
-  ];
+  // Teams blockquote
+  const teamsBlock = `<blockquote>🏏 ${battingTeamName} (Team ${battingTeamLetter})  batting\n🎯 ${bowlingTeamName} (Team ${bowlingTeamLetter})  bowling</blockquote>`;
 
+  // Score blockquote
+  let scoreInner = `📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}.${match.currentBall}/${match.totalOvers}   📈 ${runRate}`;
   if (match.innings === 2) {
     const runsNeeded = (match.firstInningsScore + 1) - match.score;
     if (runsNeeded > 0) {
       const rrr = ballsLeft > 0 ? ((runsNeeded / ballsLeft) * 6).toFixed(2) : "-";
-      lines.push(`🏹 Need ${runsNeeded} from ${ballsLeft} balls   RRR: ${rrr}`);
+      scoreInner += `\n🏹 Need ${runsNeeded} from ${ballsLeft} balls   RRR: ${rrr}`;
     } else {
-      lines.push(`✅ Target achieved!`);
+      scoreInner += `\n✅ Target achieved!`;
     }
   }
+  const scoreBlock = `<blockquote>${scoreInner}</blockquote>`;
 
-  lines.push(
-    ``,
-    `─── 🏏 Batting ───`,
-    `🏏 ${short(strikerName)}  ${st.runs}(${st.balls})  SR:${stSR}`,
-    `🪄 ${short(nonStrikerName)}  ${nst.runs}(${nst.balls})  SR:${nstSR}`,
-    `🤝 Partnership: ${partRuns}(${partBalls})`,
-    ``,
-    `─── 🎾 Bowling ───`,
-    `🎾 ${short(bowlerName)}  ${bwlOv}ov  ${bwl.runs}r  ${bwl.wickets}w  econ:${econ}`,
-    `This over: ${overBalls}`
-  );
+  // Batters blockquote
+  const battersBlock = `<blockquote>🏏 ${short(strikerName)}  ${st.runs}(${st.balls})  SR:${stSR}\n🪄 ${short(nonStrikerName)}  ${nst.runs}(${nst.balls})  SR:${nstSR}</blockquote>`;
 
-  return lines.join("\n");
+  // Partnership blockquote
+  const partBlock = `<blockquote>🤝 Partnership: ${partRuns}(${partBalls})</blockquote>`;
+
+  // Bowler — name plain, stats + history in blockquotes
+  const bowlerStats = `<blockquote>${bwlOv}ov  ${bwl.runs}r  ${bwl.wickets}w  econ:${econ}</blockquote>`;
+  const bowlerHist  = `<blockquote>This over: ${overBalls}</blockquote>`;
+
+  return [
+    `📊 Live Score`,
+    ``,
+    teamsBlock,
+    scoreBlock,
+    ``,
+    `• 🏏 Batting`,
+    battersBlock,
+    partBlock,
+    ``,
+    `• 🎾 Bowling`,
+    `🎾 ${short(bowlerName)}`,
+    bowlerStats,
+    bowlerHist,
+  ].join("\n");
 }
 
 bot.command("score", async (ctx) => {
   const match = getMatch(ctx);
   if (!match) return ctx.reply("⚠️ No active match.");
   try {
-    await ctx.reply(getLiveScore(match));
+    await ctx.reply(getLiveScore(match), { parse_mode: "HTML" });
   } catch (e) {
     console.error("Score command failed:", e.message);
     await ctx.reply("⚠️ Score error: " + e.message);
