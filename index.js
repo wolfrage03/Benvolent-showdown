@@ -290,7 +290,7 @@ async function checkOverEnd(match) {
   }
 
   try {
-    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "Markdown" });
+    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "HTML" });
   } catch (e) { console.error("Scorecard failed:", e.message); }
 
   match.lastOverBowler = match.bowler;

@@ -16,9 +16,9 @@ async function startToss(match) {
 
   await bot.telegram.sendMessage(
     match.groupId,
-`🎲 Toss Time\n\n<blockquote>🔵 ${match.teamAName} 〔Team A〕\n🔴 ${match.teamBName} 〔Team B〕</blockquote>\n\n<blockquote>Captains choose odd or even.\nA number will be rolled.</blockquote>`,
-      { parse_mode: "HTML" },
+    `🎲 Toss Time\n\n<blockquote>🔵 ${match.teamAName} 〔Team A〕\n🔴 ${match.teamBName} 〔Team B〕</blockquote>\n\n<blockquote>Captains choose odd or even.\nA number will be rolled.</blockquote>`,
     {
+      parse_mode: "HTML",
       ...Markup.inlineKeyboard([
         [
           Markup.button.callback("⚫ Odd",  "toss_odd"),
