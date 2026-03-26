@@ -29,9 +29,12 @@ function startTurnTimer(match, type) {
   match.warning30 = setTimeout(() => {
     if ((type === "bowl" && match.awaitingBowl) ||
         (type === "bat"  && match.awaitingBat)) {
+      const playerId = type === "bowl" ? match.bowler : match.striker;
+      const ping = playerId ? `<a href="tg://user?id=${playerId}">​</a>` : "";
       bot.telegram.sendMessage(
         match.groupId,
-        `⏳ ${type === "bowl" ? "Bowler" : "Batter"} — 30s left`
+        `⏳ ${ping}${type === "bowl" ? "Bowler" : "Batter"} — 30s left`,
+        { parse_mode: "HTML" }
       );
     }
   }, 30000);
@@ -39,9 +42,12 @@ function startTurnTimer(match, type) {
   match.warning10 = setTimeout(() => {
     if ((type === "bowl" && match.awaitingBowl) ||
         (type === "bat"  && match.awaitingBat)) {
+      const playerId = type === "bowl" ? match.bowler : match.striker;
+      const ping = playerId ? `<a href="tg://user?id=${playerId}">​</a>` : "";
       bot.telegram.sendMessage(
         match.groupId,
-        `🚨 ${type === "bowl" ? "Bowler" : "Batter"} — 10s left`
+        `🚨 ${ping}${type === "bowl" ? "Bowler" : "Batter"} — 10s left`,
+        { parse_mode: "HTML" }
       );
     }
   }, 50000);
@@ -172,21 +178,22 @@ async function announceBall(match) {
   const bowlingCall = getBowlingCall();
   const bowlingGif  = bowlingCall.gif;
   const bowlingOpts = bowlDMButton();
-  const bowlCaption = `🏐 ${bowlerName}\n${bowlingCall.text}`;
+  const bowlerPing  = `<a href="tg://user?id=${match.bowler}">​</a>`;
+  const bowlCaption = `${bowlerPing}🏐 ${bowlerName}\n${bowlingCall.text}`;
 
   if (bowlingGif) {
     try {
       if (bowlingGif.startsWith("BAAC")) {
-        await bot.telegram.sendVideo(match.groupId, bowlingGif, { caption: bowlCaption, ...bowlingOpts });
+        await bot.telegram.sendVideo(match.groupId, bowlingGif, { caption: bowlCaption, parse_mode: "HTML", ...bowlingOpts });
       } else {
-        await bot.telegram.sendAnimation(match.groupId, bowlingGif, { caption: bowlCaption, ...bowlingOpts });
+        await bot.telegram.sendAnimation(match.groupId, bowlingGif, { caption: bowlCaption, parse_mode: "HTML", ...bowlingOpts });
       }
     } catch (e) {
       console.error("Bowling gif failed:", e.message);
-      await bot.telegram.sendMessage(match.groupId, bowlCaption, bowlingOpts);
+      await bot.telegram.sendMessage(match.groupId, bowlCaption, { parse_mode: "HTML", ...bowlingOpts });
     }
   } else {
-    await bot.telegram.sendMessage(match.groupId, bowlCaption, bowlingOpts);
+    await bot.telegram.sendMessage(match.groupId, bowlCaption, { parse_mode: "HTML", ...bowlingOpts });
   }
 
   try {
