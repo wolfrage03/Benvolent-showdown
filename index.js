@@ -14,6 +14,8 @@ const matchResult       = require("./utils/matchResult");
 const box               = require("./utils/boxMessage");
 const ballHandler       = require("./utils/ballHandler");
 const { sendAndPinPlayerList } = require("./commands/captainCommands");
+const { generateMatchGraph } = require("./utils/graphGenerator");
+
 
 const {
   randomLine,
@@ -693,6 +695,27 @@ bot.on("text", async (ctx, next) => {
 
 
 
+bot.command("graph", async (ctx) => {
+  const match = getMatch(ctx);
+
+  if (!match || match.phase === "idle" || match.matchEnded)
+    return ctx.reply("⚠️ No active match.");
+
+  if (!match.overHistory || match.overHistory.length === 0)
+    return ctx.reply("⚠️ No overs bowled yet.");
+
+  try {
+    const buf = await generateMatchGraph(match);
+    await bot.telegram.sendPhoto(
+      match.groupId,
+      { source: buf },
+      { caption: `📊 Score Progression — Over ${match.currentOver}.${match.currentBall}` }
+    );
+  } catch (err) {
+    console.error("Graph error:", err);
+    ctx.reply("⚠️ Graph failed: " + err.message);
+  }
+});
 
 
 

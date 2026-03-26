@@ -12,15 +12,6 @@ function generateScorecard(match, getName) {
   const bowlingTeam =
     bowlingTeamLetter === "A" ? match.teamAName : match.teamBName;
 
-  const LINE_WIDTH = 36;
-
-  function section(title) {
-    const text = ` ${title} `;
-    const dashCount = Math.max(0, LINE_WIDTH - text.length);
-    const left = "─".repeat(Math.floor(dashCount / 2));
-    const right = "─".repeat(Math.ceil(dashCount / 2));
-    return `${left}${text}${right}`;
-  }
 
   function h(str) {
     return String(str ?? "")
@@ -94,14 +85,20 @@ function generateScorecard(match, getName) {
 
     // Runs/balls/SR — blockquote
     battingBlock += bq(`${stats.runs}(${stats.balls})  ⚡SR:${sr}`);
+    battingBlock += `
+`;
 
     // Boundaries — separate blockquote
     battingBlock += bq(`${fours}(4s)  ${fives}(5s)  ${sixes}(6s)`);
 
     // Dismissal — separate blockquote (only if out)
     if (isTimedOut) {
+      battingBlock += `
+`;
       battingBlock += bq(`⏱ timed out`);
     } else if (isDismissed && stats.dismissedBy && !isNotOut) {
+      battingBlock += `
+`;
       battingBlock += bq(`🎾 b ${h(getName(match, stats.dismissedBy))}`);
     }
   }
@@ -150,9 +147,10 @@ function generateScorecard(match, getName) {
     );
     if (theirOvers.length) {
       const histLines = theirOvers.map(o => {
-        const balls = o.balls.map(x => x === "W" ? "⚾" : String(x)).join("  ");
+        const balls = o.balls.map(x => x === "W" ? "W" : String(x)).join("  ");
         return `Ov ${o.over}: ${balls}`;
       }).join("\n");
+      bowlingBlock += `\n`;
       bowlingBlock += bq(histLines);
     }
   }
@@ -174,28 +172,29 @@ function generateScorecard(match, getName) {
 
   parts.push(h(hostName));
   parts.push("");
-  parts.push(section(`📋 Innings ${inningsNum}`));
+  parts.push(`• 📋 Innings ${inningsNum}`);
   parts.push("");
 
   // Teams — blockquote
   parts.push(bq(`🏏 ${h(battingTeam)} (Team ${battingTeamLetter})  vs  🎯 ${h(bowlingTeam)} (Team ${bowlingTeamLetter})`));
+  parts.push("");
 
-  // Score — blockquote
-  let scoreLine = `📊 ${match.score}/${match.wickets}  |  ⚙️ ${oversDisplay}\n`;
-  scoreLine += `📈 RR: ${crr}`;
+  // Score — separate blockquotes
+  parts.push(bq(`📊 ${match.score}/${match.wickets}  |  ⚙️ ${oversDisplay}`));
   if (match.innings === 2) {
-    scoreLine += `  |  Req RR: ${requiredRR}`;
-    scoreLine += `\n🏹 Target: ${(match.firstInningsScore ?? 0) + 1}`;
+    parts.push(bq(`📈 RR: ${crr}  |  Req RR: ${requiredRR}`));
+    parts.push(bq(`🏹 Target: ${(match.firstInningsScore ?? 0) + 1}`));
+  } else {
+    parts.push(bq(`📈 RR: ${crr}`));
   }
-  parts.push(bq(scoreLine));
 
   parts.push("");
-  parts.push(section(`🏏 Batting`));
+  parts.push(`• 🏏 Batting`);
   parts.push(battingBlock);
   parts.push("");
   parts.push(dnbBat);
   parts.push("");
-  parts.push(section(`🎾 Bowling`));
+  parts.push(`• 🎾 Bowling`);
   parts.push(bowlingBlock);
   if (dnbBowl) {
     parts.push("");
