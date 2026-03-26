@@ -291,7 +291,7 @@ async function checkOverEnd(match) {
   }
 
   try {
-    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "Markdown" });
+    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "HTML" });
   } catch (e) { console.error("Scorecard failed:", e.message); }
 
   match.lastOverBowler = match.bowler;
@@ -513,17 +513,17 @@ function getLiveScore(match) {
 
   const battingTeamLetter = match.battingTeam;
   const bowlingTeamLetter = match.bowlingTeam;
-  const battingTeamName = battingTeamLetter === "A" ? match.teamAName : match.teamBName;
-  const bowlingTeamName = bowlingTeamLetter === "A" ? match.teamAName : match.teamBName;
+  const battingTeamName   = battingTeamLetter === "A" ? match.teamAName : match.teamBName;
+  const bowlingTeamName   = bowlingTeamLetter === "A" ? match.teamAName : match.teamBName;
 
-  const st  = match.batterStats?.[match.striker]    || { runs: 0, balls: 0 };
-  const nst = match.batterStats?.[match.nonStriker] || { runs: 0, balls: 0 };
+  const st  = match.batterStats?.[match.striker]    || { runs: 0, balls: 0, fours: 0, fives: 0, sixes: 0 };
+  const nst = match.batterStats?.[match.nonStriker] || { runs: 0, balls: 0, fours: 0, fives: 0, sixes: 0 };
   const stSR  = st.balls  > 0 ? ((st.runs  / st.balls)  * 100).toFixed(0) : "0";
   const nstSR = nst.balls > 0 ? ((nst.runs / nst.balls) * 100).toFixed(0) : "0";
 
-  const bwl  = match.bowlerStats?.[match.bowler] || { balls: 0, runs: 0, wickets: 0 };
-  const bwlOv = `${Math.floor(bwl.balls / 6)}.${bwl.balls % 6}`;
-  const econ  = bwl.balls > 0 ? ((bwl.runs / bwl.balls) * 6).toFixed(2) : "0.00";
+  const bwl    = match.bowlerStats?.[match.bowler] || { balls: 0, runs: 0, wickets: 0 };
+  const bwlOv  = `${Math.floor(bwl.balls / 6)}.${bwl.balls % 6}`;
+  const econ   = bwl.balls > 0 ? ((bwl.runs / bwl.balls) * 6).toFixed(2) : "0.00";
 
   const partRuns  = match.currentPartnershipRuns  || 0;
   const partBalls = match.currentPartnershipBalls || 0;
@@ -533,46 +533,92 @@ function getLiveScore(match) {
   const bowlerName     = getName(match, match.bowler);
 
   function short(name) {
-    return name.length > 10 ? name.substring(0, 9) + "…" : name;
+    return name.length > 12 ? name.substring(0, 11) + "…" : name;
   }
 
+  // ── This over balls ──
   const currentOverHistory = (match.overHistory || []).find(
     o => o.bowler === match.bowler && o.over === match.currentOver + 1
   );
   const overBalls = currentOverHistory
-    ? currentOverHistory.balls.map(x => x === "W" ? "W" : String(x)).join(" ")
-    : "-";
+    ? currentOverHistory.balls.map(x => x === "W" ? "❌" : x === 0 ? "•" : String(x)).join("  ")
+    : "—";
 
-  const lines = [
-    `📊 Live Score`,
-    ``,
-    `🏏 ${battingTeamName} (Team ${battingTeamLetter})  batting`,
-    `🎯 ${bowlingTeamName} (Team ${bowlingTeamLetter})  bowling`,
-    ``,
-    `📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}.${match.currentBall}/${match.totalOvers}   📈 ${runRate}`,
-  ];
+  // ── Full over history for current bowler ──
+  const bowlerAllOvers = (match.overHistory || [])
+    .filter(o => String(o.bowler) === String(match.bowler));
+  const overHistoryText = bowlerAllOvers.map(o => {
+    const balls = o.balls.map(x => x === "W" ? "❌" : x === 0 ? "•" : String(x)).join("  ");
+    return `Ov ${o.over}: ${balls}`;
+  }).join("\n");
 
+  const bq = (text) => `<blockquote>${text}</blockquote>`;
+
+  const lines = [];
+
+  lines.push(`📊 <b>Live Score</b>\n`);
+
+  // ── Teams — single blockquote ──
+  lines.push(bq(
+    `🏏 ${battingTeamName} (Team ${battingTeamLetter})\n` +
+    `🎯 ${bowlingTeamName} (Team ${bowlingTeamLetter})`
+  ));
+
+  lines.push("");
+
+  // ── Score / overs / RR — single blockquote ──
   if (match.innings === 2) {
     const runsNeeded = (match.firstInningsScore + 1) - match.score;
-    if (runsNeeded > 0) {
-      const rrr = ballsLeft > 0 ? ((runsNeeded / ballsLeft) * 6).toFixed(2) : "-";
-      lines.push(`🏹 Need ${runsNeeded} from ${ballsLeft} balls   RRR: ${rrr}`);
-    } else {
-      lines.push(`✅ Target achieved!`);
-    }
+    const rrr = ballsLeft > 0 ? ((runsNeeded / ballsLeft) * 6).toFixed(2) : "—";
+    const targetLine = runsNeeded > 0
+      ? `🏹 Need ${runsNeeded} from ${ballsLeft} balls   RRR: ${rrr}`
+      : `✅ Target achieved!`;
+    lines.push(bq(
+      `📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}.${match.currentBall}/${match.totalOvers} ov   📈 ${runRate}\n` +
+      targetLine
+    ));
+  } else {
+    lines.push(bq(
+      `📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}.${match.currentBall}/${match.totalOvers} ov   📈 ${runRate}`
+    ));
   }
 
-  lines.push(
-    ``,
-    `─── 🏏 Batting ───`,
-    `🏏 ${short(strikerName)}  ${st.runs}(${st.balls})  SR:${stSR}`,
-    `🪄 ${short(nonStrikerName)}  ${nst.runs}(${nst.balls})  SR:${nstSR}`,
-    `🤝 Partnership: ${partRuns}(${partBalls})`,
-    ``,
-    `─── 🎾 Bowling ───`,
-    `🎾 ${short(bowlerName)}  ${bwlOv}ov  ${bwl.runs}r  ${bwl.wickets}w  econ:${econ}`,
-    `This over: ${overBalls}`
-  );
+  lines.push("");
+
+  // ── Batting header ──
+  lines.push(`🏏 <b>Batting</b>`);
+  lines.push("");
+
+  // ── Both batters — single blockquote, separate lines ──
+  lines.push(bq(
+    `⭐ ${short(strikerName)}   ${st.runs}(${st.balls})  SR:${stSR}  4s:${st.fours ?? 0}  6s:${st.sixes ?? 0}\n` +
+    `🏹 ${short(nonStrikerName)}   ${nst.runs}(${nst.balls})  SR:${nstSR}  4s:${nst.fours ?? 0}  6s:${nst.sixes ?? 0}`
+  ));
+
+  lines.push("");
+
+  // ── Partnership — single blockquote ──
+  lines.push(bq(`🤝 Partnership: ${partRuns}(${partBalls})`));
+
+  lines.push("");
+
+  // ── Bowling header ──
+  lines.push(`🎾 <b>Bowling</b>`);
+  lines.push("");
+
+  // ── Bowler stats — single blockquote (emoji only, no words) ──
+  lines.push(bq(`🎾 ${short(bowlerName)}   ${bwlOv}ov  🏏${bwl.runs}  ⚾${bwl.wickets}w  📉${econ}`));
+
+  lines.push("");
+
+  // ── This over — separate blockquote ──
+  lines.push(bq(`🔵 ${overBalls}`));
+
+  // ── Over history — separate blockquote (only if more than current over exists) ──
+  if (bowlerAllOvers.length > 0 && overHistoryText) {
+    lines.push("");
+    lines.push(bq(overHistoryText));
+  }
 
   return lines.join("\n");
 }
@@ -581,7 +627,7 @@ bot.command("score", async (ctx) => {
   const match = getMatch(ctx);
   if (!match) return ctx.reply("⚠️ No active match.");
   try {
-    await ctx.reply(getLiveScore(match));
+    await ctx.reply(getLiveScore(match), { parse_mode: "HTML" });
   } catch (e) {
     console.error("Score command failed:", e.message);
     await ctx.reply("⚠️ Score error: " + e.message);
@@ -667,8 +713,9 @@ bot.on("text", async (ctx, next) => {
 
   const strikerName   = getName(match, match.striker);
   const battingCall   = getBattingCall();
-  const strikerPing   = `<a href="tg://user?id=${match.striker}">​</a>`;
-  const batCaption    = `${strikerPing}🏏 ${strikerName}  🎱 Ball: ${ballNumber}\n${battingCall.text}`;
+  // FIX: use strikerName as anchor text so Telegram fires the ping notification
+  const strikerPing   = `<a href="tg://user?id=${match.striker}">${strikerName}</a>`;
+  const batCaption    = `🏏 ${strikerPing}  🎱 Ball: ${ballNumber}\n${battingCall.text}`;
 
   if (battingCall.gif) {
     try {

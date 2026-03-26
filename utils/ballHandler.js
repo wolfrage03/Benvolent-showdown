@@ -30,10 +30,11 @@ function startTurnTimer(match, type) {
     if ((type === "bowl" && match.awaitingBowl) ||
         (type === "bat"  && match.awaitingBat)) {
       const playerId = type === "bowl" ? match.bowler : match.striker;
-      const ping = playerId ? `<a href="tg://user?id=${playerId}">​</a>` : "";
+      const playerName = getName(match, playerId);
+      const ping = playerId ? `<a href="tg://user?id=${playerId}">${playerName}</a>` : "";
       bot.telegram.sendMessage(
         match.groupId,
-        `⏳ ${ping}${type === "bowl" ? "Bowler" : "Batter"} — 30s left`,
+        `⏳ ${ping} — 30s left`,
         { parse_mode: "HTML" }
       );
     }
@@ -43,10 +44,11 @@ function startTurnTimer(match, type) {
     if ((type === "bowl" && match.awaitingBowl) ||
         (type === "bat"  && match.awaitingBat)) {
       const playerId = type === "bowl" ? match.bowler : match.striker;
-      const ping = playerId ? `<a href="tg://user?id=${playerId}">​</a>` : "";
+      const playerName = getName(match, playerId);
+      const ping = playerId ? `<a href="tg://user?id=${playerId}">${playerName}</a>` : "";
       bot.telegram.sendMessage(
         match.groupId,
-        `🚨 ${ping}${type === "bowl" ? "Bowler" : "Batter"} — 10s left`,
+        `🚨 ${ping} — 10s left`,
         { parse_mode: "HTML" }
       );
     }
@@ -178,8 +180,9 @@ async function announceBall(match) {
   const bowlingCall = getBowlingCall();
   const bowlingGif  = bowlingCall.gif;
   const bowlingOpts = bowlDMButton();
-  const bowlerPing  = `<a href="tg://user?id=${match.bowler}">​</a>`;
-  const bowlCaption = `${bowlerPing}🏐 ${bowlerName}\n${bowlingCall.text}`;
+  // FIX: use bowlerName as anchor text so Telegram fires the ping notification
+  const bowlerPing  = `<a href="tg://user?id=${match.bowler}">${bowlerName}</a>`;
+  const bowlCaption = `${bowlerPing}  🏐 ${bowlerName}\n${bowlingCall.text}`;
 
   if (bowlingGif) {
     try {
@@ -200,7 +203,8 @@ async function announceBall(match) {
     const strikerName = getName(match, match.striker);
     await bot.telegram.sendMessage(
       match.bowler,
-`🎯 Your Turn — Bowl\n\n<blockquote>🏏 Facing: ${strikerName}\nSend your number 1 – 6</blockquote>`
+`🎯 Your Turn — Bowl\n\n<blockquote>🏏 Facing: ${strikerName}\nSend your number 1 – 6</blockquote>`,
+      { parse_mode: "HTML" }
     );
   } catch (e) {
     console.log("Bowler DM failed:", e.message);
