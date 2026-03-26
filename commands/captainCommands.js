@@ -10,7 +10,7 @@ const box = require("../utils/boxMessage");
 function buildPlayerListText(match) {
 
   function formatTeam(teamArray, captainId) {
-    if (!teamArray || !teamArray.length) return "  —";
+    if (!teamArray || !teamArray.length) return "<blockquote>—</blockquote>";
 
     const ordered = [
       ...teamArray.filter(p => p.id === captainId),
@@ -25,21 +25,22 @@ function buildPlayerListText(match) {
         !isStriker && !isNonStriker;
       const cap = p.id === captainId ? " 👑" : "";
       const tag = isStriker ? " 🏏" : isNonStriker ? " 🪄" : dismissed ? " ✗" : "";
-      return `  ${index + 1}.${cap} ${p.name}${tag}`;
+      const name = String(p.name || "Player").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+      return `<blockquote>${index + 1}.${cap} ${name}${tag}</blockquote>`;
     }).join("\n");
   }
 
-  const teamAPlayers = formatTeam(match.teamA, match.captains?.A);
-  const teamBPlayers = formatTeam(match.teamB, match.captains?.B);
+  const teamABlock = formatTeam(match.teamA, match.captains?.A);
+  const teamBBlock = formatTeam(match.teamB, match.captains?.B);
 
   return [
     `👥 Players`,
     ``,
     `🔵 ${match.teamAName} 〔Team A〕`,
-    teamAPlayers,
+    teamABlock,
     ``,
     `🔴 ${match.teamBName} 〔Team B〕`,
-    teamBPlayers,
+    teamBBlock,
   ].join("\n");
 }
 
@@ -52,7 +53,8 @@ async function sendAndPinPlayerList(match, telegram) {
           match.groupId,
           match.playerListMessageId,
           null,
-          text
+          text,
+          { parse_mode: "HTML" }
         );
       } catch (e) {
         if (!e.message?.includes("message is not modified")) {
@@ -60,7 +62,7 @@ async function sendAndPinPlayerList(match, telegram) {
         }
       }
     } else {
-      const msg = await telegram.sendMessage(match.groupId, text);
+      const msg = await telegram.sendMessage(match.groupId, text, { parse_mode: "HTML" });
       match.playerListMessageId = msg.message_id;
       try {
         await telegram.pinChatMessage(match.groupId, msg.message_id, {
@@ -92,9 +94,6 @@ module.exports = function (bot, helpers) {
     const match = getMatch(ctx);
     if (!match) return ctx.reply("⚠️ No active match.");
 
-  if (match.matchEnded || match.phase === "idle")
-    return ctx.reply("⚠️ No active match.");
-
     if (!match.captains) match.captains = { A: null, B: null };
 
     if (!isHost(match, ctx.from.id))
@@ -103,14 +102,11 @@ module.exports = function (bot, helpers) {
     match.phase = "captain";
 
     ctx.reply(
-      "👑 Captain Selection\n\n<blockquote>Each team picks their own captain.\nTap the button below.</blockquote>",
-      {
-        parse_mode: "HTML",
-        ...Markup.inlineKeyboard([
-          [Markup.button.callback("👑 Captain — Team A", "cap_A")],
-          [Markup.button.callback("👑 Captain — Team B", "cap_B")]
-        ])
-      }
+box("👑 Captain Selection", "Each team picks their own captain.", "Tap the button below."),
+      Markup.inlineKeyboard([
+        [Markup.button.callback("👑 Captain — Team A", "cap_A")],
+        [Markup.button.callback("👑 Captain — Team B", "cap_B")]
+      ])
     );
   });
 
@@ -135,8 +131,7 @@ module.exports = function (bot, helpers) {
 
     await ctx.answerCbQuery("You are Captain of Team A 👑");
     await ctx.reply(
-`👑 Captain Set\n\n<blockquote>${ctx.from.first_name || ""}${ctx.from.username ? " @" + ctx.from.username : ""}\n🔵 ${match.teamAName} 〔Team A〕 Captain</blockquote>`,
-      { parse_mode: "HTML" }
+box("👑 Captain Set", `${getDisplayName(ctx.from)}`, "🔵 〔Team A〕 Captain")
     );
 
     updateCaptainButtons(match, ctx);
@@ -163,8 +158,7 @@ module.exports = function (bot, helpers) {
 
     await ctx.answerCbQuery("You are Captain of Team B 👑");
     await ctx.reply(
-`👑 Captain Set\n\n<blockquote>${ctx.from.first_name || ""}${ctx.from.username ? " @" + ctx.from.username : ""}\n🔴 ${match.teamBName} 〔Team B〕 Captain</blockquote>`,
-      { parse_mode: "HTML" }
+box("👑 Captain Set", `${getDisplayName(ctx.from)}`, "🔴 〔Team B〕 Captain")
     );
 
     updateCaptainButtons(match, ctx);
@@ -190,8 +184,7 @@ module.exports = function (bot, helpers) {
       match.phase = "toss";
 
       ctx.reply(
-"✅ Both Captains Set\n\n<blockquote>Starting toss...</blockquote>",
-        { parse_mode: "HTML" }
+box("✅ Both Captains Set", "Starting toss...")
       );
 
       if (helpers.startToss) helpers.startToss(match);
@@ -209,9 +202,6 @@ module.exports = function (bot, helpers) {
     const match = getMatch(ctx);
     if (!match || ctx.chat.id !== match.groupId)
       return ctx.reply("⚠️ No active match in this group.");
-
-  if (match.matchEnded || match.phase === "idle")
-    return ctx.reply("⚠️ No active match.");
 
     if (!match.playerListMessageId) {
       await sendAndPinPlayerList(match, ctx.telegram);
@@ -266,16 +256,13 @@ module.exports = function (bot, helpers) {
     const name = getName(match, newCaptainId);
 
     await ctx.reply(
-      `🔄 Change Captain?\n\n<blockquote>〔Team ${teamLetter}〕 → ${name}</blockquote>`,
-      {
-        parse_mode: "HTML",
-        ...Markup.inlineKeyboard([
-          [
-            Markup.button.callback("✅ Confirm", "confirm_cap_change"),
-            Markup.button.callback("❌ Cancel",  "cancel_cap_change")
-          ]
-        ])
-      }
+box("🔄 Change Captain?", `〔Team ${teamLetter}〕 → ${name}`),
+      Markup.inlineKeyboard([
+        [
+          Markup.button.callback("✅ Confirm", "confirm_cap_change"),
+          Markup.button.callback("❌ Cancel",  "cancel_cap_change")
+        ]
+      ])
     );
   });
 
@@ -303,7 +290,7 @@ module.exports = function (bot, helpers) {
     const mention = `<a href="tg://user?id=${playerId}">${getName(match, playerId)}</a>`;
 
     await ctx.editMessageText(
-`👑 Captain Updated\n\n<blockquote>${mention} → 〔Team ${team}〕</blockquote>`,
+box("👑 Captain Updated", `${mention} → 〔Team ${team}〕`),
       { parse_mode: "HTML" }
     );
 
@@ -323,7 +310,7 @@ module.exports = function (bot, helpers) {
 
     match.pendingCaptainChange = null;
     await ctx.editMessageText(
-"✖️ Captain Change Cancelled"
+box("✖️ Captain Change Cancelled")
     );
   });
 
