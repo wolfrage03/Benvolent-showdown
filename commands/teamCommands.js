@@ -19,6 +19,8 @@ bot.command("createteam", (ctx) => {
   if (match.matchEnded || match.phase === "idle")
     return ctx.reply("⚠️ No active match.");
 
+  if (match.phase === "host_select")
+    return ctx.reply("⚠️ Waiting for a host to be selected first.");
   if (!isHost(match, ctx.from.id))
     return ctx.reply("❌ Only host can create teams.");
 
