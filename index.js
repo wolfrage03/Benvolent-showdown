@@ -14,8 +14,6 @@ const matchResult       = require("./utils/matchResult");
 const box               = require("./utils/boxMessage");
 const ballHandler       = require("./utils/ballHandler");
 const { sendAndPinPlayerList } = require("./commands/captainCommands");
-const { generateMatchGraph } = require("./utils/graphGenerator");
-
 
 const {
   randomLine,
@@ -217,7 +215,8 @@ async function declareTimeout(match, timedOutTeam) {
 
   await bot.telegram.sendMessage(
     match.groupId,
-box("⏱ Time Out!", `〔Team ${timedOutTeam}〕 ${losingName}`, "failed to respond in time.", "───────────", `🏆 〔Team ${winningTeam}〕 ${winningName} wins!`)
+`⏱ Time Out!\n\n<blockquote>〔Team ${timedOutTeam}〕 ${losingName} failed to respond in time.</blockquote>\n\n<blockquote>🏆 〔Team ${winningTeam}〕 ${winningName} wins!</blockquote>`,
+      { parse_mode: "HTML" }
   );
 
   clearActiveMatchPlayers(match);
@@ -292,7 +291,7 @@ async function checkOverEnd(match) {
   }
 
   try {
-    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "HTML" });
+    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "Markdown" });
   } catch (e) { console.error("Scorecard failed:", e.message); }
 
   match.lastOverBowler = match.bowler;
@@ -350,7 +349,7 @@ module.exports = { getName };
 bot.command("batter", async (ctx) => {
 
   const match = getMatch(ctx);
-  if (!match || match.matchEnded || match.phase === "idle") return;
+  if (!match) return;
   if (!isHost(match, ctx.from.id)) return;
 
   if (ctx.chat.id !== match.groupId)
@@ -454,9 +453,6 @@ bot.command("bowler", async (ctx) => {
 
   const match = getMatch(ctx);
   if (!match) return;
-
-  if (!match || match.matchEnded)
-    return ctx.reply("⚠️ No active match.");
 
   if (match.phase !== "set_bowler")
     return ctx.reply("⚠️ You can set bowler only when bot asks.");
@@ -669,53 +665,35 @@ bot.on("text", async (ctx, next) => {
 
   const ballNumber = `${match.currentOver}.${match.currentBall + 1}`;
 
-  await bot.telegram.sendMessage(
-    match.groupId,
-    `[🏏 ${getName(match, match.striker)}](tg://user?id=${match.striker})  🎱 Ball: ${ballNumber}`,
-    { parse_mode: "Markdown" }
-  );
+  const strikerName   = getName(match, match.striker);
+  const battingCall   = getBattingCall();
+  const batCaption    = `🏏 ${strikerName}  🎱 Ball: ${ballNumber}\n${battingCall.text}`;
 
-  const battingCall = getBattingCall();
   if (battingCall.gif) {
     try {
       if (battingCall.gif.startsWith("BAAC")) {
-        await bot.telegram.sendVideo(match.groupId, battingCall.gif, { caption: battingCall.text });
+        await bot.telegram.sendVideo(match.groupId, battingCall.gif, {
+          caption: batCaption,
+          reply_markup: { inline_keyboard: [[{ text: "🏏 " + strikerName, url: `tg://user?id=${match.striker}` }]] }
+        });
       } else {
-        await bot.telegram.sendAnimation(match.groupId, battingCall.gif, { caption: battingCall.text });
+        await bot.telegram.sendAnimation(match.groupId, battingCall.gif, {
+          caption: batCaption,
+          reply_markup: { inline_keyboard: [[{ text: "🏏 " + strikerName, url: `tg://user?id=${match.striker}` }]] }
+        });
       }
     } catch (e) {
       console.error("Batting gif failed:", e.message);
-      await bot.telegram.sendMessage(match.groupId, battingCall.text);
+      await bot.telegram.sendMessage(match.groupId, batCaption);
     }
   } else {
-    await bot.telegram.sendMessage(match.groupId, battingCall.text);
+    await bot.telegram.sendMessage(match.groupId, batCaption);
   }
   ballHandler.startTurnTimer(match, "bat");
 });
 
 
 
-bot.command("graph", async (ctx) => {
-  const match = getMatch(ctx);
-
-  if (!match || match.phase === "idle" || match.matchEnded)
-    return ctx.reply("⚠️ No active match.");
-
-  if (!match.overHistory || match.overHistory.length === 0)
-    return ctx.reply("⚠️ No overs bowled yet.");
-
-  try {
-    const buf = await generateMatchGraph(match);
-    await bot.telegram.sendPhoto(
-      match.groupId,
-      { source: buf },
-      { caption: `📊 Score Progression — Over ${match.currentOver}.${match.currentBall}` }
-    );
-  } catch (err) {
-    console.error("Graph error:", err);
-    ctx.reply("⚠️ Graph failed: " + err.message);
-  }
-});
 
 
 

@@ -72,8 +72,7 @@ async function ballTimeout(match) {
       await bot.telegram.sendMessage(
         match.groupId,
 "⏱ Bowler Timed Out\n\n<blockquote>+6 runs to batting team\nBall does not count</blockquote>",
-      { parse_mode: "HTML" }
-      );
+      { parse_mode: "HTML" });
 
       if (match.bowlerMissCount >= 2) {
         match.bowlerMissCount = 0;
@@ -84,8 +83,7 @@ async function ballTimeout(match) {
         await bot.telegram.sendMessage(
           match.groupId,
 "🚫 Bowler Suspended\n\n<blockquote>Consecutive delays\nCannot bowl this over or next</blockquote>\n\n👉 /bowler [number] new bowler",
-      { parse_mode: "HTML" }
-        );
+      { parse_mode: "HTML" });
         return;
       }
 
@@ -114,8 +112,7 @@ async function ballTimeout(match) {
       await bot.telegram.sendMessage(
         match.groupId,
 "⏱ Batter Timed Out\n\n<blockquote>-6 run penalty\nBall counted</blockquote>",
-      { parse_mode: "HTML" }
-      );
+      { parse_mode: "HTML" });
 
       if (match.batterMissCount >= 2) {
         match.batterMissCount = 0;
@@ -127,8 +124,7 @@ async function ballTimeout(match) {
         await bot.telegram.sendMessage(
           match.groupId,
 "💥 Batter Dismissed\n\n<blockquote>Consecutive delays</blockquote>\n\n👉 /batter [number] new batter",
-      { parse_mode: "HTML" }
-        );
+      { parse_mode: "HTML" });
 
         if (match.wickets >= match.maxWickets) {
           match.awaitingBowl = false;
@@ -172,39 +168,32 @@ async function announceBall(match) {
   match.awaitingBowl   = true;
   match.awaitingBat    = false;
 
-  const bowlerName = getName(match, match.bowler);
-
-  await bot.telegram.sendMessage(
-    match.groupId,
-    `[🏐 ${bowlerName}](tg://user?id=${match.bowler})`,
-    { parse_mode: "Markdown" }
-  );
-
+  const bowlerName  = getName(match, match.bowler);
   const bowlingCall = getBowlingCall();
   const bowlingGif  = bowlingCall.gif;
   const bowlingOpts = bowlDMButton();
+  const bowlCaption = `🏐 ${bowlerName}\n${bowlingCall.text}`;
 
   if (bowlingGif) {
     try {
       if (bowlingGif.startsWith("BAAC")) {
-        await bot.telegram.sendVideo(match.groupId, bowlingGif, { caption: bowlingCall.text, ...bowlingOpts });
+        await bot.telegram.sendVideo(match.groupId, bowlingGif, { caption: bowlCaption, ...bowlingOpts });
       } else {
-        await bot.telegram.sendAnimation(match.groupId, bowlingGif, { caption: bowlingCall.text, ...bowlingOpts });
+        await bot.telegram.sendAnimation(match.groupId, bowlingGif, { caption: bowlCaption, ...bowlingOpts });
       }
     } catch (e) {
       console.error("Bowling gif failed:", e.message);
-      await bot.telegram.sendMessage(match.groupId, bowlingCall.text, bowlingOpts);
+      await bot.telegram.sendMessage(match.groupId, bowlCaption, bowlingOpts);
     }
   } else {
-    await bot.telegram.sendMessage(match.groupId, bowlingCall.text, bowlingOpts);
+    await bot.telegram.sendMessage(match.groupId, bowlCaption, bowlingOpts);
   }
 
   try {
     const strikerName = getName(match, match.striker);
     await bot.telegram.sendMessage(
       match.bowler,
-`🎯 Your Turn — Bowl\n\n<blockquote>🏏 Facing: ${strikerName}\nSend your number 1 – 6</blockquote>`,
-      { parse_mode: "HTML" }
+`🎯 Your Turn — Bowl\n\n<blockquote>🏏 Facing: ${strikerName}\nSend your number 1 – 6</blockquote>`
     );
   } catch (e) {
     console.log("Bowler DM failed:", e.message);
@@ -264,8 +253,7 @@ async function processBall(match) {
       await bot.telegram.sendMessage(
         match.groupId,
 "⚠️ Hattrick Ball!\n\n<blockquote>Cannot play 0 — two wickets in a row!</blockquote>",
-      { parse_mode: "HTML" }
-      );
+      { parse_mode: "HTML" });
       match.batNumber  = null;
       match.awaitingBat  = true;
       match.ballLocked   = false;
@@ -371,8 +359,7 @@ async function processBall(match) {
 
       await bot.telegram.sendMessage(
         match.groupId,
-`💥 Wicket!\n\n👉 /batter [number] new batter`,
-      { parse_mode: "HTML" }
+"💥 Wicket!\n\n👉 /batter [number] new batter"
       );
 
       // ── Start 5 min event timer for batter selection ──

@@ -12,6 +12,15 @@ function generateScorecard(match, getName) {
   const bowlingTeam =
     bowlingTeamLetter === "A" ? match.teamAName : match.teamBName;
 
+  const LINE_WIDTH = 36;
+
+  function section(title) {
+    const text = ` ${title} `;
+    const dashCount = Math.max(0, LINE_WIDTH - text.length);
+    const left = "─".repeat(Math.floor(dashCount / 2));
+    const right = "─".repeat(Math.ceil(dashCount / 2));
+    return `${left}${text}${right}`;
+  }
 
   function h(str) {
     return String(str ?? "")
@@ -77,30 +86,30 @@ function generateScorecard(match, getName) {
     const isStriker    = id === match.striker;
     const isNonStriker = id === match.nonStriker;
     const isNotOut     = (isStriker || isNonStriker) && !isDismissed;
-    const indicator    = isStriker ? "⭐ " : isNonStriker ? "• " : "";
+    const indicator    = isStriker ? "⭐ " : isNonStriker ? "🏹 " : "";
     const notOutMark   = isNotOut ? "*" : "";
 
     // Batter name — plain
     battingBlock += `\n🏏 ${indicator}${h(name)}${notOutMark}\n`;
 
-    // Runs/balls/SR — blockquote
+    // Box 1: runs/balls/SR
     battingBlock += bq(`${stats.runs}(${stats.balls})  ⚡SR:${sr}`);
-    battingBlock += `
-`;
+    battingBlock += "\n";
 
-    // Boundaries — separate blockquote
+    // Box 2: boundaries
     battingBlock += bq(`${fours}(4s)  ${fives}(5s)  ${sixes}(6s)`);
 
-    // Dismissal — separate blockquote (only if out)
+    // Box 3: dismissal (only if out)
     if (isTimedOut) {
-      battingBlock += `
-`;
+      battingBlock += "\n";
       battingBlock += bq(`⏱ timed out`);
     } else if (isDismissed && stats.dismissedBy && !isNotOut) {
-      battingBlock += `
-`;
+      battingBlock += "\n";
       battingBlock += bq(`🎾 b ${h(getName(match, stats.dismissedBy))}`);
     }
+
+    // Gap between batters
+    battingBlock += "\n\n";
   }
 
   const battingTeamPlayers =
@@ -140,8 +149,8 @@ function generateScorecard(match, getName) {
 
     // Stats — blockquote
     bowlingBlock += bq(`${ovW}.${ovB}ov  🏏${b.runs}  ⚾${b.wickets}  📉${econ}`);
-
-    // Over history — blockquote
+    
+    // Over history — separate blockquote
     const theirOvers = (match.overHistory || []).filter(
       o => String(o.bowler) === String(id)
     );
@@ -150,9 +159,11 @@ function generateScorecard(match, getName) {
         const balls = o.balls.map(x => x === "W" ? "W" : String(x)).join("  ");
         return `Ov ${o.over}: ${balls}`;
       }).join("\n");
-      bowlingBlock += `\n`;
+      bowlingBlock += "\n";
       bowlingBlock += bq(histLines);
     }
+    
+    bowlingBlock += "\n\n";
   }
 
   const didNotBowl = (bowlingTeamPlayers || [])

@@ -19,25 +19,8 @@ module.exports = function (bot, helpers) {
     if (ctx.chat.type === "private") return next();
 
     let match = getMatch(ctx);
-
-    // Allow force restart if match is stuck — ended but not cleaned, or idle
-    if (match && match.phase !== "idle" && !match.matchEnded) {
-      // Allow admins to force-reset a stuck match
-      let isAdmin = false;
-      try {
-        const member = await ctx.getChatMember(ctx.from.id);
-        isAdmin = ["administrator", "creator"].includes(member.status);
-      } catch {}
-
-      if (!isAdmin && ctx.from.id !== match.host)
-        return ctx.reply("⚠️ A match is already running. Ask an admin to /endmatch first.");
-
-      // Admin force-reset — clear the stale match
-      clearTimers(match);
-      clearDelayTimers(match);
-      clearActiveMatchPlayers(match);
-      matches.delete(ctx.chat.id);
-    }
+    if (match && match.phase !== "idle")
+      return ctx.reply("⚠️ A match is already running.");
 
     try {
       const { id, username, first_name, last_name } = ctx.from;
@@ -63,10 +46,13 @@ module.exports = function (bot, helpers) {
     match.phase   = "host_select";
 
     ctx.reply(
-box("🏏 Match Lobby", "A new match is starting!", "First player to press becomes host."),
-      Markup.inlineKeyboard([
-        [Markup.button.callback("👑 Become Host", "select_host")]
-      ])
+"🏏 Match Lobby\n\n<blockquote>A new match is starting!\nFirst player to press becomes host.</blockquote>",
+      {
+        parse_mode: "HTML",
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback("👑 Become Host", "select_host")]
+        ])
+      }
     );
   });
 
@@ -89,13 +75,16 @@ box("🏏 Match Lobby", "A new match is starting!", "First player to press becom
       return ctx.reply("❌ Only host or admin can end the match.");
 
     ctx.reply(
-box("⚠️ End Match?", "This cannot be undone."),
-      Markup.inlineKeyboard([
-        [
-          Markup.button.callback("✅ Confirm", "confirm_end"),
-          Markup.button.callback("❌ Cancel",  "cancel_end")
-        ]
-      ])
+"⚠️ End Match?\n\n<blockquote>This cannot be undone.</blockquote>",
+      {
+        parse_mode: "HTML",
+        ...Markup.inlineKeyboard([
+          [
+            Markup.button.callback("✅ Confirm", "confirm_end"),
+            Markup.button.callback("❌ Cancel",  "cancel_end")
+          ]
+        ])
+      }
     );
   });
 
@@ -119,7 +108,8 @@ box("⚠️ End Match?", "This cannot be undone."),
     try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
 
     await ctx.reply(
-box("🛑 Match Ended", "👉 /start to begin a new match")
+"🛑 Match Ended\n\n<blockquote>👉 /start to begin a new match</blockquote>",
+      { parse_mode: "HTML" }
     );
 
     clearTimers(match);
