@@ -19,7 +19,7 @@ module.exports = function (bot, helpers) {
     if (ctx.chat.type === "private") return next();
 
     let match = getMatch(ctx);
-    if (match && match.phase !== "idle")
+    if (match && match.phase !== "idle" && match.phase !== "host_select")
       return ctx.reply("⚠️ A match is already running.");
 
     try {
@@ -71,7 +71,8 @@ module.exports = function (bot, helpers) {
       isAdmin = ["administrator", "creator"].includes(member.status);
     } catch {}
 
-    if (ctx.from.id !== match.host && !isAdmin)
+    // if no host yet (host_select phase), anyone can end
+    if (match.host !== null && ctx.from.id !== match.host && !isAdmin)
       return ctx.reply("❌ Only host or admin can end the match.");
 
     ctx.reply(
@@ -102,7 +103,8 @@ module.exports = function (bot, helpers) {
       isAdmin = ["administrator", "creator"].includes(member.status);
     } catch {}
 
-    if (ctx.from.id !== match.host && !isAdmin)
+    // if no host yet (host_select phase), anyone can confirm
+    if (match.host !== null && ctx.from.id !== match.host && !isAdmin)
       return ctx.answerCbQuery("Only host or admin can confirm.");
 
     try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
