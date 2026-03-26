@@ -20,8 +20,13 @@ module.exports = function (bot, helpers) {
     if (ctx.chat.type === "private") return next();
 
     let match = getMatch(ctx);
-    if (match && !match.matchEnded && match.phase !== "idle" && match.phase !== "host_select" && match.phase !== "team_create")
+
+    console.log("[START] phase:", match?.phase, "matchEnded:", match?.matchEnded, "host:", match?.host);
+
+    if (match && !match.matchEnded && match.phase !== "idle" && match.phase !== "host_select" && match.phase !== "team_create") {
+      console.log("[START] BLOCKED — match still active");
       return ctx.reply("⚠️ A match is already running.");
+    }
 
     try {
       const { id, username, first_name, last_name } = ctx.from;
@@ -46,6 +51,8 @@ module.exports = function (bot, helpers) {
     match.groupId = ctx.chat.id;
     match.phase   = "host_select";
 
+    console.log("[START] New match created, phase:", match.phase);
+
     ctx.reply(
 "🏏 Match Lobby\n\n<blockquote>A new match is starting!\nFirst player to press becomes host.</blockquote>",
       {
@@ -63,6 +70,9 @@ module.exports = function (bot, helpers) {
   bot.command("endmatch", async (ctx) => {
 
     const match = getMatch(ctx);
+
+    console.log("[ENDMATCH] phase:", match?.phase, "host:", match?.host);
+
     if (!match || match.phase === "idle")
       return ctx.reply("⚠️ No active match running.");
 
@@ -71,6 +81,8 @@ module.exports = function (bot, helpers) {
       const member = await ctx.getChatMember(ctx.from.id);
       isAdmin = ["administrator", "creator"].includes(member.status);
     } catch {}
+
+    console.log("[ENDMATCH] isAdmin:", isAdmin, "from:", ctx.from.id, "match.host:", match.host);
 
     if (match.host !== null && ctx.from.id !== match.host && !isAdmin)
       return ctx.reply("❌ Only host or admin can end the match.");
@@ -95,6 +107,9 @@ module.exports = function (bot, helpers) {
   bot.action("confirm_end", async (ctx) => {
 
     const match = getMatch(ctx);
+
+    console.log("[CONFIRM_END] match exists:", !!match, "phase:", match?.phase, "host:", match?.host);
+
     if (!match) return;
 
     let isAdmin = false;
@@ -119,7 +134,10 @@ module.exports = function (bot, helpers) {
     match.phase = "idle";
     match.matchEnded = true;
     match.inningsEnded = true;
+
+    console.log("[CONFIRM_END] calling deleteMatch for groupId:", match.groupId);
     deleteMatch(match.groupId);
+    console.log("[CONFIRM_END] match deleted. matches.has:", matches.has(match.groupId));
   });
 
 
