@@ -19,7 +19,9 @@ module.exports = function (bot, helpers) {
     if (ctx.chat.type === "private") return next();
 
     let match = getMatch(ctx);
-    if (match && match.phase !== "idle" && match.phase !== "host_select")
+
+    // Block if a real match is running (past host selection)
+    if (match && match.phase !== "idle" && match.phase !== "host_select" && match.phase !== "team_create")
       return ctx.reply("⚠️ A match is already running.");
 
     try {
@@ -71,7 +73,7 @@ module.exports = function (bot, helpers) {
       isAdmin = ["administrator", "creator"].includes(member.status);
     } catch {}
 
-    // if no host yet (host_select phase), anyone can end
+    // Allow anyone to end if no host picked yet
     if (match.host !== null && ctx.from.id !== match.host && !isAdmin)
       return ctx.reply("❌ Only host or admin can end the match.");
 
@@ -103,7 +105,7 @@ module.exports = function (bot, helpers) {
       isAdmin = ["administrator", "creator"].includes(member.status);
     } catch {}
 
-    // if no host yet (host_select phase), anyone can confirm
+    // Allow anyone to confirm if no host picked yet
     if (match.host !== null && ctx.from.id !== match.host && !isAdmin)
       return ctx.answerCbQuery("Only host or admin can confirm.");
 
@@ -117,8 +119,7 @@ module.exports = function (bot, helpers) {
     clearTimers(match);
     clearDelayTimers(match);
     clearActiveMatchPlayers(match);
-    const freshMatch = resetMatch(match.groupId);
-    freshMatch.phase = "idle";
+    matches.delete(match.groupId);
   });
 
 
