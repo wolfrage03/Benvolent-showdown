@@ -19,9 +19,6 @@ bot.command("createteam", (ctx) => {
   if (match.matchEnded || match.phase === "idle")
     return ctx.reply("⚠️ No active match.");
 
-  if (match.phase === "host_select")
-    return ctx.reply("⚠️ Waiting for a host to be selected first.");
-
   if (!isHost(match, ctx.from.id))
     return ctx.reply("❌ Only host can create teams.");
 
@@ -221,8 +218,15 @@ Ask them to send /start to the bot in DM first.`,
   /* ── USER ID METHOD ── */
   } else if (args[2]) {
     if (isNaN(args[2])) return ctx.reply("❌ Invalid Telegram user ID.");
-    userId  = Number(args[2]);
-    name    = `User_${args[2]}`;
+    userId = Number(args[2]);
+
+    // Try to look up real name from DB
+    const dbUser = await User.findOne({ telegramId: String(userId) });
+    if (dbUser) {
+      name = dbUser.firstName || dbUser.username || `User_${userId}`;
+    } else {
+      name = `User_${userId}`;
+    }
     mention = `<a href="tg://user?id=${userId}">${name}</a>`;
 
   } else {

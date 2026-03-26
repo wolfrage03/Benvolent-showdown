@@ -85,17 +85,33 @@ Play some matches first!`
   bot.command("stats", async (ctx) => {
     try {
       const parts = ctx.message.text.trim().split(/\s+/);
-      if (parts.length < 2 || !parts[1].startsWith("@"))
-        return ctx.reply("ℹ️ Usage: /stats @username");
-      const username = parts[1].replace("@", "").toLowerCase();
-      const user = await User.findOne({ username });
-      if (!user) return ctx.reply(`❌ User @${username} not found.`);
+      if (parts.length < 2)
+        return ctx.reply("ℹ️ Usage: /stats @username  or  /stats 123456789");
+
+      let user = null;
+      let displayHandle = "";
+
+      if (parts[1].startsWith("@")) {
+        // lookup by username
+        const username = parts[1].replace("@", "").toLowerCase();
+        user = await User.findOne({ username });
+        if (!user) return ctx.reply(`❌ User @${username} not found.\nAsk them to send /start to the bot in DM first.`);
+        displayHandle = `@${username}`;
+      } else if (/^\d+$/.test(parts[1])) {
+        // lookup by Telegram user ID
+        user = await User.findOne({ telegramId: parts[1] });
+        if (!user) return ctx.reply(`❌ User ID ${parts[1]} not found.\nAsk them to send /start to the bot in DM first.`);
+        displayHandle = user.username ? `@${user.username}` : (user.firstName || parts[1]);
+      } else {
+        return ctx.reply("ℹ️ Usage: /stats @username  or  /stats 123456789");
+      }
+
       const stats = await PlayerStats.findOne({ userId: user.telegramId });
-      if (!stats) return ctx.reply(`📊 @${username} has no stats yet.`);
+      if (!stats) return ctx.reply(`📊 ${displayHandle} has no stats yet.`);
       const bat  = calculateBatting(stats);
       const bowl = calculateBowling(stats);
-      const firstName = user.firstName || user.first_name || "";
-      await ctx.reply(buildStatsCard(`@${username}`, firstName, stats, bat, bowl), { parse_mode: "MarkdownV2" });
+      const firstName = user.firstName || "";
+      await ctx.reply(buildStatsCard(displayHandle, firstName, stats, bat, bowl), { parse_mode: "MarkdownV2" });
     } catch (err) {
       console.error("stats error:", err);
       ctx.reply("⚠️ Error: " + err.message);
