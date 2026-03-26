@@ -19,7 +19,7 @@ module.exports = function (bot, helpers) {
     if (ctx.chat.type === "private") return next();
 
     let match = getMatch(ctx);
-    if (match && match.phase !== "idle")
+    if (match && match.phase !== "idle" && match.phase !== "host_select")
       return ctx.reply("⚠️ A match is already running.");
 
     try {
