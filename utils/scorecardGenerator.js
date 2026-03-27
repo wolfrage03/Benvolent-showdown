@@ -26,7 +26,9 @@ function generateScorecard(match, getName) {
     return String(str ?? "")
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+      .replace(/>/g, "&gt;")
+      // Strip null bytes and other control chars that break Telegram HTML
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "");
   }
 
   function bq(text) {

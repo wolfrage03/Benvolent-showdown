@@ -34,14 +34,6 @@ const {
 } = require("./matchManager");
 
 
-/* ================= ALLOWED GROUPS ================= */
-
-const ALLOWED_GROUPS = [
-  "-1003631018582",
-  "-1003240391473",
-  "-1003047955907"
-];
-
 /* ================= HELPERS ================= */
 
 const isHost = (match, id) => match && id === match.host;
@@ -108,9 +100,9 @@ function clearTimers(match) {
 
 /* ================= DELAY TIMER SYSTEM ================= */
 
-const POOL_MS  = 5 * 60 * 1000;
-const EXTRA_MS = 5 * 60 * 1000;
-const EVENT_MS = 5 * 60 * 1000;
+const POOL_MS  = 5 * 60 * 1000;  // 5 min pool per innings per team
+const EXTRA_MS = 5 * 60 * 1000;  // 5 min extra per team per match
+const EVENT_MS = 5 * 60 * 1000;  // 5 min per-event (over/wicket)
 
 function msToMin(ms) {
   const m = Math.floor(ms / 60000);
@@ -119,6 +111,7 @@ function msToMin(ms) {
 }
 
 function initTimerState(match) {
+  // reset pool for new innings — extraUsed carries across innings (per team per match)
   clearDelayTimers(match);
   match.poolRemaining   = POOL_MS;
   match.poolTimerStart  = null;
@@ -133,6 +126,7 @@ function clearDelayTimers(match) {
   if (match.eventTimer) { clearTimeout(match.eventTimer); match.eventTimer = null; }
   if (match.poolTimer)  { clearTimeout(match.poolTimer);  match.poolTimer  = null; }
   if (match.extraTimer) { clearTimeout(match.extraTimer); match.extraTimer = null; }
+  // if pool was running, save consumed ms
   if (match.poolTimerActive && match.poolTimerStart) {
     const consumed = Date.now() - match.poolTimerStart;
     match.poolRemaining = Math.max(0, (match.poolRemaining || POOL_MS) - consumed);
@@ -146,6 +140,7 @@ async function startDelayTimer(match, type) {
 
   const delayedTeam = type === "bowler" ? match.bowlingTeam : match.battingTeam;
 
+  // ── Per-event 5 min ──
   match.eventTimer = setTimeout(async () => {
     match.eventTimer = null;
     const phase = type === "bowler" ? "set_bowler" : "new_batter";
@@ -159,10 +154,12 @@ async function startDelayTimer(match, type) {
     );
 
     if (poolLeft <= 0) {
+      // pool already empty — go straight to extra or forfeit
       await handlePoolExhausted(match, type, delayedTeam);
       return;
     }
 
+    // ── Pool timer ──
     match.poolTimerStart  = Date.now();
     match.poolTimerActive = true;
 
@@ -184,6 +181,7 @@ async function handlePoolExhausted(match, type, delayedTeam) {
   if (!match.extraUsed) match.extraUsed = { A: false, B: false };
 
   if (!match.extraUsed[delayedTeam]) {
+    // Grant one-time 5 min extra for this team
     match.extraUsed[delayedTeam] = true;
     await bot.telegram.sendMessage(match.groupId,
 `🚨 Team pool exhausted!
@@ -199,6 +197,7 @@ async function handlePoolExhausted(match, type, delayedTeam) {
     }, EXTRA_MS);
 
   } else {
+    // Extra already used — opposition wins immediately
     await declareTimeout(match, delayedTeam);
   }
 }
@@ -234,6 +233,9 @@ function bowlDMButton() {
   };
 }
 
+
+// ── Send a GIF/video + text message together ──
+// BAAC = video (0x04), CgAC = animation/document (0x0a)
 async function sendWithGif(groupId, gifType, text) {
   const fileId = randomGif(gifType);
   if (fileId) {
@@ -252,7 +254,6 @@ async function sendWithGif(groupId, gifType, text) {
     await bot.telegram.sendMessage(groupId, text, { parse_mode: "Markdown" });
   }
 }
-
 async function advanceGame(match) {
   if (!match) return;
   if (match.phase === "switch") return;
@@ -289,33 +290,18 @@ async function checkOverEnd(match) {
     return true;
   }
 
+  try {
+    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "HTML" });
+  } catch (e) { console.error("Scorecard failed:", e.message); }
+
   match.lastOverBowler = match.bowler;
   match.bowler = null;
   swapStrike(match);
+  match.phase = "set_bowler";
 
   const rr = match.currentOver > 0
     ? (match.score / (match.currentOver * 6) * 6).toFixed(2)
     : "0.00";
-
-  // ── Wicket on last ball — ask for batter first, then bowler ──
-  if (match.pendingNewBatter) {
-    match.pendingNewBatter = false;
-    match.phase = "new_batter";
-
-    try {
-      await bot.telegram.sendMessage(
-        match.groupId,
-`✅ Over ${match.currentOver} Complete\n\n<blockquote>📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}/${match.totalOvers} ov   📈 ${rr}</blockquote>\n\n💥 Wicket on last ball!\n👉 /batter [number] new batter`,
-        { parse_mode: "HTML" }
-      );
-    } catch (e) { console.error("Over+wicket message failed:", e.message); }
-
-    await startDelayTimer(match, "batter");
-    return true;
-  }
-
-  // ── Normal over end ──
-  match.phase = "set_bowler";
 
   try {
     await bot.telegram.sendMessage(
@@ -325,6 +311,7 @@ async function checkOverEnd(match) {
     );
   } catch (e) { console.error("Over message failed:", e.message); }
 
+  // ── Start 5 min event timer for bowler selection ──
   await startDelayTimer(match, "bowler");
 
   return true;
@@ -336,7 +323,6 @@ const helpers = {
   getName,
   getPlayerTeam,
   clearTimers,
-  clearDelayTimers,
   clearActiveMatchPlayers,
   startToss: null
 };
@@ -446,21 +432,15 @@ bot.command("batter", async (ctx) => {
       match.battingOrder.push(selected.id);
     match.usedBatters.push(selected.id);
     await sendAndPinPlayerList(match, ctx.telegram);
+    match.phase = "play";
 
+    // ── Clear delay timers, save pool remaining ──
     clearDelayTimers(match);
 
     await ctx.reply(
 `🏏 New Batter\n\n<blockquote>🏏 ${name}   ${ordinal(orderNumber)} batter</blockquote>`,
       { parse_mode: "HTML" }
     );
-
-    // ── Over just ended with a wicket — bowler still needed ──
-    if (match.bowler === null) {
-      match.phase = "set_bowler";
-      return ctx.reply("👉 /bowler [number] set bowler");
-    }
-
-    match.phase = "play";
     return ballHandler.startBall(match);
   }
 
@@ -509,6 +489,7 @@ bot.command("bowler", async (ctx) => {
   match.phase = "play";
   playerActiveMatch.set(player.id, match.groupId);
 
+  // ── Clear delay timers, save pool remaining ──
   clearDelayTimers(match);
 
   await ctx.reply(
@@ -608,6 +589,8 @@ bot.command("score", async (ctx) => {
 });
 
 
+
+
 /* ================= HANDLE INPUT ================= */
 
 bot.on("text", async (ctx, next) => {
@@ -619,7 +602,7 @@ bot.on("text", async (ctx, next) => {
 
   const text = ctx.message.text.trim();
 
-  /* GROUP BATTER INPUT */
+ /* GROUP BATTER INPUT */
   if (ctx.chat.type !== "private") {
 
     const ballInProgress = match.awaitingBowl || match.awaitingBat;
@@ -630,6 +613,7 @@ bot.on("text", async (ctx, next) => {
     if (!/^[0-6]$/.test(text))
       return ctx.reply("❌ Send a number between 0–6.");
 
+    // ✅ BLOCK early batting input
     if (!match.awaitingBat) {
       return ctx.reply("⏳ Wait for bowler to send the ball first.");
     }
@@ -680,38 +664,43 @@ bot.on("text", async (ctx, next) => {
   await ctx.reply(`✅ Submitted — waiting for batter`);
 
   const ballNumber = `${match.currentOver}.${match.currentBall + 1}`;
-  const strikerName   = getName(match, match.striker);
-  const battingCall   = getBattingCall();
-  const batCaption    = `🏏 ${strikerName}  🎱 Ball: ${ballNumber}\n${battingCall.text}`;
-  const batOpts = {
-    caption: batCaption,
-    parse_mode: "HTML",
-    reply_markup: {
-      inline_keyboard: [[{ text: "🏏 " + strikerName, url: `tg://user?id=${match.striker}` }]]
-    }
-  };
 
-  try {
-    if (battingCall.gif) {
+  const battingCall   = getBattingCall();
+  const strikerPing   = `<a href="tg://user?id=${match.striker}">&#8203;</a>`;
+  const batCaption    = `${strikerPing}🏏  🎱 Ball: ${ballNumber}\n${battingCall.text}`;
+
+  if (battingCall.gif) {
+    let gifSent = false;
+    try {
       if (battingCall.gif.startsWith("BAAC")) {
-        await bot.telegram.sendVideo(match.groupId, battingCall.gif, batOpts);
+        await bot.telegram.sendVideo(match.groupId, battingCall.gif, { caption: batCaption, parse_mode: "HTML" });
       } else {
-        await bot.telegram.sendAnimation(match.groupId, battingCall.gif, batOpts);
+        await bot.telegram.sendAnimation(match.groupId, battingCall.gif, { caption: batCaption, parse_mode: "HTML" });
       }
-    } else {
-      await bot.telegram.sendMessage(match.groupId, batCaption, { parse_mode: "HTML" });
+      gifSent = true;
+    } catch (e) {
+      console.error("Batting gif failed:", e.message);
     }
-  } catch (e) {
-    console.error("Batting gif failed:", e.message);
+    if (!gifSent) {
+      try {
+        await bot.telegram.sendMessage(match.groupId, batCaption, { parse_mode: "HTML" });
+      } catch (e2) {
+        console.error("Batting fallback failed:", e2.message);
+      }
+    }
+  } else {
     try {
       await bot.telegram.sendMessage(match.groupId, batCaption, { parse_mode: "HTML" });
-    } catch (e2) {
-      console.error("Batting fallback also failed:", e2.message);
+    } catch (e) {
+      console.error("Batting text failed:", e.message);
     }
   }
-
   ballHandler.startTurnTimer(match, "bat");
 });
+
+
+
+
 
 
 // TEMP: file ID logger — remove after collecting IDs
@@ -730,6 +719,8 @@ bot.on(["animation", "video", "document"], async (ctx) => {
 });
 
 
+
+
 /* ================= BOT SAFETY ================= */
 
 bot.catch((err, ctx) => {
@@ -744,17 +735,6 @@ bot.use(async (ctx, next) => {
     try { await ctx.answerCbQuery(); } catch {}
   }
   return next();
-});
-
-bot.use(async (ctx, next) => {
-  const chatType = ctx.chat?.type;
-  if (chatType && chatType !== "private") {
-    const chatId = String(ctx.chat.id);
-    if (!ALLOWED_GROUPS.includes(chatId)) {
-      return;
-    }
-  }
-  return next();   
 });
 
 registerStartHandler(bot);
