@@ -84,9 +84,31 @@ Play some matches first!`
   bot.command("stats", async (ctx) => {
     try {
       const parts = ctx.message.text.trim().split(/\s+/);
-      if (parts.length < 2 || !parts[1].startsWith("@"))
-        return ctx.reply("ℹ️ Usage: /stats @username");
-      const username = parts[1].replace("@", "").toLowerCase();
+      if (parts.length < 2)
+        return ctx.reply("ℹ️ Usage: /stats @username  or  /stats 123456789");
+
+      const arg = parts[1];
+
+      // Accept numeric user ID
+      if (/^\d+$/.test(arg)) {
+        const userId = arg;
+        const stats = await PlayerStats.findOne({ userId });
+        if (!stats) return ctx.reply(`📊 User ID ${userId} has no stats yet.`);
+        const bat  = calculateBatting(stats);
+        const bowl = calculateBowling(stats);
+        const user = await User.findOne({ telegramId: userId });
+        const displayName = user
+          ? (user.username ? `@${user.username}` : (user.firstName || userId))
+          : userId;
+        const firstName = user?.firstName || "";
+        await ctx.reply(buildStatsCard(displayName, firstName, stats, bat, bowl), { parse_mode: "MarkdownV2" });
+        return;
+      }
+
+      if (!arg.startsWith("@"))
+        return ctx.reply("ℹ️ Usage: /stats @username  or  /stats 123456789");
+
+      const username = arg.replace("@", "").toLowerCase();
       const user = await User.findOne({ username });
       if (!user) return ctx.reply(`❌ User @${username} not found.`);
       const stats = await PlayerStats.findOne({ userId: user.telegramId });

@@ -167,12 +167,11 @@ async function announceBall(match) {
   match.awaitingBowl   = true;
   match.awaitingBat    = false;
 
-  const bowlerName  = getName(match, match.bowler);
   const bowlingCall = getBowlingCall();
   const bowlingGif  = bowlingCall.gif;
   const bowlingOpts = bowlDMButton();
   const bowlerPing  = `<a href="tg://user?id=${match.bowler}">&#8203;</a>`;
-  const bowlCaption = `${bowlerPing}🏐 ${bowlerName}\n${bowlingCall.text}`;
+  const bowlCaption = `${bowlerPing}🏐 ${bowlingCall.text}`;
 
   if (bowlingGif) {
     try {

@@ -22,7 +22,6 @@ bot.command("createteam", (ctx) => {
   if (!isHost(match, ctx.from.id))
     return ctx.reply("❌ Only host can create teams.");
 
-  // ── FIX 1: Only reset teams if they are empty, preserve existing players ──
   if (!match.teamA) match.teamA = [];
   if (!match.teamB) match.teamB = [];
   if (!match.captains) match.captains = { A: null, B: null };
@@ -227,7 +226,7 @@ or reply to a message + /add A`
     let userId, name, mention;
 
     if (raw.startsWith("@")) {
-      // @username lookup
+      // @username — look up in DB (user must have /start-ed the bot)
       const username = raw.replace("@", "").toLowerCase().trim();
       const user = await User.findOne({ username: { $regex: new RegExp(`^${username}$`, "i") } });
       if (!user) {
@@ -241,20 +240,30 @@ or reply to a message + /add A`
       mention = `<a href="tg://user?id=${userId}">${name}</a>`;
 
     } else if (/^\d+$/.test(raw)) {
-      // user ID lookup
+      // Numeric user ID — try DB first, then fetch live from Telegram
       userId = Number(raw);
       const dbUser = await User.findOne({ telegramId: String(userId) });
       if (dbUser) {
+        // Known user — use stored name
         name = dbUser.firstName
           ? (dbUser.lastName ? `${dbUser.firstName} ${dbUser.lastName}` : dbUser.firstName)
           : (dbUser.username || `User_${userId}`);
       } else {
-        name = `User_${userId}`;
+        // Not in DB — ask Telegram directly for their name
+        try {
+          const chat = await bot.telegram.getChat(userId);
+          name = chat.first_name
+            ? (chat.last_name ? `${chat.first_name} ${chat.last_name}` : chat.first_name)
+            : (chat.username || `User_${userId}`);
+        } catch (e) {
+          // Telegram can't resolve — user has never interacted with the bot
+          name = `User_${userId}`;
+        }
       }
       mention = `<a href="tg://user?id=${userId}">${name}</a>`;
 
     } else {
-      skipped.push(`${raw} (invalid)`);
+      skipped.push(`${raw} (invalid — use @username or numeric user ID)`);
       continue;
     }
 
@@ -343,7 +352,6 @@ bot.command("remove", async (ctx) => {
   if (Array.isArray(match.usedBatters))
     match.usedBatters = match.usedBatters.filter(id => id !== removed.id);
 
-  // ── Recalculate maxWickets if match in progress ──
   const matchInProgress = [
     "set_striker", "set_non_striker", "set_bowler",
     "play", "new_batter"
@@ -376,7 +384,6 @@ bot.command("changeteam", (ctx) => {
   if (!isHost(match, ctx.from.id))
     return ctx.reply("❌ Only host can move players.");
 
-  // ── FIX 2: Allow changeteam until batting has actually started ──
   const allowedPhases = [
     "join", "teams_set", "captain", "toss",
     "batbowl", "setovers", "set_striker", "set_non_striker"

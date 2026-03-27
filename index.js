@@ -202,23 +202,20 @@ function bowlDMButton() {
 
 
 // ── Send a GIF/video + text message together ──
-// BAAC = video (0x04), CgAC = animation/document (0x0a)
 async function sendWithGif(groupId, gifType, text) {
   const fileId = randomGif(gifType);
-  if (fileId) {
-    try {
-      if (fileId.startsWith("BAAC")) {
-        await bot.telegram.sendVideo(groupId, fileId, { caption: text, parse_mode: "Markdown" });
-      } else {
-        await bot.telegram.sendAnimation(groupId, fileId, { caption: text, parse_mode: "Markdown" });
-      }
-      return;
-    } catch (e) {
-      console.error("sendWithGif failed:", e.message);
-      await bot.telegram.sendMessage(groupId, text, { parse_mode: "Markdown" });
-    }
-  } else {
-    await bot.telegram.sendMessage(groupId, text, { parse_mode: "Markdown" });
+  if (!fileId) {
+    return bot.telegram.sendMessage(groupId, text, { parse_mode: "Markdown" });
+  }
+  try {
+    await bot.telegram.sendVideo(groupId, fileId, {
+      caption: text,
+      parse_mode: "Markdown",
+      supports_streaming: true
+    });
+  } catch (e) {
+    console.error("sendWithGif failed:", e.message);
+    await bot.telegram.sendMessage(groupId, text);
   }
 }
 
@@ -583,9 +580,8 @@ bot.on("text", async (ctx, next) => {
   const ballNumber = `${match.currentOver}.${match.currentBall + 1}`;
 
   const battingCall   = getBattingCall();
-  const strikerName   = getName(match, match.striker);
   const strikerPing   = `<a href="tg://user?id=${match.striker}">&#8203;</a>`;
-  const batCaption    = `${strikerPing}🏏 ${strikerName}  🎱 Ball: ${ballNumber}\n${battingCall.text}`;
+  const batCaption    = `${strikerPing}🏏 Ball: ${ballNumber}\n${battingCall.text}`;
 
   if (battingCall.gif) {
     let gifSent = false;
