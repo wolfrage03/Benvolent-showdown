@@ -172,28 +172,30 @@ async function announceBall(match) {
   const bowlingCall = getBowlingCall();
   const bowlingGif  = bowlingCall.gif;
   const bowlingOpts = bowlDMButton();
-  const bowlCaption = `🏐 ${bowlerName}\n${bowlingCall.text}`;
+  const bowlerPing  = `<a href="tg://user?id=${match.bowler}">&#8203;</a>`;
+  const bowlCaption = `${bowlerPing}🏐 ${bowlerName}\n${bowlingCall.text}`;
 
   if (bowlingGif) {
     try {
       if (bowlingGif.startsWith("BAAC")) {
-        await bot.telegram.sendVideo(match.groupId, bowlingGif, { caption: bowlCaption, ...bowlingOpts });
+        await bot.telegram.sendVideo(match.groupId, bowlingGif, { caption: bowlCaption, parse_mode: "HTML", ...bowlingOpts });
       } else {
-        await bot.telegram.sendAnimation(match.groupId, bowlingGif, { caption: bowlCaption, ...bowlingOpts });
+        await bot.telegram.sendAnimation(match.groupId, bowlingGif, { caption: bowlCaption, parse_mode: "HTML", ...bowlingOpts });
       }
     } catch (e) {
       console.error("Bowling gif failed:", e.message);
-      await bot.telegram.sendMessage(match.groupId, bowlCaption, bowlingOpts);
+      await bot.telegram.sendMessage(match.groupId, bowlCaption, { parse_mode: "HTML", ...bowlingOpts });
     }
   } else {
-    await bot.telegram.sendMessage(match.groupId, bowlCaption, bowlingOpts);
+    await bot.telegram.sendMessage(match.groupId, bowlCaption, { parse_mode: "HTML", ...bowlingOpts });
   }
 
   try {
     const strikerName = getName(match, match.striker);
     await bot.telegram.sendMessage(
       match.bowler,
-`🎯 Your Turn — Bowl\n\n<blockquote>🏏 Facing: ${strikerName}\nSend your number 1 – 6</blockquote>`
+`🎯 Your Turn — Bowl\n\n<blockquote>🏏 Facing: ${strikerName}\nSend your number 1 – 6</blockquote>`,
+      { parse_mode: "HTML" }
     );
   } catch (e) {
     console.log("Bowler DM failed:", e.message);

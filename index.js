@@ -290,10 +290,6 @@ async function checkOverEnd(match) {
     return true;
   }
 
-  try {
-    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "HTML" });
-  } catch (e) { console.error("Scorecard failed:", e.message); }
-
   match.lastOverBowler = match.bowler;
   match.bowler = null;
   swapStrike(match);
@@ -323,6 +319,7 @@ const helpers = {
   getName,
   getPlayerTeam,
   clearTimers,
+  clearDelayTimers,
   clearActiveMatchPlayers,
   startToss: null
 };
@@ -528,13 +525,22 @@ function getLiveScore(match) {
   const partRuns  = match.currentPartnershipRuns  || 0;
   const partBalls = match.currentPartnershipBalls || 0;
 
+  // Sanitize names for HTML — prevents UTF-8/parse errors from fancy unicode names
+  function h(str) {
+    return String(str ?? "")
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;");
+  }
+
+  function short(name) {
+    const s = String(name ?? "");
+    return s.length > 10 ? s.substring(0, 9) + "…" : s;
+  }
+
   const strikerName    = getName(match, match.striker);
   const nonStrikerName = getName(match, match.nonStriker);
   const bowlerName     = getName(match, match.bowler);
-
-  function short(name) {
-    return name.length > 10 ? name.substring(0, 9) + "…" : name;
-  }
 
   const currentOverHistory = (match.overHistory || []).find(
     o => o.bowler === match.bowler && o.over === match.currentOver + 1
@@ -546,17 +552,17 @@ function getLiveScore(match) {
   const lines = [
     `📊 Live Score`,
     ``,
-    `🏏 ${battingTeamName} (Team ${battingTeamLetter})  batting`,
-    `🎯 ${bowlingTeamName} (Team ${bowlingTeamLetter})  bowling`,
+    `🏏 ${h(battingTeamName)} (Team ${battingTeamLetter})  batting`,
+    `🎯 ${h(bowlingTeamName)} (Team ${bowlingTeamLetter})  bowling`,
     ``,
-    `📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}.${match.currentBall}/${match.totalOvers}   📈 ${runRate}`,
+    `<blockquote>📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}.${match.currentBall}/${match.totalOvers}   📈 ${runRate}</blockquote>`,
   ];
 
   if (match.innings === 2) {
     const runsNeeded = (match.firstInningsScore + 1) - match.score;
     if (runsNeeded > 0) {
       const rrr = ballsLeft > 0 ? ((runsNeeded / ballsLeft) * 6).toFixed(2) : "-";
-      lines.push(`🏹 Need ${runsNeeded} from ${ballsLeft} balls   RRR: ${rrr}`);
+      lines.push(`<blockquote>🏹 Need ${runsNeeded} from ${ballsLeft} balls   RRR: ${rrr}</blockquote>`);
     } else {
       lines.push(`✅ Target achieved!`);
     }
@@ -565,13 +571,10 @@ function getLiveScore(match) {
   lines.push(
     ``,
     `─── 🏏 Batting ───`,
-    `🏏 ${short(strikerName)}  ${st.runs}(${st.balls})  SR:${stSR}`,
-    `🪄 ${short(nonStrikerName)}  ${nst.runs}(${nst.balls})  SR:${nstSR}`,
-    `🤝 Partnership: ${partRuns}(${partBalls})`,
+    `<blockquote>⭐ ${h(short(strikerName))}  ${st.runs}(${st.balls})  SR:${stSR}\n🏹 ${h(short(nonStrikerName))}  ${nst.runs}(${nst.balls})  SR:${nstSR}\n🤝 Partnership: ${partRuns}(${partBalls})</blockquote>`,
     ``,
     `─── 🎾 Bowling ───`,
-    `🎾 ${short(bowlerName)}  ${bwlOv}ov  ${bwl.runs}r  ${bwl.wickets}w  econ:${econ}`,
-    `This over: ${overBalls}`
+    `<blockquote>🎾 ${h(short(bowlerName))}  ${bwlOv}ov  ${bwl.runs}r  ${bwl.wickets}w  econ:${econ}\nThis over: ${overBalls}</blockquote>`
   );
 
   return lines.join("\n");
@@ -581,7 +584,7 @@ bot.command("score", async (ctx) => {
   const match = getMatch(ctx);
   if (!match) return ctx.reply("⚠️ No active match.");
   try {
-    await ctx.reply(getLiveScore(match));
+    await ctx.reply(getLiveScore(match), { parse_mode: "HTML" });
   } catch (e) {
     console.error("Score command failed:", e.message);
     await ctx.reply("⚠️ Score error: " + e.message);
@@ -666,8 +669,9 @@ bot.on("text", async (ctx, next) => {
   const ballNumber = `${match.currentOver}.${match.currentBall + 1}`;
 
   const battingCall   = getBattingCall();
+  const strikerName   = getName(match, match.striker);
   const strikerPing   = `<a href="tg://user?id=${match.striker}">&#8203;</a>`;
-  const batCaption    = `${strikerPing}🏏  🎱 Ball: ${ballNumber}\n${battingCall.text}`;
+  const batCaption    = `${strikerPing}🏏 ${strikerName}  🎱 Ball: ${ballNumber}\n${battingCall.text}`;
 
   if (battingCall.gif) {
     let gifSent = false;
