@@ -109,7 +109,7 @@ function generateScorecard(match, getName) {
     }
 
     // Gap between batters
-    battingBlock += "\n";
+    battingBlock += "\n\n";
   }
 
   const battingTeamPlayers =
@@ -163,7 +163,7 @@ function generateScorecard(match, getName) {
       bowlingBlock += bq(histLines);
     }
     
-    bowlingBlock += "\n";
+    bowlingBlock += "\n\n";
   }
 
   const didNotBowl = (bowlingTeamPlayers || [])

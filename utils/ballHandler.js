@@ -171,7 +171,6 @@ async function announceBall(match) {
   const bowlingCall = getBowlingCall();
   const bowlingGif  = bowlingCall.gif;
   const bowlingOpts = bowlDMButton();
-  // Invisible ping — fires notification without showing name
   const bowlerPing  = `<a href="tg://user?id=${match.bowler}">&#8203;</a>`;
   const bowlCaption = `${bowlerPing}🏐\n${bowlingCall.text}`;
 
@@ -292,17 +291,14 @@ async function processBall(match) {
       match.currentPartnershipRuns  = 0;
       match.currentPartnershipBalls = 0;
 
-      // ── Duck check ──
       const batterRunsAtDismissal = match.batterStats[match.striker]?.runs ?? 0;
-      const isDuck = batterRunsAtDismissal === 0;
+      const isDuck     = batterRunsAtDismissal === 0;
       const isHattrick = match.wicketStreak === 3;
 
-      // Only show wicket gif if it's NOT a duck and NOT a hattrick
       if (!isDuck && !isHattrick) {
         await sendWithGif(match.groupId, "wicket", randomLine("wicket"));
       }
 
-      // Duck gif (replaces wicket gif)
       if (isDuck) {
         match.duckStreak = (match.duckStreak || 0) + 1;
         if (match.duckStreak >= 3) {
@@ -315,14 +311,12 @@ async function processBall(match) {
         match.duckStreak = 0;
       }
 
-      // ── Bowling fer milestones ──
       const bowlerWkts = match.bowlerStats[match.bowler]?.wickets ?? 0;
       if      (bowlerWkts === 3) await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('threeFer'));
       else if (bowlerWkts === 4) await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('fourFer'));
       else if (bowlerWkts === 5) await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('fiveFer'));
       else if (bowlerWkts >= 6)  await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('sixFer'));
 
-      // ── Hattrick (replaces wicket gif) ──
       if (isHattrick) {
         const hattrickCall = getHattrickCall();
         if (hattrickCall.gif) {
@@ -342,6 +336,7 @@ async function processBall(match) {
         match.wicketStreak = 0;
       }
 
+      // ── Max wickets — end innings immediately ──
       if (match.wickets >= match.maxWickets) {
         match.awaitingBowl = false;
         match.awaitingBat  = false;
@@ -349,21 +344,25 @@ async function processBall(match) {
         return;
       }
 
+      // ── Wicket on last ball of over ──
+      // Over ends first, new batter asked after new bowler is set
       if (match.currentBall >= 6) {
+        match.pendingNewBatter = true;
         const overEnded = await checkOverEnd(match);
         if (overEnded) return;
+        match.pendingNewBatter = false;
       }
 
+      // ── Normal mid-over wicket ──
       match.phase        = "new_batter";
       match.awaitingBowl = false;
       match.awaitingBat  = false;
 
       await bot.telegram.sendMessage(
         match.groupId,
-"💥 Wicket!\n\n👉 /batter [number] new batter"
+        "💥 Wicket!\n\n👉 /batter [number] new batter"
       );
 
-      // ── Start 5 min event timer for batter selection ──
       if (startDelayTimer) await startDelayTimer(match, "batter");
       return;
     }
@@ -386,7 +385,6 @@ async function processBall(match) {
 
     match.wicketStreak = 0;
 
-    // ── Partnership milestones ──
     if (match.currentPartnershipRuns === 50)
       await sendWithGif(match.groupId, 'partnership', randomMilestoneLine('partnership50'));
     else if (match.currentPartnershipRuns === 100)
@@ -394,7 +392,6 @@ async function processBall(match) {
 
     await sendWithGif(match.groupId, bat, randomLine(bat));
 
-    // ── Batter milestones ──
     const bRuns       = match.batterStats[match.striker]?.runs ?? 0;
     const bRunsBefore = bRuns - bat;
     if (bRunsBefore < 50 && bRuns >= 50 && bRuns < 100)
