@@ -172,8 +172,8 @@ bot.command("add", async (ctx) => {
   if (args.length < 2)
     return ctx.reply(
 `ℹ️ Usage
-/add A @username
-/add B 123456789
+/add A @user1 @user2 @user3
+/add B 123456 789012
 or reply to a message + /add A`
     );
 
@@ -182,89 +182,113 @@ or reply to a message + /add A`
   if (!["A", "B"].includes(team))
     return ctx.reply("❌ Team must be A or B.");
 
-  let userId, name, mention;
-
   /* ── REPLY METHOD ── */
   if (ctx.message.reply_to_message) {
     const user = ctx.message.reply_to_message.from;
     if (user.is_bot) return ctx.reply("❌ Cannot add a bot.");
-    userId  = user.id;
-    name    = user.first_name || user.username || "Player";
-    mention = `<a href="tg://user?id=${userId}">${name}</a>`;
 
-  /* ── @USERNAME METHOD ── */
-  } else if (args[2] && args[2].startsWith("@")) {
-    const username = args[2].replace("@", "").toLowerCase().trim();
+    const userId  = user.id;
+    const name    = user.first_name || user.username || "Player";
+    const mention = `<a href="tg://user?id=${userId}">${name}</a>`;
 
-    console.log("Looking up username:", username);
+    if (userId === match.host)
+      return ctx.reply("❌ Host cannot be added as a player.");
+    if (match.teamA.some(p => p.id === userId) || match.teamB.some(p => p.id === userId))
+      return ctx.reply("⚠️ Player already in a team.");
 
-    const user = await User.findOne({
-      username: { $regex: new RegExp(`^${username}$`, "i") }
-    });
+    if (team === "A") match.teamA.push({ id: userId, name, mention });
+    else              match.teamB.push({ id: userId, name, mention });
+    playerActiveMatch.set(userId, match.groupId);
 
-    console.log("Found user:", user);
-
-    if (!user)
-      return ctx.reply(
-`❌ User <b>${username}</b> not found.
-Ask them to send /start to the bot in DM first.`,
-        { parse_mode: "HTML" }
-      );
-
-    userId  = Number(user.telegramId);
-    name    = user.firstName || user.username || username;
-    mention = `<a href="tg://user?id=${userId}">${name}</a>`;
-
-  /* ── USER ID METHOD ── */
-  } else if (args[2]) {
-    if (isNaN(args[2])) return ctx.reply("❌ Invalid Telegram user ID.");
-    userId = Number(args[2]);
-
-    // Try to look up real name from DB
-    const dbUser = await User.findOne({ telegramId: String(userId) });
-    if (dbUser) {
-      name = dbUser.firstName || dbUser.username || `User_${userId}`;
-    } else {
-      name = `User_${userId}`;
+    const matchInProgress = ["set_striker","set_non_striker","set_bowler","play","new_batter"].includes(match.phase);
+    if (matchInProgress) {
+      const battingTeamArr = match.battingTeam === "A" ? match.teamA : match.teamB;
+      match.maxWickets = battingTeamArr.length - 1;
     }
-    mention = `<a href="tg://user?id=${userId}">${name}</a>`;
 
-  } else {
-    return ctx.reply(
-`ℹ️ Usage
-/add A @username
-/add B 123456789`
-    );
+    await ctx.reply(`✅ ${mention} added to 〔<b>Team ${team}</b>〕`, { parse_mode: "HTML" });
+    await sendAndPinPlayerList(match, ctx.telegram);
+    return;
   }
 
-  if (userId === match.host)
-    return ctx.reply("❌ Host cannot be added as a player.");
+  /* ── MULTI-USER METHOD (@username or user ID, multiple allowed) ── */
+  const targets = args.slice(2);
+  if (!targets.length)
+    return ctx.reply(
+`ℹ️ Usage
+/add A @user1 @user2
+/add B 123456 789012`
+    );
 
-  if (match.teamA.some(p => p.id === userId) || match.teamB.some(p => p.id === userId))
-    return ctx.reply("⚠️ Player already in a team.");
+  const added   = [];
+  const skipped = [];
 
-  if (team === "A") match.teamA.push({ id: userId, name, mention });
-  else              match.teamB.push({ id: userId, name, mention });
+  for (const raw of targets) {
+    let userId, name, mention;
 
-  playerActiveMatch.set(userId, match.groupId);
+    if (raw.startsWith("@")) {
+      // @username lookup
+      const username = raw.replace("@", "").toLowerCase().trim();
+      const user = await User.findOne({ username: { $regex: new RegExp(`^${username}$`, "i") } });
+      if (!user) {
+        skipped.push(`@${username} (not found — needs to /start bot in DM)`);
+        continue;
+      }
+      userId  = Number(user.telegramId);
+      name    = user.firstName
+        ? (user.lastName ? `${user.firstName} ${user.lastName}` : user.firstName)
+        : (user.username || username);
+      mention = `<a href="tg://user?id=${userId}">${name}</a>`;
 
-  // ── If match already in progress, update maxWickets so new player counts ──
-  const matchInProgress = [
-    "set_striker", "set_non_striker", "set_bowler",
-    "play", "new_batter"
-  ].includes(match.phase);
+    } else if (/^\d+$/.test(raw)) {
+      // user ID lookup
+      userId = Number(raw);
+      const dbUser = await User.findOne({ telegramId: String(userId) });
+      if (dbUser) {
+        name = dbUser.firstName
+          ? (dbUser.lastName ? `${dbUser.firstName} ${dbUser.lastName}` : dbUser.firstName)
+          : (dbUser.username || `User_${userId}`);
+      } else {
+        name = `User_${userId}`;
+      }
+      mention = `<a href="tg://user?id=${userId}">${name}</a>`;
 
-  if (matchInProgress) {
+    } else {
+      skipped.push(`${raw} (invalid)`);
+      continue;
+    }
+
+    if (userId === match.host) {
+      skipped.push(`${name} (host cannot be a player)`);
+      continue;
+    }
+    if (match.teamA.some(p => p.id === userId) || match.teamB.some(p => p.id === userId)) {
+      skipped.push(`${name} (already in a team)`);
+      continue;
+    }
+
+    if (team === "A") match.teamA.push({ id: userId, name, mention });
+    else              match.teamB.push({ id: userId, name, mention });
+    playerActiveMatch.set(userId, match.groupId);
+    added.push(mention);
+  }
+
+  // Recalculate maxWickets if match in progress
+  const matchInProgress = ["set_striker","set_non_striker","set_bowler","play","new_batter"].includes(match.phase);
+  if (matchInProgress && added.length) {
     const battingTeamArr = match.battingTeam === "A" ? match.teamA : match.teamB;
     match.maxWickets = battingTeamArr.length - 1;
   }
 
-  await ctx.reply(
-`✅ ${mention} added to 〔<b>Team ${team}</b>〕`,
-    { parse_mode: "HTML" }
-  );
+  const lines = [];
+  if (added.length)
+    lines.push(`✅ Added to 〔<b>Team ${team}</b>〕\n${added.join("\n")}`);
+  if (skipped.length)
+    lines.push(`⚠️ Skipped:\n${skipped.map(s => `• ${s}`).join("\n")}`);
 
-  await sendAndPinPlayerList(match, ctx.telegram);
+  await ctx.reply(lines.join("\n\n"), { parse_mode: "HTML" });
+
+  if (added.length) await sendAndPinPlayerList(match, ctx.telegram);
 
 });
 
