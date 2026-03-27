@@ -96,14 +96,7 @@ function resetMatch(groupId) {
     ballTimer: null,
     ballLocked: false,
 
-    // ── Delay timer system ──
-    eventTimer:       null,          // per-event 5 min setTimeout ref
-    poolTimer:        null,          // pool countdown setTimeout ref
-    extraTimer:       null,          // extra 5 min setTimeout ref
-    poolRemaining:    5 * 60 * 1000, // ms left in innings pool (5 min)
-    poolTimerStart:   null,          // timestamp when pool last resumed
-    poolTimerActive:  false,
-    extraUsed:        { A: false, B: false }, // per team, per match
+ 
 
     batterStats: {},
     bowlerStats: {},

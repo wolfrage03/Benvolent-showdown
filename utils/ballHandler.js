@@ -4,7 +4,7 @@ const box = require("../utils/boxMessage");
 /* ================= DEPS (injected via init) ================= */
 
 let bot, getName, clearTimers, swapStrike, checkOverEnd, advanceGame,
-    endInnings, sendWithGif, battingPlayers, bowlDMButton, startDelayTimer;
+    endInnings, sendWithGif, battingPlayers, bowlDMButton;
 
 function init(deps) {
   bot             = deps.bot;
@@ -17,7 +17,6 @@ function init(deps) {
   sendWithGif     = deps.sendWithGif;
   battingPlayers  = deps.battingPlayers;
   bowlDMButton    = deps.bowlDMButton;
-  startDelayTimer = deps.startDelayTimer;
 }
 
 
@@ -350,14 +349,13 @@ async function processBall(match) {
         return;
       }
 
-      // ── Check over end BEFORE going to new_batter ──
-      // Pass wasWicket=true so checkOverEnd skips swapStrike and sets
-      // phase to new_batter instead of set_bowler.
+      // ── Wicket on ball 6: over ends, pass wasWicket=true ──
       if (match.currentBall >= 6) {
         const overEnded = await checkOverEnd(match, true);
         if (overEnded) return;
       }
 
+      // ── Mid-over wicket: prompt for new batter ──
       match.phase        = "new_batter";
       match.awaitingBowl = false;
       match.awaitingBat  = false;
@@ -367,9 +365,6 @@ async function processBall(match) {
 "💥 Wicket!\n\n👉 /batter [number] new batter",
         { parse_mode: "HTML" }
       );
-
-      // ── Start 5 min event timer for batter selection ──
-      if (startDelayTimer) await startDelayTimer(match, "batter");
       return;
     }
 
@@ -414,7 +409,6 @@ async function processBall(match) {
       return;
     }
 
-    // Normal run ball — no wasWicket flag needed
     const overEnded = await checkOverEnd(match) || false;
     if (!overEnded) await advanceGame(match);
 

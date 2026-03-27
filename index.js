@@ -98,129 +98,96 @@ function clearTimers(match) {
   if (match.ballTimer)  { clearTimeout(match.ballTimer);  match.ballTimer  = null; }
 }
 
-/* ================= DELAY TIMER SYSTEM ================= */
 
-const POOL_MS  = 5 * 60 * 1000;  // 5 min pool per innings per team
-const EXTRA_MS = 5 * 60 * 1000;  // 5 min extra per team per match
-const EVENT_MS = 5 * 60 * 1000;  // 5 min per-event (over/wicket)
+/* ================= GAME FLOW ================= */
 
-function msToMin(ms) {
-  const m = Math.floor(ms / 60000);
-  const s = Math.floor((ms % 60000) / 1000);
-  return `${m}m ${s}s`;
-}
-
-function initTimerState(match) {
-  // reset pool for new innings — extraUsed carries across innings (per team per match)
-  clearDelayTimers(match);
-  match.poolRemaining   = POOL_MS;
-  match.poolTimerStart  = null;
-  match.poolTimerActive = false;
-  match.eventTimer      = null;
-  match.poolTimer       = null;
-  match.extraTimer      = null;
-}
-
-function clearDelayTimers(match) {
+async function advanceGame(match) {
   if (!match) return;
-  if (match.eventTimer) { clearTimeout(match.eventTimer); match.eventTimer = null; }
-  if (match.poolTimer)  { clearTimeout(match.poolTimer);  match.poolTimer  = null; }
-  if (match.extraTimer) { clearTimeout(match.extraTimer); match.extraTimer = null; }
-  // if pool was running, save consumed ms
-  if (match.poolTimerActive && match.poolTimerStart) {
-    const consumed = Date.now() - match.poolTimerStart;
-    match.poolRemaining = Math.max(0, (match.poolRemaining || POOL_MS) - consumed);
-    match.poolTimerStart  = null;
-    match.poolTimerActive = false;
+  if (match.phase === "switch") return;
+  if (match.inningsEnded) return;
+  if (match.wickets >= match.maxWickets) { await matchResult.endInnings(match); return; }
+  if (match.currentOver >= match.totalOvers) { await matchResult.endInnings(match); return; }
+  await ballHandler.startBall(match);
+}
+
+async function handleBallCompletion(match) {
+  if (match.currentBall >= 6) {
+    const overEnded = await checkOverEnd(match);
+    return overEnded;
   }
+  await advanceGame(match);
+  return false;
 }
 
-async function startDelayTimer(match, type) {
-  clearDelayTimers(match);
+// wasWicket = true when a wicket caused the over to end (ball 6 = W).
+// This skips swapStrike (dismissed batter is gone, not rotating ends)
+// and sets phase to "new_batter" so host is prompted for a batter before bowler.
+async function checkOverEnd(match, wasWicket = false) {
+  if (!match) return false;
+  if (match.currentBall < 6) return false;
+  if (match.inningsEnded) return true;
 
-  const delayedTeam = type === "bowler" ? match.bowlingTeam : match.battingTeam;
+  match.currentOver++;
+  match.currentBall = 0;
+  match.currentOverRuns = 0;
+  match.wicketStreak = 0;
+  match.awaitingBat = false;
+  match.awaitingBowl = false;
 
-  // ── Per-event 5 min ──
-  match.eventTimer = setTimeout(async () => {
-    match.eventTimer = null;
-    const phase = type === "bowler" ? "set_bowler" : "new_batter";
-    if (match.phase !== phase || match.inningsEnded) return;
+  if (match.currentOver >= match.totalOvers) {
+    clearTimers(match);
+    await matchResult.endInnings(match);
+    return true;
+  }
 
-    const poolLeft = match.poolRemaining || POOL_MS;
-    await bot.telegram.sendMessage(match.groupId,
-`⚠️ 5 min event time up — no ${type} set!
-⏳ Team innings pool starting: ${msToMin(poolLeft)} remaining.
-👉 /${type === "bowler" ? "bowler [number]" : "batter [number]"}`
-    );
+  // Send over-end scorecard
+  try {
+    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "HTML" });
+  } catch (e) { console.error("Scorecard failed:", e.message); }
 
-    if (poolLeft <= 0) {
-      // pool already empty — go straight to extra or forfeit
-      await handlePoolExhausted(match, type, delayedTeam);
-      return;
-    }
+  match.lastOverBowler = match.bowler;
+  match.bowler = null;
 
-    // ── Pool timer ──
-    match.poolTimerStart  = Date.now();
-    match.poolTimerActive = true;
+  // Only swap strike on a normal over-end (run/dot).
+  // When a wicket ends the over the dismissed striker is out —
+  // swapping would ghost them as non-striker.
+  if (!wasWicket) {
+    swapStrike(match);
+  }
 
-    match.poolTimer = setTimeout(async () => {
-      match.poolTimer       = null;
-      match.poolTimerActive = false;
-      if (match.phase !== phase || match.inningsEnded) return;
-      match.poolRemaining = 0;
-      await handlePoolExhausted(match, type, delayedTeam);
-    }, poolLeft);
+  const rr = match.currentOver > 0
+    ? (match.score / (match.currentOver * 6) * 6).toFixed(2)
+    : "0.00";
 
-  }, EVENT_MS);
-}
+  if (wasWicket) {
+    // Need both a new batter AND a new bowler.
+    // Prompt batter first — /batter handler advances to set_bowler after.
+    match.phase = "new_batter";
+    match.awaitingBowl = false;
+    match.awaitingBat  = false;
 
-async function handlePoolExhausted(match, type, delayedTeam) {
-  const phase = type === "bowler" ? "set_bowler" : "new_batter";
-  if (match.phase !== phase || match.inningsEnded) return;
-
-  if (!match.extraUsed) match.extraUsed = { A: false, B: false };
-
-  if (!match.extraUsed[delayedTeam]) {
-    // Grant one-time 5 min extra for this team
-    match.extraUsed[delayedTeam] = true;
-    await bot.telegram.sendMessage(match.groupId,
-`🚨 Team pool exhausted!
-⚠️ One-time 5 min extra granted to 〔Team ${delayedTeam}〕
-⛔ This is the FINAL chance — opposition wins if time runs out!
-👉 /${type === "bowler" ? "bowler [number]" : "batter [number]"}`
-    );
-
-    match.extraTimer = setTimeout(async () => {
-      match.extraTimer = null;
-      if (match.phase !== phase || match.inningsEnded) return;
-      await declareTimeout(match, delayedTeam);
-    }, EXTRA_MS);
+    try {
+      await bot.telegram.sendMessage(
+        match.groupId,
+`✅ Over ${match.currentOver} Complete\n\n<blockquote>📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}/${match.totalOvers} ov   📈 ${rr}</blockquote>\n\n💥 Wicket on last ball — set new batter first\n👉 /batter [number] new batter`,
+        { parse_mode: "HTML" }
+      );
+    } catch (e) { console.error("Over+wicket message failed:", e.message); }
 
   } else {
-    // Extra already used — opposition wins immediately
-    await declareTimeout(match, delayedTeam);
+    // Normal over end — just need a bowler.
+    match.phase = "set_bowler";
+
+    try {
+      await bot.telegram.sendMessage(
+        match.groupId,
+`✅ Over ${match.currentOver} Complete\n\n<blockquote>📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}/${match.totalOvers} ov   📈 ${rr}</blockquote>\n\n👉 /bowler [number] new bowler`,
+        { parse_mode: "HTML" }
+      );
+    } catch (e) { console.error("Over message failed:", e.message); }
   }
-}
 
-async function declareTimeout(match, timedOutTeam) {
-  if (match.inningsEnded || match.matchEnded) return;
-  match.matchEnded = true;
-
-  const winningTeam = timedOutTeam === "A" ? "B" : "A";
-  const winningName = winningTeam === "A" ? match.teamAName : match.teamBName;
-  const losingName  = timedOutTeam === "A" ? match.teamAName : match.teamBName;
-
-  clearDelayTimers(match);
-  clearTimers(match);
-
-  await bot.telegram.sendMessage(
-    match.groupId,
-`⏱ Time Out!\n\n<blockquote>〔Team ${timedOutTeam}〕 ${losingName} failed to respond in time.</blockquote>\n\n<blockquote>🏆 〔Team ${winningTeam}〕 ${winningName} wins!</blockquote>`,
-      { parse_mode: "HTML" }
-  );
-
-  clearActiveMatchPlayers(match);
-  matches.delete(match.groupId);
+  return true;
 }
 
 function bowlDMButton() {
@@ -255,118 +222,22 @@ async function sendWithGif(groupId, gifType, text) {
   }
 }
 
-async function advanceGame(match) {
-  if (!match) return;
-  if (match.phase === "switch") return;
-  if (match.inningsEnded) return;
-  if (match.wickets >= match.maxWickets) { await matchResult.endInnings(match); return; }
-  if (match.currentOver >= match.totalOvers) { await matchResult.endInnings(match); return; }
-  await ballHandler.startBall(match);
-}
-
-async function handleBallCompletion(match) {
-  if (match.currentBall >= 6) {
-    const overEnded = await checkOverEnd(match);
-    return overEnded;
-  }
-  await advanceGame(match);
-  return false;
-}
-
-// wasWicket = true when a wicket caused the over to end (ball 6 = W).
-// This changes two things:
-//   1. Skips swapStrike — dismissed striker is OUT, not rotating ends.
-//   2. Sets phase to "new_batter" instead of "set_bowler", so the host
-//      is prompted for a new batter first, then a bowler.
-async function checkOverEnd(match, wasWicket = false) {
-  if (!match) return false;
-  if (match.currentBall < 6) return false;
-  if (match.inningsEnded) return true;
-
-  match.currentOver++;
-  match.currentBall = 0;
-  match.currentOverRuns = 0;
-  match.wicketStreak = 0;
-  match.awaitingBat = false;
-  match.awaitingBowl = false;
-
-  if (match.currentOver >= match.totalOvers) {
-    clearTimers(match);
-    await matchResult.endInnings(match);
-    return true;
-  }
-
-  // Send over-end scorecard
-  try {
-    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "HTML" });
-  } catch (e) { console.error("Scorecard failed:", e.message); }
-
-  match.lastOverBowler = match.bowler;
-  match.bowler = null;
-
-  // Only swap strike on normal over-end (run/dot ball).
-  // On a wicket the dismissed batter is gone — swapping would ghost them as non-striker.
-  if (!wasWicket) {
-    swapStrike(match);
-  }
-
-  const rr = match.currentOver > 0
-    ? (match.score / (match.currentOver * 6) * 6).toFixed(2)
-    : "0.00";
-
-  if (wasWicket) {
-    // Need both a new batter AND a new bowler.
-    // Ask for batter first; /batter command advances to set_bowler after.
-    match.phase = "new_batter";
-    match.awaitingBowl = false;
-    match.awaitingBat  = false;
-
-    try {
-      await bot.telegram.sendMessage(
-        match.groupId,
-`✅ Over ${match.currentOver} Complete\n\n<blockquote>📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}/${match.totalOvers} ov   📈 ${rr}</blockquote>\n\n💥 Wicket on last ball — set new batter first\n👉 /batter [number] new batter`,
-        { parse_mode: "HTML" }
-      );
-    } catch (e) { console.error("Over+wicket message failed:", e.message); }
-
-    // Batter delay timer; bowler timer fires after /batter is set
-    await startDelayTimer(match, "batter");
-
-  } else {
-    // Normal over end — just need a bowler.
-    match.phase = "set_bowler";
-
-    try {
-      await bot.telegram.sendMessage(
-        match.groupId,
-`✅ Over ${match.currentOver} Complete\n\n<blockquote>📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}/${match.totalOvers} ov   📈 ${rr}</blockquote>\n\n👉 /bowler [number] new bowler`,
-        { parse_mode: "HTML" }
-      );
-    } catch (e) { console.error("Over message failed:", e.message); }
-
-    await startDelayTimer(match, "bowler");
-  }
-
-  return true;
-}
-
 const helpers = {
   isHost,
   getDisplayName,
   getName,
   getPlayerTeam,
   clearTimers,
-  clearDelayTimers,
   clearActiveMatchPlayers,
   startToss: null
 };
 
-matchResult.init({ bot, getName, clearTimers, clearActiveMatchPlayers, initTimerState, getCountdownCall });
+matchResult.init({ bot, getName, clearTimers, clearActiveMatchPlayers, getCountdownCall });
 ballHandler.init({
   bot, getName, clearTimers, swapStrike, sendWithGif,
   battingPlayers, checkOverEnd, advanceGame,
   endInnings: (m) => matchResult.endInnings(m),
-  bowlDMButton, startDelayTimer
+  bowlDMButton
 });
 
 require("./commands/matchCommands")(bot, helpers);
@@ -467,26 +338,22 @@ bot.command("batter", async (ctx) => {
     match.usedBatters.push(selected.id);
     await sendAndPinPlayerList(match, ctx.telegram);
 
-    // ── Clear delay timers, save pool remaining ──
-    clearDelayTimers(match);
-
     await ctx.reply(
 `🏏 New Batter\n\n<blockquote>🏏 ${name}   ${ordinal(orderNumber)} batter</blockquote>`,
       { parse_mode: "HTML" }
     );
 
-    // If bowler was cleared (wicket on ball 6 = over ended + wicket),
-    // we need a bowler next before play can resume.
+    // If bowler was cleared (wicket on ball 6 = over ended),
+    // need a bowler next before play can resume.
     if (match.bowler === null) {
       match.phase = "set_bowler";
-      await startDelayTimer(match, "bowler");
       return ctx.reply(
 `👉 /bowler [number] set bowler for new over`,
         { parse_mode: "HTML" }
       );
     }
 
-    // Normal mid-over wicket — bowler is still set, go straight to play.
+    // Normal mid-over wicket — bowler still set, go straight to play.
     match.phase = "play";
     return ballHandler.startBall(match);
   }
@@ -536,9 +403,6 @@ bot.command("bowler", async (ctx) => {
   match.phase = "play";
   playerActiveMatch.set(player.id, match.groupId);
 
-  // ── Clear delay timers, save pool remaining ──
-  clearDelayTimers(match);
-
   await ctx.reply(
 `🏐 Bowler Set\n\n<blockquote>🏐 ${player.name} is bowling</blockquote>`,
       { parse_mode: "HTML" }
@@ -575,7 +439,7 @@ function getLiveScore(match) {
   const partRuns  = match.currentPartnershipRuns  || 0;
   const partBalls = match.currentPartnershipBalls || 0;
 
-  // Sanitize names for HTML — prevents UTF-8/parse errors from fancy unicode names
+  // Sanitize names for HTML
   function h(str) {
     return String(str ?? "")
       .replace(/&/g, "&amp;")
