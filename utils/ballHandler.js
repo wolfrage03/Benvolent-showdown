@@ -351,9 +351,10 @@ async function processBall(match) {
       }
 
       // ── Check over end BEFORE going to new_batter ──
-      // If wicket fell on ball 6, over ends — no new batter needed yet
+      // Pass wasWicket=true so checkOverEnd skips swapStrike and sets
+      // phase to new_batter instead of set_bowler.
       if (match.currentBall >= 6) {
-        const overEnded = await checkOverEnd(match);
+        const overEnded = await checkOverEnd(match, true);
         if (overEnded) return;
       }
 
@@ -413,6 +414,7 @@ async function processBall(match) {
       return;
     }
 
+    // Normal run ball — no wasWicket flag needed
     const overEnded = await checkOverEnd(match) || false;
     if (!overEnded) await advanceGame(match);
 

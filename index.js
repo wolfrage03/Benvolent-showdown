@@ -254,6 +254,7 @@ async function sendWithGif(groupId, gifType, text) {
     await bot.telegram.sendMessage(groupId, text, { parse_mode: "Markdown" });
   }
 }
+
 async function advanceGame(match) {
   if (!match) return;
   if (match.phase === "switch") return;
@@ -272,7 +273,12 @@ async function handleBallCompletion(match) {
   return false;
 }
 
-async function checkOverEnd(match) {
+// wasWicket = true when a wicket caused the over to end (ball 6 = W).
+// This changes two things:
+//   1. Skips swapStrike — dismissed striker is OUT, not rotating ends.
+//   2. Sets phase to "new_batter" instead of "set_bowler", so the host
+//      is prompted for a new batter first, then a bowler.
+async function checkOverEnd(match, wasWicket = false) {
   if (!match) return false;
   if (match.currentBall < 6) return false;
   if (match.inningsEnded) return true;
@@ -290,25 +296,56 @@ async function checkOverEnd(match) {
     return true;
   }
 
+  // Send over-end scorecard
+  try {
+    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "HTML" });
+  } catch (e) { console.error("Scorecard failed:", e.message); }
+
   match.lastOverBowler = match.bowler;
   match.bowler = null;
-  swapStrike(match);
-  match.phase = "set_bowler";
+
+  // Only swap strike on normal over-end (run/dot ball).
+  // On a wicket the dismissed batter is gone — swapping would ghost them as non-striker.
+  if (!wasWicket) {
+    swapStrike(match);
+  }
 
   const rr = match.currentOver > 0
     ? (match.score / (match.currentOver * 6) * 6).toFixed(2)
     : "0.00";
 
-  try {
-    await bot.telegram.sendMessage(
-      match.groupId,
-`✅ Over ${match.currentOver} Complete\n\n<blockquote>📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}/${match.totalOvers} ov   📈 ${rr}</blockquote>\n\n👉 /bowler [number] new bowler`,
-      { parse_mode: "HTML" }
-    );
-  } catch (e) { console.error("Over message failed:", e.message); }
+  if (wasWicket) {
+    // Need both a new batter AND a new bowler.
+    // Ask for batter first; /batter command advances to set_bowler after.
+    match.phase = "new_batter";
+    match.awaitingBowl = false;
+    match.awaitingBat  = false;
 
-  // ── Start 5 min event timer for bowler selection ──
-  await startDelayTimer(match, "bowler");
+    try {
+      await bot.telegram.sendMessage(
+        match.groupId,
+`✅ Over ${match.currentOver} Complete\n\n<blockquote>📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}/${match.totalOvers} ov   📈 ${rr}</blockquote>\n\n💥 Wicket on last ball — set new batter first\n👉 /batter [number] new batter`,
+        { parse_mode: "HTML" }
+      );
+    } catch (e) { console.error("Over+wicket message failed:", e.message); }
+
+    // Batter delay timer; bowler timer fires after /batter is set
+    await startDelayTimer(match, "batter");
+
+  } else {
+    // Normal over end — just need a bowler.
+    match.phase = "set_bowler";
+
+    try {
+      await bot.telegram.sendMessage(
+        match.groupId,
+`✅ Over ${match.currentOver} Complete\n\n<blockquote>📊 ${match.score}/${match.wickets}   ⚙️ ${match.currentOver}/${match.totalOvers} ov   📈 ${rr}</blockquote>\n\n👉 /bowler [number] new bowler`,
+        { parse_mode: "HTML" }
+      );
+    } catch (e) { console.error("Over message failed:", e.message); }
+
+    await startDelayTimer(match, "bowler");
+  }
 
   return true;
 }
@@ -429,7 +466,6 @@ bot.command("batter", async (ctx) => {
       match.battingOrder.push(selected.id);
     match.usedBatters.push(selected.id);
     await sendAndPinPlayerList(match, ctx.telegram);
-    match.phase = "play";
 
     // ── Clear delay timers, save pool remaining ──
     clearDelayTimers(match);
@@ -438,6 +474,20 @@ bot.command("batter", async (ctx) => {
 `🏏 New Batter\n\n<blockquote>🏏 ${name}   ${ordinal(orderNumber)} batter</blockquote>`,
       { parse_mode: "HTML" }
     );
+
+    // If bowler was cleared (wicket on ball 6 = over ended + wicket),
+    // we need a bowler next before play can resume.
+    if (match.bowler === null) {
+      match.phase = "set_bowler";
+      await startDelayTimer(match, "bowler");
+      return ctx.reply(
+`👉 /bowler [number] set bowler for new over`,
+        { parse_mode: "HTML" }
+      );
+    }
+
+    // Normal mid-over wicket — bowler is still set, go straight to play.
+    match.phase = "play";
     return ballHandler.startBall(match);
   }
 
@@ -701,8 +751,6 @@ bot.on("text", async (ctx, next) => {
   }
   ballHandler.startTurnTimer(match, "bat");
 });
-
-
 
 
 
