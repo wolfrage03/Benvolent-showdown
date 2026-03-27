@@ -34,6 +34,14 @@ const {
 } = require("./matchManager");
 
 
+/* ================= ALLOWED GROUPS ================= */
+
+const ALLOWED_GROUPS = [
+  "-1003631018582",
+  "-1003240391473",
+  "-1003047955907"
+];
+
 /* ================= HELPERS ================= */
 
 const isHost = (match, id) => match && id === match.host;
@@ -665,30 +673,29 @@ bot.on("text", async (ctx, next) => {
 
   const ballNumber = `${match.currentOver}.${match.currentBall + 1}`;
 
+  const strikerName   = getName(match, match.striker);
   const battingCall   = getBattingCall();
-  // Invisible ping — fires notification without showing name
-  const strikerPing   = `<a href="tg://user?id=${match.striker}">&#8203;</a>`;
-  const batCaption    = `${strikerPing}🏏  🎱 Ball: ${ballNumber}\n${battingCall.text}`;
+  const batCaption    = `🏏 ${strikerName}  🎱 Ball: ${ballNumber}\n${battingCall.text}`;
 
   if (battingCall.gif) {
     try {
       if (battingCall.gif.startsWith("BAAC")) {
         await bot.telegram.sendVideo(match.groupId, battingCall.gif, {
           caption: batCaption,
-          parse_mode: "HTML"
+          reply_markup: { inline_keyboard: [[{ text: "🏏 " + strikerName, url: `tg://user?id=${match.striker}` }]] }
         });
       } else {
         await bot.telegram.sendAnimation(match.groupId, battingCall.gif, {
           caption: batCaption,
-          parse_mode: "HTML"
+          reply_markup: { inline_keyboard: [[{ text: "🏏 " + strikerName, url: `tg://user?id=${match.striker}` }]] }
         });
       }
     } catch (e) {
       console.error("Batting gif failed:", e.message);
-      await bot.telegram.sendMessage(match.groupId, batCaption, { parse_mode: "HTML" });
+      await bot.telegram.sendMessage(match.groupId, batCaption);
     }
   } else {
-    await bot.telegram.sendMessage(match.groupId, batCaption, { parse_mode: "HTML" });
+    await bot.telegram.sendMessage(match.groupId, batCaption);
   }
   ballHandler.startTurnTimer(match, "bat");
 });
@@ -728,6 +735,20 @@ bot.catch((err, ctx) => {
 bot.use(async (ctx, next) => {
   if (ctx.callbackQuery) {
     try { await ctx.answerCbQuery(); } catch {}
+  }
+  return next();
+});
+
+// ── Group whitelist middleware ──
+// Allow: private chats (DMs) always, group chats only if in ALLOWED_GROUPS
+bot.use(async (ctx, next) => {
+  const chatType = ctx.chat?.type;
+  if (chatType && chatType !== "private") {
+    const chatId = String(ctx.chat.id);
+    if (!ALLOWED_GROUPS.includes(chatId)) {
+      // Silently ignore — don't reply so bot stays hidden in other groups
+      return;
+    }
   }
   return next();
 });
