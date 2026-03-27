@@ -588,34 +588,19 @@ bot.on("text", async (ctx, next) => {
   const ballNumber = `${match.currentOver}.${match.currentBall + 1}`;
 
   const battingCall   = getBattingCall();
-  const strikerPing   = `<a href="tg://user?id=${match.striker}">&#8203;</a>`;
-  const batCaption    = `${strikerPing}🏏 Ball: ${ballNumber}\n${battingCall.text}`;
+  const strikerName   = getName(match, match.striker);
+  const strikerPing   = `<a href="tg://user?id=${match.striker}">${strikerName}</a>`;
+  const batCaption    = `${strikerPing} 🏏 Ball: ${ballNumber}\n${battingCall.text}`;
 
   if (battingCall.gif) {
-    let gifSent = false;
     try {
-      if (battingCall.gif.startsWith("BAAC")) {
-        await bot.telegram.sendVideo(match.groupId, battingCall.gif, { caption: batCaption, parse_mode: "HTML" });
-      } else {
-        await bot.telegram.sendAnimation(match.groupId, battingCall.gif, { caption: batCaption, parse_mode: "HTML" });
-      }
-      gifSent = true;
+      await bot.telegram.sendVideo(match.groupId, battingCall.gif, { caption: batCaption, parse_mode: "HTML", supports_streaming: true });
     } catch (e) {
       console.error("Batting gif failed:", e.message);
-    }
-    if (!gifSent) {
-      try {
-        await bot.telegram.sendMessage(match.groupId, batCaption, { parse_mode: "HTML" });
-      } catch (e2) {
-        console.error("Batting fallback failed:", e2.message);
-      }
+      await bot.telegram.sendMessage(match.groupId, batCaption, { parse_mode: "HTML" });
     }
   } else {
-    try {
-      await bot.telegram.sendMessage(match.groupId, batCaption, { parse_mode: "HTML" });
-    } catch (e) {
-      console.error("Batting text failed:", e.message);
-    }
+    await bot.telegram.sendMessage(match.groupId, batCaption, { parse_mode: "HTML" });
   }
   ballHandler.startTurnTimer(match, "bat");
 });
