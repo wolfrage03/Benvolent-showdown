@@ -96,7 +96,6 @@ function clearTimers(match) {
   if (match.warning30) { clearTimeout(match.warning30); match.warning30 = null; }
   if (match.warning10) { clearTimeout(match.warning10); match.warning10 = null; }
   if (match.ballTimer)  { clearTimeout(match.ballTimer);  match.ballTimer  = null; }
-  if (match.joinTimer)  { clearTimeout(match.joinTimer);  match.joinTimer  = null; }
 }
 
 /* ================= DELAY TIMER SYSTEM ================= */
@@ -324,7 +323,6 @@ const helpers = {
   getName,
   getPlayerTeam,
   clearTimers,
-  clearDelayTimers,
   clearActiveMatchPlayers,
   startToss: null
 };
@@ -730,6 +728,23 @@ bot.use(async (ctx, next) => {
   if (ctx.callbackQuery) {
     try { await ctx.answerCbQuery(); } catch {}
   }
+  return next();
+});
+
+// ── Ban check middleware — block banned users from all commands ──
+bot.use(async (ctx, next) => {
+  if (!ctx.from) return next();
+  try {
+    const user = await require("./User").findOne({ telegramId: String(ctx.from.id) });
+    if (user?.banned) {
+      if (ctx.callbackQuery) {
+        try { await ctx.answerCbQuery("🚫 You are banned from this bot."); } catch {}
+      } else {
+        await ctx.reply("🚫 You are banned from this bot.");
+      }
+      return;
+    }
+  } catch {}
   return next();
 });
 

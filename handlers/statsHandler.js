@@ -4,11 +4,10 @@ const { calculateBatting, calculateBowling } = require("../utils/statsCalculator
 
 /* ================= ADMINS ================= */
 
-const ADMIN_USERNAMES = ["ryomensukuna39", "norai_na_o"];
+const ADMIN_IDS = ["764519233", "8569821097"];
 
 function isAdmin(ctx) {
-  const username = (ctx.from?.username || "").toLowerCase();
-  return ADMIN_USERNAMES.includes(username);
+  return ADMIN_IDS.includes(String(ctx.from?.id));
 }
 
 /* ================= ESCAPE UTILITY ================= */
@@ -85,33 +84,17 @@ Play some matches first!`
   bot.command("stats", async (ctx) => {
     try {
       const parts = ctx.message.text.trim().split(/\s+/);
-      if (parts.length < 2)
-        return ctx.reply("ℹ️ Usage: /stats @username  or  /stats 123456789");
-
-      let user = null;
-      let displayHandle = "";
-
-      if (parts[1].startsWith("@")) {
-        // lookup by username
-        const username = parts[1].replace("@", "").toLowerCase();
-        user = await User.findOne({ username });
-        if (!user) return ctx.reply(`❌ User @${username} not found.\nAsk them to send /start to the bot in DM first.`);
-        displayHandle = `@${username}`;
-      } else if (/^\d+$/.test(parts[1])) {
-        // lookup by Telegram user ID
-        user = await User.findOne({ telegramId: parts[1] });
-        if (!user) return ctx.reply(`❌ User ID ${parts[1]} not found.\nAsk them to send /start to the bot in DM first.`);
-        displayHandle = user.username ? `@${user.username}` : (user.firstName || parts[1]);
-      } else {
-        return ctx.reply("ℹ️ Usage: /stats @username  or  /stats 123456789");
-      }
-
+      if (parts.length < 2 || !parts[1].startsWith("@"))
+        return ctx.reply("ℹ️ Usage: /stats @username");
+      const username = parts[1].replace("@", "").toLowerCase();
+      const user = await User.findOne({ username });
+      if (!user) return ctx.reply(`❌ User @${username} not found.`);
       const stats = await PlayerStats.findOne({ userId: user.telegramId });
-      if (!stats) return ctx.reply(`📊 ${displayHandle} has no stats yet.`);
+      if (!stats) return ctx.reply(`📊 @${username} has no stats yet.`);
       const bat  = calculateBatting(stats);
       const bowl = calculateBowling(stats);
-      const firstName = user.firstName || "";
-      await ctx.reply(buildStatsCard(displayHandle, firstName, stats, bat, bowl), { parse_mode: "MarkdownV2" });
+      const firstName = user.firstName || user.first_name || "";
+      await ctx.reply(buildStatsCard(`@${username}`, firstName, stats, bat, bowl), { parse_mode: "MarkdownV2" });
     } catch (err) {
       console.error("stats error:", err);
       ctx.reply("⚠️ Error: " + err.message);
@@ -134,23 +117,38 @@ Play some matches first!`
         displayHandle = replied.username ? `@${replied.username}` : replied.first_name;
       } else {
         const parts = ctx.message.text.trim().split(/\s+/);
-        if (parts.length < 2 || !parts[1].startsWith("@"))
+        if (parts.length < 2)
           return ctx.reply(
 `ℹ️ Usage:
-  • /reset @username
+  • /reset 123456789
   • Reply to a player's message with /reset`
           );
-        const username = parts[1].replace("@", "").toLowerCase();
-        const user = await User.findOne({ username });
-        if (!user) return ctx.reply(`❌ User @${username} not found.`);
-        targetUserId  = String(user.telegramId);
-        displayHandle = `@${username}`;
+
+        const arg = parts[1];
+
+        if (/^\d+$/.test(arg)) {
+          // user ID
+          targetUserId  = arg;
+          const user    = await User.findOne({ telegramId: arg });
+          displayHandle = user
+            ? (user.firstName || user.username || arg)
+            : arg;
+        } else if (arg.startsWith("@")) {
+          // @username fallback
+          const username = arg.replace("@", "").toLowerCase();
+          const user = await User.findOne({ username });
+          if (!user) return ctx.reply(`❌ User @${username} not found.`);
+          targetUserId  = String(user.telegramId);
+          displayHandle = user.firstName || `@${username}`;
+        } else {
+          return ctx.reply("ℹ️ Usage: /reset 123456789  or reply to a message with /reset");
+        }
       }
 
       await ctx.reply(
 `⚠️ Reset Stats
 ──────────────
-👤 ${displayHandle}
+👤 ${displayHandle} (ID: ${targetUserId})
 Are you sure you want to wipe all career stats?`,
         {
           reply_markup: {
@@ -203,6 +201,107 @@ Are you sure you want to wipe all career stats?`,
     } catch (err) {
       console.error("reset_cancel error:", err);
       await ctx.answerCbQuery("⚠️ Error: " + err.message, { show_alert: true });
+    }
+  });
+
+  /* ================= BAN / UNBAN ================= */
+
+  bot.command("ban", async (ctx) => {
+    try {
+      if (!isAdmin(ctx))
+        return ctx.reply("❌ You don't have permission to ban users.");
+
+      let targetUserId  = null;
+      let displayHandle = null;
+
+      if (ctx.message.reply_to_message) {
+        const replied = ctx.message.reply_to_message.from;
+        targetUserId  = String(replied.id);
+        displayHandle = replied.username ? `@${replied.username}` : replied.first_name;
+      } else {
+        const parts = ctx.message.text.trim().split(/\s+/);
+        if (parts.length < 2)
+          return ctx.reply("ℹ️ Usage: /ban 123456789  or reply to a message with /ban");
+
+        const arg = parts[1];
+        if (/^\d+$/.test(arg)) {
+          targetUserId  = arg;
+          const user    = await User.findOne({ telegramId: arg });
+          displayHandle = user ? (user.firstName || user.username || arg) : arg;
+        } else if (arg.startsWith("@")) {
+          const username = arg.replace("@", "").toLowerCase();
+          const user = await User.findOne({ username });
+          if (!user) return ctx.reply(`❌ User @${username} not found.`);
+          targetUserId  = String(user.telegramId);
+          displayHandle = user.firstName || `@${username}`;
+        } else {
+          return ctx.reply("ℹ️ Usage: /ban 123456789  or reply to a message with /ban");
+        }
+      }
+
+      if (ADMIN_IDS.includes(targetUserId))
+        return ctx.reply("❌ Cannot ban an admin.");
+
+      await User.updateOne(
+        { telegramId: targetUserId },
+        { $set: { banned: true } },
+        { upsert: true }
+      );
+
+      await ctx.reply(
+`🚫 User Banned
+──────────────
+👤 ${displayHandle} (ID: ${targetUserId})
+They can no longer use the bot.`
+      );
+
+    } catch (err) {
+      console.error("ban error:", err);
+      ctx.reply("⚠️ Error: " + err.message);
+    }
+  });
+
+  bot.command("unban", async (ctx) => {
+    try {
+      if (!isAdmin(ctx))
+        return ctx.reply("❌ You don't have permission to unban users.");
+
+      const parts = ctx.message.text.trim().split(/\s+/);
+      if (parts.length < 2)
+        return ctx.reply("ℹ️ Usage: /unban 123456789");
+
+      const arg = parts[1];
+      let targetUserId, displayHandle;
+
+      if (/^\d+$/.test(arg)) {
+        targetUserId  = arg;
+        const user    = await User.findOne({ telegramId: arg });
+        displayHandle = user ? (user.firstName || user.username || arg) : arg;
+      } else if (arg.startsWith("@")) {
+        const username = arg.replace("@", "").toLowerCase();
+        const user = await User.findOne({ username });
+        if (!user) return ctx.reply(`❌ User @${username} not found.`);
+        targetUserId  = String(user.telegramId);
+        displayHandle = user.firstName || `@${username}`;
+      } else {
+        return ctx.reply("ℹ️ Usage: /unban 123456789");
+      }
+
+      await User.updateOne(
+        { telegramId: targetUserId },
+        { $set: { banned: false } }
+      );
+
+      await ctx.reply(
+`✅ User Unbanned
+──────────────
+👤 ${displayHandle} (ID: ${targetUserId})
+They can use the bot again.`
+      );
+
+    } catch (err) {
+      console.error("unban error:", err);
+      ctx.reply("⚠️ Error: " + err.message);
     }
   });
 
