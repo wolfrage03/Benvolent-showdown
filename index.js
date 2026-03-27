@@ -665,29 +665,30 @@ bot.on("text", async (ctx, next) => {
 
   const ballNumber = `${match.currentOver}.${match.currentBall + 1}`;
 
-  const strikerName   = getName(match, match.striker);
   const battingCall   = getBattingCall();
-  const batCaption    = `🏏 ${strikerName}  🎱 Ball: ${ballNumber}\n${battingCall.text}`;
+  // Invisible ping — fires notification without showing name
+  const strikerPing   = `<a href="tg://user?id=${match.striker}">&#8203;</a>`;
+  const batCaption    = `${strikerPing}🏏  🎱 Ball: ${ballNumber}\n${battingCall.text}`;
 
   if (battingCall.gif) {
     try {
       if (battingCall.gif.startsWith("BAAC")) {
         await bot.telegram.sendVideo(match.groupId, battingCall.gif, {
           caption: batCaption,
-          reply_markup: { inline_keyboard: [[{ text: "🏏 " + strikerName, url: `tg://user?id=${match.striker}` }]] }
+          parse_mode: "HTML"
         });
       } else {
         await bot.telegram.sendAnimation(match.groupId, battingCall.gif, {
           caption: batCaption,
-          reply_markup: { inline_keyboard: [[{ text: "🏏 " + strikerName, url: `tg://user?id=${match.striker}` }]] }
+          parse_mode: "HTML"
         });
       }
     } catch (e) {
       console.error("Batting gif failed:", e.message);
-      await bot.telegram.sendMessage(match.groupId, batCaption);
+      await bot.telegram.sendMessage(match.groupId, batCaption, { parse_mode: "HTML" });
     }
   } else {
-    await bot.telegram.sendMessage(match.groupId, batCaption);
+    await bot.telegram.sendMessage(match.groupId, batCaption, { parse_mode: "HTML" });
   }
   ballHandler.startTurnTimer(match, "bat");
 });
@@ -728,23 +729,6 @@ bot.use(async (ctx, next) => {
   if (ctx.callbackQuery) {
     try { await ctx.answerCbQuery(); } catch {}
   }
-  return next();
-});
-
-// ── Ban check middleware — block banned users from all commands ──
-bot.use(async (ctx, next) => {
-  if (!ctx.from) return next();
-  try {
-    const user = await require("./User").findOne({ telegramId: String(ctx.from.id) });
-    if (user?.banned) {
-      if (ctx.callbackQuery) {
-        try { await ctx.answerCbQuery("🚫 You are banned from this bot."); } catch {}
-      } else {
-        await ctx.reply("🚫 You are banned from this bot.");
-      }
-      return;
-    }
-  } catch {}
   return next();
 });
 

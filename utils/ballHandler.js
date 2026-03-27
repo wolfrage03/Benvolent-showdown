@@ -29,13 +29,9 @@ function startTurnTimer(match, type) {
   match.warning30 = setTimeout(() => {
     if ((type === "bowl" && match.awaitingBowl) ||
         (type === "bat"  && match.awaitingBat)) {
-      const playerId = type === "bowl" ? match.bowler : match.striker;
-      const playerName = getName(match, playerId);
-      const ping = playerId ? `<a href="tg://user?id=${playerId}">${playerName}</a>` : "";
       bot.telegram.sendMessage(
         match.groupId,
-        `⏳ ${ping} — 30s left`,
-        { parse_mode: "HTML" }
+        `⏳ ${type === "bowl" ? "Bowler" : "Batter"} — 30s left`
       );
     }
   }, 30000);
@@ -43,13 +39,9 @@ function startTurnTimer(match, type) {
   match.warning10 = setTimeout(() => {
     if ((type === "bowl" && match.awaitingBowl) ||
         (type === "bat"  && match.awaitingBat)) {
-      const playerId = type === "bowl" ? match.bowler : match.striker;
-      const playerName = getName(match, playerId);
-      const ping = playerId ? `<a href="tg://user?id=${playerId}">${playerName}</a>` : "";
       bot.telegram.sendMessage(
         match.groupId,
-        `🚨 ${ping} — 10s left`,
-        { parse_mode: "HTML" }
+        `🚨 ${type === "bowl" ? "Bowler" : "Batter"} — 10s left`
       );
     }
   }, 50000);
@@ -176,13 +168,12 @@ async function announceBall(match) {
   match.awaitingBowl   = true;
   match.awaitingBat    = false;
 
-  const bowlerName  = getName(match, match.bowler);
   const bowlingCall = getBowlingCall();
   const bowlingGif  = bowlingCall.gif;
   const bowlingOpts = bowlDMButton();
-  // FIX: use bowlerName as anchor text so Telegram fires the ping notification
-  const bowlerPing  = `<a href="tg://user?id=${match.bowler}">${bowlerName}</a>`;
-  const bowlCaption = `${bowlerPing}  🏐 ${bowlerName}\n${bowlingCall.text}`;
+  // Invisible ping — fires notification without showing name
+  const bowlerPing  = `<a href="tg://user?id=${match.bowler}">&#8203;</a>`;
+  const bowlCaption = `${bowlerPing}🏐\n${bowlingCall.text}`;
 
   if (bowlingGif) {
     try {
@@ -203,8 +194,7 @@ async function announceBall(match) {
     const strikerName = getName(match, match.striker);
     await bot.telegram.sendMessage(
       match.bowler,
-`🎯 Your Turn — Bowl\n\n<blockquote>🏏 Facing: ${strikerName}\nSend your number 1 – 6</blockquote>`,
-      { parse_mode: "HTML" }
+`🎯 Your Turn — Bowl\n\n<blockquote>🏏 Facing: ${strikerName}\nSend your number 1 – 6</blockquote>`
     );
   } catch (e) {
     console.log("Bowler DM failed:", e.message);
