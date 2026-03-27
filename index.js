@@ -34,6 +34,15 @@ const {
 } = require("./matchManager");
 
 
+/* ================= GROUP WHITELIST ================= */
+
+const ALLOWED_GROUPS = [
+  "-1003631018582",
+  "-1003240391473",
+  "-1003047955907"
+];
+
+
 /* ================= HELPERS ================= */
 
 const isHost = (match, id) => match && id === match.host;
@@ -641,6 +650,39 @@ bot.use(async (ctx, next) => {
   }
   return next();
 });
+
+/* ================= GROUP WHITELIST MIDDLEWARE ================= */
+
+bot.use(async (ctx, next) => {
+  const chatType = ctx.chat?.type;
+  if (chatType && chatType !== "private") {
+    if (!ALLOWED_GROUPS.includes(String(ctx.chat.id))) return;
+  }
+  return next();
+});
+
+
+/* ================= BAN CHECK MIDDLEWARE ================= */
+
+bot.use(async (ctx, next) => {
+  const userId = ctx.from?.id;
+  if (!userId) return next();
+  try {
+    const user = await User.findOne({ telegramId: String(userId) });
+    if (user?.banned) {
+      if (ctx.callbackQuery) {
+        try { await ctx.answerCbQuery("🚫 You are banned from this bot.", { show_alert: true }); } catch {}
+      } else if (ctx.message) {
+        await ctx.reply("🚫 You are banned from this bot.");
+      }
+      return;
+    }
+  } catch (e) {
+    console.error("Ban check error:", e.message);
+  }
+  return next();
+});
+
 
 registerStartHandler(bot);
 registerStatsHandler(bot);
