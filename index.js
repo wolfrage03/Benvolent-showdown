@@ -99,6 +99,12 @@ function clearTimers(match) {
   if (match.ballTimer)  { clearTimeout(match.ballTimer);  match.ballTimer  = null; }
 }
 
+function clearDelayTimers(match) {
+  if (!match) return;
+  if (match.joinTimer)           { clearTimeout(match.joinTimer);          match.joinTimer          = null; }
+  if (match.hostChange?.timeout) { clearTimeout(match.hostChange.timeout); match.hostChange.timeout = null; }
+}
+
 
 /* ================= GAME FLOW ================= */
 
@@ -226,6 +232,7 @@ const helpers = {
   getName,
   getPlayerTeam,
   clearTimers,
+  clearDelayTimers,
   clearActiveMatchPlayers,
   startToss: null
 };
