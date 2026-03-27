@@ -750,7 +750,7 @@ bot.use(async (ctx, next) => {
       return;
     }
   }
-  return next();
+  return next();   
 });
 
 registerStartHandler(bot);
