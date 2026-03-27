@@ -34,10 +34,8 @@ async function startToss(match) {
 
 bot.action(["toss_odd", "toss_even"], async (ctx) => {
 
-  await ctx.answerCbQuery();
-
   const match = getMatch(ctx);
-  if (!match || match.phase !== "toss") return;
+  if (!match || match.phase !== "toss") return ctx.answerCbQuery();
 
   const captainA = match.captains.A;
   const captainB = match.captains.B;
@@ -45,56 +43,44 @@ bot.action(["toss_odd", "toss_even"], async (ctx) => {
   if (![captainA, captainB].includes(ctx.from.id))
     return ctx.answerCbQuery("Only captains can choose.");
 
-  const choice     = ctx.callbackQuery.data === "toss_odd" ? "odd" : "even";
-  const tossNumber = Math.floor(Math.random() * 6) + 1;
-  const result     = tossNumber % 2 === 0 ? "even" : "odd";
-  const chooser    = ctx.from.id;
+  await ctx.answerCbQuery();
 
-  const tossWinner =
-    choice === result
-      ? chooser
-      : chooser === captainA ? captainB : captainA;
-
-  match.tossWinner = tossWinner;
-  match.phase      = "batbowl";
+  const choice  = ctx.callbackQuery.data === "toss_odd" ? "odd" : "even";
+  const chooser = ctx.from.id;
 
   await ctx.editMessageReplyMarkup({ inline_keyboard: [] });
 
-  const winnerTeam = tossWinner === captainA ? "A" : "B";
-  const winnerName = winnerTeam === "A" ? match.teamAName : match.teamBName;
-
   // ── Telegram native dice animation ──
-  // sendDice returns the rolled value (1-6), animation plays automatically
-  const diceMsg = await bot.telegram.sendDice(match.groupId, { emoji: "🎲" });
+  const diceMsg    = await bot.telegram.sendDice(match.groupId, { emoji: "🎲" });
   const rolledValue = diceMsg.dice.value;
   const diceResult  = rolledValue % 2 === 0 ? "even" : "odd";
   const diceWinner  = choice === diceResult
     ? chooser
     : chooser === captainA ? captainB : captainA;
-  match.tossWinner = diceWinner;
-  const winnerTeamFinal = diceWinner === captainA ? "A" : "B";
 
   // Wait for the dice animation to finish (~4 seconds)
   await new Promise(res => setTimeout(res, 4000));
 
+  match.tossWinner = diceWinner;
+  const winnerTeamFinal = diceWinner === captainA ? "A" : "B";
+
+  const winnerArr   = winnerTeamFinal === "A" ? match.teamA : match.teamB;
+  const chooserArr  = choice === diceResult ? winnerArr : (winnerTeamFinal === "A" ? match.teamB : match.teamA);
+  const chooserCapName = chooserArr?.find(p => p.id === chooser)?.name || "Captain";
+  const winnerCapName  = winnerArr?.find(p => p.id === diceWinner)?.name || "Captain";
+  const winnerTeamName = winnerTeamFinal === "A" ? match.teamAName : match.teamBName;
+
   await bot.telegram.sendMessage(
     match.groupId,
-(() => {
-      const winnerArr = winnerTeamFinal === "A" ? match.teamA : match.teamB;
-      const chooserArr = choice === diceResult ? winnerArr : (winnerTeamFinal === "A" ? match.teamB : match.teamA);
-      const chooserCapName = chooserArr?.find(p => p.id === chooser)?.name || "Captain";
-      const winnerCapName  = winnerArr?.find(p => p.id === diceWinner)?.name || "Captain";
-      const winnerTeamName = winnerTeamFinal === "A" ? match.teamAName : match.teamBName;
-      return [
-        `🎲 Toss Result`,
-        ``,
-        `<blockquote>${chooserCapName} chose ${choice}\nDice rolled ${rolledValue} — ${diceResult}</blockquote>`,
-        ``,
-        `<blockquote>🏆 ${winnerTeamName} 〔Team ${winnerTeamFinal}〕 won the toss!</blockquote>`,
-        ``,
-        `👑 ${winnerCapName} choose to bat or bowl:`,
-      ].join("\n");
-    })(),
+    [
+      `🎲 Toss Result`,
+      ``,
+      `<blockquote>${chooserCapName} chose ${choice}\nDice rolled ${rolledValue} — ${diceResult}</blockquote>`,
+      ``,
+      `<blockquote>🏆 ${winnerTeamName} 〔Team ${winnerTeamFinal}〕 won the toss!</blockquote>`,
+      ``,
+      `👑 ${winnerCapName} choose to bat or bowl:`,
+    ].join("\n"),
     {
       parse_mode: "HTML",
       reply_markup: {
@@ -105,6 +91,9 @@ bot.action(["toss_odd", "toss_even"], async (ctx) => {
       }
     }
   );
+
+  // Set phase AFTER sending the bat/bowl message
+  match.phase = "batbowl";
 });
 
 
@@ -112,13 +101,13 @@ bot.action(["toss_odd", "toss_even"], async (ctx) => {
 
 bot.action(["decision_bat", "decision_bowl"], async (ctx) => {
 
-  await ctx.answerCbQuery();
-
   const match = getMatch(ctx);
-  if (!match || match.phase !== "batbowl") return;
+  if (!match || match.phase !== "batbowl") return ctx.answerCbQuery();
 
   if (ctx.from.id !== match.tossWinner)
     return ctx.answerCbQuery("Only toss winner decides.");
+
+  await ctx.answerCbQuery();
 
   const winnerTeam = ctx.from.id === match.captains.A ? "A" : "B";
   const otherTeam  = winnerTeam === "A" ? "B" : "A";
@@ -149,7 +138,7 @@ bot.action(["decision_bat", "decision_bowl"], async (ctx) => {
   await bot.telegram.sendMessage(
     match.groupId,
 `✅ Match Setup\n\n<blockquote>🏏 ${battingName} 〔Team ${match.battingTeam}〕  batting\n🎯 ${bowlingName} 〔Team ${match.bowlingTeam}〕  bowling</blockquote>\n\n👉 /setovers [1–25] to set overs`,
-      { parse_mode: "HTML" },
+    { parse_mode: "HTML" },
   );
 });
 
@@ -184,7 +173,7 @@ bot.command("setovers", (ctx) => {
 
   ctx.reply(
 `⚙️ Overs Set\n\n<blockquote>Overs: ${overs}</blockquote>\n\n<blockquote>🏏 ${battingName} 〔Team ${match.battingTeam}〕  batting\n🎯 ${bowlingName} 〔Team ${match.bowlingTeam}〕  bowling</blockquote>\n\n👉 /batter [number] set opener`,
-      { parse_mode: "HTML" },
+    { parse_mode: "HTML" },
   );
 });
 
