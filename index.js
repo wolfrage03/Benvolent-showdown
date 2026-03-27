@@ -60,6 +60,7 @@ function clearActiveMatchPlayers(match) {
   for (const player of allPlayers) {
     if (player?.id) playerActiveMatch.delete(player.id);
   }
+  if (match.host) playerActiveMatch.delete(match.host);
 }
 
 function getPlayerTeam(match, userId) {
