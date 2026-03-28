@@ -6,7 +6,7 @@ const box = require("../utils/boxMessage");
 
 module.exports = function (bot, helpers) {
 
-const { isHost } = helpers;
+const { isHost, isUserBanned } = helpers;
 
 
 /* ================= CREATE TEAM ================= */
@@ -85,7 +85,7 @@ bot.command("joina", async (ctx) => {
   if (match.phase !== "join")
     return ctx.reply("⚠️ Joining is closed.");
 
-  const dbUser = await User.findOne({ telegramId: String(ctx.from.id) }).lean();
+  const dbUser = await User.collection.findOne({ telegramId: String(ctx.from.id) });
   if (dbUser?.banned === true) return ctx.reply("🚫 You are banned from this bot.");
 
   if (playerActiveMatch.has(ctx.from.id))
@@ -127,7 +127,7 @@ bot.command("joinb", async (ctx) => {
   if (match.phase !== "join")
     return ctx.reply("⚠️ Joining is closed.");
 
-  const dbUser = await User.findOne({ telegramId: String(ctx.from.id) }).lean();
+  const dbUser = await User.collection.findOne({ telegramId: String(ctx.from.id) });
   if (dbUser?.banned === true) return ctx.reply("🚫 You are banned from this bot.");
 
   if (playerActiveMatch.has(ctx.from.id))

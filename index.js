@@ -75,9 +75,7 @@ bot.use(async (ctx, next) => {
 
 async function isUserBanned(userId) {
   try {
-    // Use raw collection to bypass Mongoose schema field stripping
     const user = await User.collection.findOne({ telegramId: String(userId) });
-    console.log(`[BAN CHECK] userId=${userId} doc=`, JSON.stringify(user));
     return user?.banned === true;
   } catch (e) {
     console.error("[BAN CHECK] error:", e.message);
@@ -85,18 +83,23 @@ async function isUserBanned(userId) {
   }
 }
 
+// Global middleware — intercepts ALL updates before any handler
 bot.use(async (ctx, next) => {
   const userId = ctx.from?.id;
   if (!userId) return next();
-  const banned = await isUserBanned(userId);
-  console.log(`[BAN MIDDLEWARE] userId=${userId} banned=${banned}`);
-  if (banned) {
-    if (ctx.callbackQuery) {
-      try { await ctx.answerCbQuery("🚫 You are banned from this bot.", { show_alert: true }); } catch {}
-    } else if (ctx.message) {
-      try { await ctx.reply("🚫 You are banned from this bot."); } catch {}
+  try {
+    const user = await User.collection.findOne({ telegramId: String(userId) });
+    if (user?.banned === true) {
+      console.log(`[BAN BLOCK] userId=${userId}`);
+      if (ctx.callbackQuery) {
+        try { await ctx.answerCbQuery("🚫 You are banned.", { show_alert: true }); } catch {}
+      } else if (ctx.message) {
+        try { await ctx.reply("🚫 You are banned from this bot."); } catch {}
+      }
+      return; // do NOT call next()
     }
-    return;
+  } catch (e) {
+    console.error("[BAN MIDDLEWARE] error:", e.message);
   }
   return next();
 });
@@ -302,6 +305,7 @@ const helpers = {
   clearTimers,
   clearDelayTimers,
   clearActiveMatchPlayers,
+  isUserBanned,
   startToss: null
 };
 
@@ -332,18 +336,23 @@ require("./commands/handleInput")(bot, helpers);
 
 
 // TEMP: file ID logger — remove after collecting IDs
-bot.on(["animation", "video", "document"], async (ctx) => {
+bot.on(["animation", "video", "document", "sticker"], async (ctx) => {
   if (ctx.chat.type !== "private") return;
   const msg = ctx.message;
   const fileId =
     msg.animation?.file_id ||
-    msg.video?.file_id ||
+    msg.video?.file_id     ||
+    msg.sticker?.file_id   ||
     msg.document?.file_id;
   const type =
     msg.animation ? "animation" :
-    msg.video     ? "video"     : "document";
-  console.log(`[GIF LOG] type=${type} file_id=${fileId}`);
-  await ctx.reply(`\`${type}\n${fileId}\``, { parse_mode: "Markdown" });
+    msg.video     ? "video"     :
+    msg.sticker   ? "sticker"   : "document";
+  const extra = msg.sticker
+    ? ` emoji=${msg.sticker.emoji} animated=${msg.sticker.is_animated} video=${msg.sticker.is_video}`
+    : "";
+  console.log(`[GIF LOG] type=${type}${extra} file_id=${fileId}`);
+  await ctx.reply(`\`${type}${extra}\n${fileId}\``, { parse_mode: "Markdown" });
 });
 
 
