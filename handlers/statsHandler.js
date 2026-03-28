@@ -7,7 +7,9 @@ const { calculateBatting, calculateBowling } = require("../utils/statsCalculator
 const ADMIN_IDS = ["764519233", "8569821097"];
 
 function isAdmin(ctx) {
-  return ADMIN_IDS.includes(String(ctx.from?.id));
+  const id = String(ctx.from?.id);
+  console.log(`[ADMIN CHECK] userId=${id} isAdmin=${ADMIN_IDS.includes(id)}`);
+  return ADMIN_IDS.includes(id);
 }
 
 /* ================= ESCAPE UTILITY ================= */
@@ -89,7 +91,6 @@ Play some matches first!`
 
       const arg = parts[1];
 
-      // Accept numeric user ID
       if (/^\d+$/.test(arg)) {
         const userId = arg;
         const stats = await PlayerStats.findOne({ userId });
@@ -149,14 +150,12 @@ Play some matches first!`
         const arg = parts[1];
 
         if (/^\d+$/.test(arg)) {
-          // user ID
           targetUserId  = arg;
           const user    = await User.findOne({ telegramId: arg });
           displayHandle = user
             ? (user.firstName || user.username || arg)
             : arg;
         } else if (arg.startsWith("@")) {
-          // @username fallback
           const username = arg.replace("@", "").toLowerCase();
           const user = await User.findOne({ username });
           if (!user) return ctx.reply(`❌ User @${username} not found.`);
@@ -226,10 +225,12 @@ Are you sure you want to wipe all career stats?`,
     }
   });
 
-  /* ================= BAN / UNBAN ================= */
+  /* ================= BAN ================= */
 
   bot.command("ban", async (ctx) => {
     try {
+      console.log(`[BAN CMD] triggered by userId=${ctx.from?.id}`);
+
       if (!isAdmin(ctx))
         return ctx.reply("❌ You don't have permission to ban users.");
 
@@ -237,38 +238,56 @@ Are you sure you want to wipe all career stats?`,
       let displayHandle = null;
 
       if (ctx.message.reply_to_message) {
+        // Ban by replying to a message
         const replied = ctx.message.reply_to_message.from;
         targetUserId  = String(replied.id);
         displayHandle = replied.username ? `@${replied.username}` : replied.first_name;
+        console.log(`[BAN CMD] reply method — target=${targetUserId}`);
+
       } else {
+        // Ban by user ID or @username argument
         const parts = ctx.message.text.trim().split(/\s+/);
         if (parts.length < 2)
           return ctx.reply("ℹ️ Usage: /ban 123456789  or reply to a message with /ban");
 
         const arg = parts[1];
+
         if (/^\d+$/.test(arg)) {
           targetUserId  = arg;
           const user    = await User.findOne({ telegramId: arg });
           displayHandle = user ? (user.firstName || user.username || arg) : arg;
+          console.log(`[BAN CMD] ID method — target=${targetUserId} handle=${displayHandle}`);
+
         } else if (arg.startsWith("@")) {
           const username = arg.replace("@", "").toLowerCase();
           const user = await User.findOne({ username });
-          if (!user) return ctx.reply(`❌ User @${username} not found.`);
+          if (!user) return ctx.reply(`❌ User @${username} not found. They must have used /start in the bot DM first.`);
           targetUserId  = String(user.telegramId);
           displayHandle = user.firstName || `@${username}`;
+          console.log(`[BAN CMD] @username method — target=${targetUserId} handle=${displayHandle}`);
+
         } else {
           return ctx.reply("ℹ️ Usage: /ban 123456789  or reply to a message with /ban");
         }
       }
 
+      // Prevent banning another admin
       if (ADMIN_IDS.includes(targetUserId))
         return ctx.reply("❌ Cannot ban an admin.");
 
-      await User.updateOne(
+      // FIX: upsert=true so even users who never /start-ed the bot get banned.
+      // We use $set so existing fields (like stats) are not wiped.
+      const result = await User.updateOne(
         { telegramId: targetUserId },
         { $set: { banned: true } },
         { upsert: true }
       );
+
+      console.log(`[BAN CMD] updateOne result:`, JSON.stringify(result));
+
+      // Verify the ban was actually saved
+      const verify = await User.findOne({ telegramId: targetUserId });
+      console.log(`[BAN CMD] verify doc:`, JSON.stringify(verify));
 
       await ctx.reply(
 `🚫 User Banned
@@ -278,13 +297,17 @@ They can no longer use the bot.`
       );
 
     } catch (err) {
-      console.error("ban error:", err);
+      console.error("[BAN CMD] error:", err);
       ctx.reply("⚠️ Error: " + err.message);
     }
   });
 
+  /* ================= UNBAN ================= */
+
   bot.command("unban", async (ctx) => {
     try {
+      console.log(`[UNBAN CMD] triggered by userId=${ctx.from?.id}`);
+
       if (!isAdmin(ctx))
         return ctx.reply("❌ You don't have permission to unban users.");
 
@@ -314,6 +337,8 @@ They can no longer use the bot.`
         { $set: { banned: false } }
       );
 
+      console.log(`[UNBAN CMD] unbanned userId=${targetUserId}`);
+
       await ctx.reply(
 `✅ User Unbanned
 ──────────────
@@ -322,7 +347,7 @@ They can use the bot again.`
       );
 
     } catch (err) {
-      console.error("unban error:", err);
+      console.error("[UNBAN CMD] error:", err);
       ctx.reply("⚠️ Error: " + err.message);
     }
   });
