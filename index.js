@@ -331,11 +331,9 @@ require("./commands/scoreCommand")(bot, helpers);
 require("./commands/handleInput")(bot, helpers);
 
 
+/* ================= FILE ID LOGGER ================= */
 
-
-
-
-// TEMP: file ID logger — remove after collecting IDs
+// Regular stickers, videos, animations, documents (send in DM)
 bot.on(["animation", "video", "document", "sticker"], async (ctx) => {
   if (ctx.chat.type !== "private") return;
   const msg = ctx.message;
@@ -355,7 +353,36 @@ bot.on(["animation", "video", "document", "sticker"], async (ctx) => {
   await ctx.reply(`\`${type}${extra}\n${fileId}\``, { parse_mode: "Markdown" });
 });
 
+// Custom emoji file IDs — send any message in DM that contains a custom emoji
+// (the animated ones from the emoji picker, not regular stickers)
+bot.on("message", async (ctx) => {
+  if (ctx.chat.type !== "private") return;
 
+  const entities =
+    ctx.message?.entities ||
+    ctx.message?.caption_entities ||
+    [];
+
+  const customEmojis = entities.filter(e => e.type === "custom_emoji");
+  if (!customEmojis.length) return;
+
+  const ids = customEmojis.map(e => e.custom_emoji_id);
+
+  try {
+    const stickers = await ctx.telegram.callApi("getCustomEmojiStickers", {
+      custom_emoji_ids: ids
+    });
+
+    for (const s of stickers) {
+      const line = `custom_emoji  emoji=${s.emoji}  animated=${s.is_animated}  video=${s.is_video}\n${s.file_id}`;
+      console.log(`[GIF LOG] ${line}`);
+      await ctx.reply(`\`${line}\``, { parse_mode: "Markdown" });
+    }
+  } catch (e) {
+    console.error("[CUSTOM EMOJI LOG] failed:", e.message);
+    await ctx.reply(`⚠️ getCustomEmojiStickers failed: ${e.message}`);
+  }
+});
 
 
 /* ================= BOT SAFETY ================= */

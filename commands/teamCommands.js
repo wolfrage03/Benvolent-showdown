@@ -85,8 +85,7 @@ bot.command("joina", async (ctx) => {
   if (match.phase !== "join")
     return ctx.reply("⚠️ Joining is closed.");
 
-  const dbUser = await User.collection.findOne({ telegramId: String(ctx.from.id) });
-  if (dbUser?.banned === true) return ctx.reply("🚫 You are banned from this bot.");
+  // Ban check handled by global middleware in index.js — no duplicate check needed here
 
   if (playerActiveMatch.has(ctx.from.id))
     return ctx.reply("❌ You're already in a match.");
@@ -127,8 +126,7 @@ bot.command("joinb", async (ctx) => {
   if (match.phase !== "join")
     return ctx.reply("⚠️ Joining is closed.");
 
-  const dbUser = await User.collection.findOne({ telegramId: String(ctx.from.id) });
-  if (dbUser?.banned === true) return ctx.reply("🚫 You are banned from this bot.");
+  // Ban check handled by global middleware in index.js — no duplicate check needed here
 
   if (playerActiveMatch.has(ctx.from.id))
     return ctx.reply("❌ You're already in a match.");
