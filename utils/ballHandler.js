@@ -28,9 +28,12 @@ function startTurnTimer(match, type) {
   match.warning30 = setTimeout(() => {
     if ((type === "bowl" && match.awaitingBowl) ||
         (type === "bat"  && match.awaitingBat)) {
+      const playerId = type === "bowl" ? match.bowler : match.striker;
+      const ping = playerId ? `<a href="tg://user?id=${playerId}">&#8203;</a>` : "";
       bot.telegram.sendMessage(
         match.groupId,
-        `⏳ ${type === "bowl" ? "Bowler" : "Batter"} — 30s left`
+        `${ping}⏳ ${type === "bowl" ? "Bowler" : "Batter"} — 30s left`,
+        { parse_mode: "HTML" }
       );
     }
   }, 30000);
@@ -38,9 +41,12 @@ function startTurnTimer(match, type) {
   match.warning10 = setTimeout(() => {
     if ((type === "bowl" && match.awaitingBowl) ||
         (type === "bat"  && match.awaitingBat)) {
+      const playerId = type === "bowl" ? match.bowler : match.striker;
+      const ping = playerId ? `<a href="tg://user?id=${playerId}">&#8203;</a>` : "";
       bot.telegram.sendMessage(
         match.groupId,
-        `🚨 ${type === "bowl" ? "Bowler" : "Batter"} — 10s left`
+        `${ping}🚨 ${type === "bowl" ? "Bowler" : "Batter"} — 10s left`,
+        { parse_mode: "HTML" }
       );
     }
   }, 50000);
@@ -187,11 +193,18 @@ async function announceBall(match) {
 
   try {
     const strikerName = getName(match, match.striker);
-    await bot.telegram.sendMessage(
-      match.bowler,
-`🎯 Your Turn — Bowl\n\n<blockquote>🏏 Facing: ${strikerName}\nSend your number 1 – 6</blockquote>`,
-      { parse_mode: "HTML" }
-    );
+    const ballNumber  = `${match.currentOver}.${match.currentBall + 1}`;
+    const dmGif       = "BAACAgUAAyEFAATBJHMxAAJUqGnHyeiWWHjTCJfClpJ5zl9DmUdXAAJxHAACcyxAVtgKSBJYA3gqOgQ";
+    const dmCaption   = `🎯 Ball: ${ballNumber}\n🏏 Facing: ${strikerName}\nSend your number 1 – 6`;
+    try {
+      await bot.telegram.sendVideo(match.bowler, dmGif, { caption: dmCaption, supports_streaming: true });
+    } catch (e) {
+      await bot.telegram.sendMessage(
+        match.bowler,
+        `🎯 Your Turn — Bowl\n\n<blockquote>🏏 Facing: ${strikerName}\n🎱 Ball: ${ballNumber}\nSend your number 1 – 6</blockquote>`,
+        { parse_mode: "HTML" }
+      );
+    }
   } catch (e) {
     console.log("Bowler DM failed:", e.message);
   }

@@ -23,10 +23,10 @@ function buildPlayerListText(match) {
       const dismissed    =
         match.usedBatters?.includes(p.id) &&
         !isStriker && !isNonStriker;
-      const cap = p.id === captainId ? " 👑" : "";
+      const cap = p.id === captainId ? " (C)" : "";
       const tag = isStriker ? " 🏏" : isNonStriker ? " 🪄" : dismissed ? " ✗" : "";
       const name = String(p.name || "Player").replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-      return `<blockquote>${index + 1}.${cap} ${name}${tag}</blockquote>`;
+      return `<blockquote>${index + 1}. ${name}${cap}${tag}</blockquote>`;
     }).join("\n");
   }
 

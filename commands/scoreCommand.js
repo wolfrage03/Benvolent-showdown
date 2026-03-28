@@ -76,10 +76,10 @@ module.exports = function (bot, helpers) {
 
     lines.push(
       ``,
-      `─── 🏏 Batting ───`,
+      `<b>🏏 Batting</b>`,
       `<blockquote>⭐ ${h(short(strikerName))}  ${st.runs}(${st.balls})  SR:${stSR}\n🏹 ${h(short(nonStrikerName))}  ${nst.runs}(${nst.balls})  SR:${nstSR}\n🤝 Partnership: ${partRuns}(${partBalls})</blockquote>`,
       ``,
-      `─── 🎾 Bowling ───`,
+      `<b>🎾 Bowling</b>`,
       `<blockquote>🎾 ${h(short(bowlerName))}  ${bwlOv}ov  ${bwl.runs}r  ${bwl.wickets}w  econ:${econ}\nThis over: ${overBalls}</blockquote>`
     );
 
