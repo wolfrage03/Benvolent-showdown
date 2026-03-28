@@ -41,6 +41,27 @@ const ALLOWED_GROUPS = new Set([
   "-1003047955907"
 ]);
 
+// When bot is added to any group — leave if not whitelisted
+bot.on("my_chat_member", async (ctx) => {
+  const update = ctx.myChatMember;
+  const chat   = update?.chat;
+  const newStatus = update?.new_chat_member?.status;
+
+  if (!chat || chat.type === "private") return;
+  if (!["member", "administrator"].includes(newStatus)) return;
+
+  if (!ALLOWED_GROUPS.has(String(chat.id))) {
+    try {
+      await bot.telegram.sendMessage(
+        chat.id,
+        "🚫 This bot requires permission from the bot owner to operate in this group.\n\nContact @YourOwnerUsername to request access."
+      );
+    } catch {}
+    try { await bot.telegram.leaveChat(chat.id); } catch {}
+  }
+});
+
+// Block all group updates from non-whitelisted groups
 bot.use(async (ctx, next) => {
   const chatType = ctx.chat?.type;
   if (chatType && chatType !== "private") {
@@ -52,21 +73,25 @@ bot.use(async (ctx, next) => {
 
 /* ================= BAN CHECK ================= */
 
+async function isUserBanned(userId) {
+  try {
+    const user = await User.findOne({ telegramId: String(userId) });
+    return user?.banned === true;
+  } catch {
+    return false;
+  }
+}
+
 bot.use(async (ctx, next) => {
   const userId = ctx.from?.id;
   if (!userId) return next();
-  try {
-    const user = await User.findOne({ telegramId: String(userId) });
-    if (user?.banned) {
-      if (ctx.callbackQuery) {
-        try { await ctx.answerCbQuery("🚫 You are banned.", { show_alert: true }); } catch {}
-      } else if (ctx.message) {
-        await ctx.reply("🚫 You are banned from this bot.");
-      }
-      return;
+  if (await isUserBanned(userId)) {
+    if (ctx.callbackQuery) {
+      try { await ctx.answerCbQuery("🚫 You are banned from this bot.", { show_alert: true }); } catch {}
+    } else if (ctx.message) {
+      try { await ctx.reply("🚫 You are banned from this bot."); } catch {}
     }
-  } catch (e) {
-    console.error("Ban check error:", e.message);
+    return;
   }
   return next();
 });
