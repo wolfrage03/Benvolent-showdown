@@ -29,10 +29,11 @@ function startTurnTimer(match, type) {
     if ((type === "bowl" && match.awaitingBowl) ||
         (type === "bat"  && match.awaitingBat)) {
       const playerId = type === "bowl" ? match.bowler : match.striker;
-      const ping = playerId ? `<a href="tg://user?id=${playerId}">&#8203;</a>` : "";
+      const playerName = getName(match, playerId);
+      const ping = playerId ? `<a href="tg://user?id=${playerId}">${playerName}</a>` : "";
       bot.telegram.sendMessage(
         match.groupId,
-        `${ping}⏳ ${type === "bowl" ? "Bowler" : "Batter"} — 30s left`,
+        `${ping} ⏳ 30s left`,
         { parse_mode: "HTML" }
       );
     }
@@ -42,10 +43,11 @@ function startTurnTimer(match, type) {
     if ((type === "bowl" && match.awaitingBowl) ||
         (type === "bat"  && match.awaitingBat)) {
       const playerId = type === "bowl" ? match.bowler : match.striker;
-      const ping = playerId ? `<a href="tg://user?id=${playerId}">&#8203;</a>` : "";
+      const playerName = getName(match, playerId);
+      const ping = playerId ? `<a href="tg://user?id=${playerId}">${playerName}</a>` : "";
       bot.telegram.sendMessage(
         match.groupId,
-        `${ping}🚨 ${type === "bowl" ? "Bowler" : "Batter"} — 10s left`,
+        `${ping} 🚨 10s left`,
         { parse_mode: "HTML" }
       );
     }

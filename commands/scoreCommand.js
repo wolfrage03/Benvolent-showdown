@@ -1,8 +1,13 @@
-const { getMatch } = require("../matchManager");
+const { getMatch, matches } = require("../matchManager");
 
 module.exports = function (bot, helpers) {
 
-  const { getName } = helpers;
+  function getName(match, id) {
+    if (!match) return "Player";
+    const all = [...(match.teamA || []), ...(match.teamB || [])];
+    const p = all.find(x => x.id === id);
+    return p ? p.name : "Player";
+  }
 
   function getLiveScore(match) {
     if (!match) return "⚠️ No active match.";
@@ -105,4 +110,4 @@ module.exports = function (bot, helpers) {
     }
   });
 
-};  
+};
