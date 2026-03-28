@@ -88,10 +88,17 @@ async function isUserBanned(userId) {
   }
 }
 
+// Admin IDs — always bypass the ban middleware
+const ADMIN_IDS = new Set(["764519233", "8569821097"]);
+
 // Global middleware — intercepts ALL updates before any handler
 bot.use(async (ctx, next) => {
   const userId = ctx.from?.id;
   if (!userId) return next();
+
+  // Admins are never blocked — even if somehow flagged in DB
+  if (ADMIN_IDS.has(String(userId))) return next();
+
   try {
     const user = await User.findOne({ telegramId: String(userId) });
     if (user?.banned === true) {
@@ -384,6 +391,18 @@ bot.on("text", async (ctx) => {
     console.error("[EMOJI LOG] getCustomEmojiStickers failed:", e.message);
     await ctx.reply(`⚠️ getCustomEmojiStickers error: ${e.message}`);
   }
+});
+
+
+/* ================= CATCH-ALL DEBUG (remove after fixing) ================= */
+// Logs every update that reaches this point — if /ban appears here, the handler
+// is the problem. If it never appears, the middleware is swallowing it.
+bot.use((ctx, next) => {
+  const type = ctx.updateType;
+  const text = ctx.message?.text || ctx.callbackQuery?.data || "";
+  const userId = ctx.from?.id;
+  console.log(`[UPDATE] type=${type} userId=${userId} text="${text}"`);
+  return next();
 });
 
 
