@@ -32,7 +32,12 @@ const {
   deleteMatch
 } = require("./matchManager");
 
+const PlayerStats = require("./models/PlayerStats");
 
+setTimeout(async () => {
+  const stats = await PlayerStats.find().limit(5);
+  console.log("📊 Sample Stats:", stats);
+}, 5000);
 /* ================= GROUP WHITELIST ================= */
 
 const ALLOWED_GROUPS = new Set([
