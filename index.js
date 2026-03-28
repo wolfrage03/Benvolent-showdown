@@ -75,9 +75,12 @@ bot.use(async (ctx, next) => {
 
 async function isUserBanned(userId) {
   try {
-    const user = await User.findOne({ telegramId: String(userId) }).lean();
+    // Use raw collection to bypass Mongoose schema field stripping
+    const user = await User.collection.findOne({ telegramId: String(userId) });
+    console.log(`[BAN CHECK] userId=${userId} doc=`, JSON.stringify(user));
     return user?.banned === true;
-  } catch {
+  } catch (e) {
+    console.error("[BAN CHECK] error:", e.message);
     return false;
   }
 }
@@ -85,7 +88,9 @@ async function isUserBanned(userId) {
 bot.use(async (ctx, next) => {
   const userId = ctx.from?.id;
   if (!userId) return next();
-  if (await isUserBanned(userId)) {
+  const banned = await isUserBanned(userId);
+  console.log(`[BAN MIDDLEWARE] userId=${userId} banned=${banned}`);
+  if (banned) {
     if (ctx.callbackQuery) {
       try { await ctx.answerCbQuery("🚫 You are banned from this bot.", { show_alert: true }); } catch {}
     } else if (ctx.message) {
