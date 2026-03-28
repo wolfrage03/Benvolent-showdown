@@ -75,7 +75,7 @@ bot.use(async (ctx, next) => {
 
 async function isUserBanned(userId) {
   try {
-    const user = await User.findOne({ telegramId: String(userId) });
+    const user = await User.findOne({ telegramId: String(userId) }).lean();
     return user?.banned === true;
   } catch {
     return false;
