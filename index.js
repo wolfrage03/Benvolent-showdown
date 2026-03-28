@@ -73,14 +73,9 @@ bot.use(async (ctx, next) => {
 
 /* ================= BAN CHECK ================= */
 
-// FIX: switched from User.collection.findOne (raw MongoDB driver, no type casting)
-// to User.findOne (Mongoose model) so telegramId is always cast to String consistently,
-// matching how /ban saves it via User.updateOne. The raw driver was silently missing
-// docs when the stored type didn't exactly match the query type.
-
 async function isUserBanned(userId) {
   try {
-    const user = await User.findOne({ telegramId: String(userId) });
+    const user = await User.collection.findOne({ telegramId: String(userId) });
     return user?.banned === true;
   } catch (e) {
     console.error("[BAN CHECK] error:", e.message);
@@ -88,19 +83,12 @@ async function isUserBanned(userId) {
   }
 }
 
-// Admin IDs — always bypass the ban middleware
-const ADMIN_IDS = new Set(["764519233", "8569821097"]);
-
 // Global middleware — intercepts ALL updates before any handler
 bot.use(async (ctx, next) => {
   const userId = ctx.from?.id;
   if (!userId) return next();
-
-  // Admins are never blocked — even if somehow flagged in DB
-  if (ADMIN_IDS.has(String(userId))) return next();
-
   try {
-    const user = await User.findOne({ telegramId: String(userId) });
+    const user = await User.collection.findOne({ telegramId: String(userId) });
     if (user?.banned === true) {
       console.log(`[BAN BLOCK] userId=${userId}`);
       if (ctx.callbackQuery) {
@@ -209,6 +197,9 @@ async function handleBallCompletion(match) {
   return false;
 }
 
+// wasWicket = true when a wicket caused the over to end (ball 6 = W).
+// This skips swapStrike (dismissed batter is gone, not rotating ends)
+// and sets phase to "new_batter" so host is prompted for a batter before bowler.
 async function checkOverEnd(match, wasWicket = false) {
   if (!match) return false;
   if (match.currentBall < 6) return false;
@@ -227,6 +218,7 @@ async function checkOverEnd(match, wasWicket = false) {
     return true;
   }
 
+  // Send over-end scorecard
   try {
     await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "HTML" });
   } catch (e) { console.error("Scorecard failed:", e.message); }
@@ -234,6 +226,9 @@ async function checkOverEnd(match, wasWicket = false) {
   match.lastOverBowler = match.bowler;
   match.bowler = null;
 
+  // Only swap strike on a normal over-end (run/dot).
+  // When a wicket ends the over the dismissed striker is out —
+  // swapping would ghost them as non-striker.
   if (!wasWicket) {
     swapStrike(match);
   }
@@ -243,6 +238,8 @@ async function checkOverEnd(match, wasWicket = false) {
     : "0.00";
 
   if (wasWicket) {
+    // Need both a new batter AND a new bowler.
+    // Prompt batter first — /batter handler advances to set_bowler after.
     match.phase = "new_batter";
     match.awaitingBowl = false;
     match.awaitingBat  = false;
@@ -256,6 +253,7 @@ async function checkOverEnd(match, wasWicket = false) {
     } catch (e) { console.error("Over+wicket message failed:", e.message); }
 
   } else {
+    // Normal over end — just need a bowler.
     match.phase = "set_bowler";
 
     try {
@@ -280,6 +278,8 @@ function bowlDMButton() {
   };
 }
 
+
+// ── Send a GIF/video + text message together ──
 async function sendWithGif(groupId, gifType, text) {
   const fileId = randomGif(gifType);
   if (!fileId) {
@@ -325,14 +325,15 @@ require("./commands/tossCommands")(bot, helpers);
 
 module.exports = { getName };
 
+
 require("./commands/batterBowlerCommands")(bot, helpers);
 require("./commands/scoreCommand")(bot, helpers);
 require("./commands/handleInput")(bot, helpers);
 
 
-/* ================= FILE ID LOGGER (DM only — remove when done collecting) ================= */
+/* ================= FILE ID LOGGER ================= */
 
-// Handler A: regular sticker / video / animation / document
+// Regular stickers, videos, animations, documents (send in DM)
 bot.on(["animation", "video", "document", "sticker"], async (ctx) => {
   if (ctx.chat.type !== "private") return;
   const msg = ctx.message;
@@ -352,57 +353,35 @@ bot.on(["animation", "video", "document", "sticker"], async (ctx) => {
   await ctx.reply(`\`${type}${extra}\n${fileId}\``, { parse_mode: "Markdown" });
 });
 
-// Handler B: custom emoji file IDs
-// FIX: previous version used bot.on("message") which fires for EVERY update and
-// conflicts with other handlers. Now using bot.on("text") which only fires for
-// text messages, and we check for custom_emoji entities inside.
-//
-// HOW TO USE:
-//   In the bot DM, type any message and insert a custom emoji from the emoji panel
-//   (the animated ones, e.g. 🔥💀⚡ from Telegram Premium packs).
-//   The bot replies with the file_id of each unique custom emoji in the message.
-//   Requires Telegram Premium to send custom emoji.
-bot.on("text", async (ctx) => {
+// Custom emoji file IDs — send any message in DM that contains a custom emoji
+// (the animated ones from the emoji picker, not regular stickers)
+bot.on("message", async (ctx) => {
   if (ctx.chat.type !== "private") return;
 
-  const entities = ctx.message.entities || [];
+  const entities =
+    ctx.message?.entities ||
+    ctx.message?.caption_entities ||
+    [];
+
   const customEmojis = entities.filter(e => e.type === "custom_emoji");
   if (!customEmojis.length) return;
 
-  // Deduplicate IDs in case the same emoji is used multiple times
-  const uniqueIds = [...new Set(customEmojis.map(e => e.custom_emoji_id))];
-  console.log(`[EMOJI LOG] custom_emoji_ids found:`, uniqueIds);
+  const ids = customEmojis.map(e => e.custom_emoji_id);
 
   try {
     const stickers = await ctx.telegram.callApi("getCustomEmojiStickers", {
-      custom_emoji_ids: uniqueIds
+      custom_emoji_ids: ids
     });
 
-    if (!stickers?.length) {
-      return ctx.reply("⚠️ Telegram returned no sticker data for those emoji IDs.");
-    }
-
     for (const s of stickers) {
-      const line = `type=custom_emoji  emoji=${s.emoji}  animated=${s.is_animated}  video=${s.is_video}\nfile_id=${s.file_id}`;
-      console.log(`[EMOJI LOG] ${line}`);
+      const line = `custom_emoji  emoji=${s.emoji}  animated=${s.is_animated}  video=${s.is_video}\n${s.file_id}`;
+      console.log(`[GIF LOG] ${line}`);
       await ctx.reply(`\`${line}\``, { parse_mode: "Markdown" });
     }
   } catch (e) {
-    console.error("[EMOJI LOG] getCustomEmojiStickers failed:", e.message);
-    await ctx.reply(`⚠️ getCustomEmojiStickers error: ${e.message}`);
+    console.error("[CUSTOM EMOJI LOG] failed:", e.message);
+    await ctx.reply(`⚠️ getCustomEmojiStickers failed: ${e.message}`);
   }
-});
-
-
-/* ================= CATCH-ALL DEBUG (remove after fixing) ================= */
-// Logs every update that reaches this point — if /ban appears here, the handler
-// is the problem. If it never appears, the middleware is swallowing it.
-bot.use((ctx, next) => {
-  const type = ctx.updateType;
-  const text = ctx.message?.text || ctx.callbackQuery?.data || "";
-  const userId = ctx.from?.id;
-  console.log(`[UPDATE] type=${type} userId=${userId} text="${text}"`);
-  return next();
 });
 
 
