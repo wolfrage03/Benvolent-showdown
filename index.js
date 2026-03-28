@@ -36,11 +36,41 @@ const {
 
 /* ================= GROUP WHITELIST ================= */
 
-const ALLOWED_GROUPS = [
+const ALLOWED_GROUPS = new Set([
   "-1003631018582",
   "-1003240391473",
   "-1003047955907"
-];
+]);
+
+bot.use(async (ctx, next) => {
+  const chatType = ctx.chat?.type;
+  if (chatType && chatType !== "private") {
+    if (!ALLOWED_GROUPS.has(String(ctx.chat.id))) return;
+  }
+  return next();
+});
+
+
+/* ================= BAN CHECK ================= */
+
+bot.use(async (ctx, next) => {
+  const userId = ctx.from?.id;
+  if (!userId) return next();
+  try {
+    const user = await User.findOne({ telegramId: String(userId) });
+    if (user?.banned) {
+      if (ctx.callbackQuery) {
+        try { await ctx.answerCbQuery("🚫 You are banned.", { show_alert: true }); } catch {}
+      } else if (ctx.message) {
+        await ctx.reply("🚫 You are banned from this bot.");
+      }
+      return;
+    }
+  } catch (e) {
+    console.error("Ban check error:", e.message);
+  }
+  return next();
+});
 
 
 /* ================= HELPERS ================= */
@@ -453,9 +483,10 @@ function getLiveScore(match) {
   const partRuns  = match.currentPartnershipRuns  || 0;
   const partBalls = match.currentPartnershipBalls || 0;
 
-  // Sanitize names for HTML
+  // Sanitize names for HTML — strips invalid chars, escapes HTML entities
   function h(str) {
     return String(str ?? "")
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")  // strip control chars
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
       .replace(/>/g, "&gt;");
@@ -514,8 +545,14 @@ bot.command("score", async (ctx) => {
   try {
     await ctx.reply(getLiveScore(match), { parse_mode: "HTML" });
   } catch (e) {
-    console.error("Score command failed:", e.message);
-    await ctx.reply("⚠️ Score error: " + e.message);
+    console.error("Score HTML failed:", e.message);
+    try {
+      // Fallback: strip all HTML tags and send as plain text
+      const plain = getLiveScore(match).replace(/<[^>]*>/g, "");
+      await ctx.reply(plain);
+    } catch (e2) {
+      console.error("Score fallback failed:", e2.message);
+    }
   }
 });
 
@@ -647,38 +684,6 @@ bot.catch((err, ctx) => {
 bot.use(async (ctx, next) => {
   if (ctx.callbackQuery) {
     try { await ctx.answerCbQuery(); } catch {}
-  }
-  return next();
-});
-
-/* ================= GROUP WHITELIST MIDDLEWARE ================= */
-
-bot.use(async (ctx, next) => {
-  const chatType = ctx.chat?.type;
-  if (chatType && chatType !== "private") {
-    if (!ALLOWED_GROUPS.includes(String(ctx.chat.id))) return;
-  }
-  return next();
-});
-
-
-/* ================= BAN CHECK MIDDLEWARE ================= */
-
-bot.use(async (ctx, next) => {
-  const userId = ctx.from?.id;
-  if (!userId) return next();
-  try {
-    const user = await User.findOne({ telegramId: String(userId) });
-    if (user?.banned) {
-      if (ctx.callbackQuery) {
-        try { await ctx.answerCbQuery("🚫 You are banned from this bot.", { show_alert: true }); } catch {}
-      } else if (ctx.message) {
-        await ctx.reply("🚫 You are banned from this bot.");
-      }
-      return;
-    }
-  } catch (e) {
-    console.error("Ban check error:", e.message);
   }
   return next();
 });
