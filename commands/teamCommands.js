@@ -407,7 +407,7 @@ bot.command("remove", async (ctx) => {
 
 /* ================= CHANGE TEAM ================= */
 
-bot.command("changeteam", (ctx) => {
+bot.command("changeteam", async (ctx) => {
 
   const match = getMatch(ctx);
   if (!match) return ctx.reply("⚠️ No active match.");
