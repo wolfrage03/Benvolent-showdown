@@ -145,7 +145,7 @@ bot.action(["decision_bat", "decision_bowl"], async (ctx) => {
 
 /* ================= SET OVERS ================= */
 
-bot.command("setovers", (ctx) => {
+bot.command("setovers", async (ctx) => {
 
   const match = getMatch(ctx);
   if (!match) return;
@@ -171,7 +171,8 @@ bot.command("setovers", (ctx) => {
   const battingName = match.battingTeam === "A" ? match.teamAName : match.teamBName;
   const bowlingName = match.bowlingTeam === "A" ? match.teamAName : match.teamBName;
 
-  ctx.reply(
+  try { await ctx.deleteMessage(); } catch {}
+  await ctx.reply(
 `⚙️ Overs Set\n\n<blockquote>Overs: ${overs}</blockquote>\n\n<blockquote>🏏 ${battingName} 〔Team ${match.battingTeam}〕  batting\n🎯 ${bowlingName} 〔Team ${match.bowlingTeam}〕  bowling</blockquote>\n\n👉 /batter [number] set opener`,
     { parse_mode: "HTML" },
   );

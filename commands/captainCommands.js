@@ -89,7 +89,7 @@ module.exports = function (bot, helpers) {
 
   /* ================= CHOOSE CAPTAIN ================= */
 
-  bot.command("choosecap", ctx => {
+  bot.command("choosecap", async ctx => {
 
     const match = getMatch(ctx);
     if (!match) return ctx.reply("⚠️ No active match.");
@@ -100,6 +100,8 @@ module.exports = function (bot, helpers) {
       return ctx.reply("❌ Only host can start captain selection.");
 
     match.phase = "captain";
+
+    try { await ctx.deleteMessage(); } catch {}
 
     ctx.reply(
 box("👑 Captain Selection", "Each team picks their own captain.", "Tap the button below."),
@@ -255,6 +257,7 @@ box("✅ Both Captains Set", "Starting toss...")
 
     const name = getName(match, newCaptainId);
 
+    try { await ctx.deleteMessage(); } catch {}
     await ctx.reply(
 box("🔄 Change Captain?", `〔Team ${teamLetter}〕 → ${name}`),
       Markup.inlineKeyboard([
