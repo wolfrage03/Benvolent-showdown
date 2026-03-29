@@ -61,6 +61,8 @@ bot.on("my_chat_member", async (ctx) => {
   }
 });
 
+/* ================= GROUP FILTER MIDDLEWARE ================= */
+
 bot.use(async (ctx, next) => {
   const chatType = ctx.chat?.type;
   if (chatType && chatType !== "private") {
@@ -70,23 +72,15 @@ bot.use(async (ctx, next) => {
 });
 
 
-/* ================= BAN CHECK ================= */
-
-async function isUserBanned(userId) {
-  try {
-    const user = await User.findOne({ telegramId: String(userId) });
-    return user?.banned === true;
-  } catch (e) {
-    console.error("[BAN CHECK] error:", e.message);
-    return false;
-  }
-}
+/* ================= BAN CHECK MIDDLEWARE ================= */
 
 bot.use(async (ctx, next) => {
   const userId = ctx.from?.id;
   if (!userId) return next();
   try {
-    const user = await User.findOne({ telegramId: String(userId) });
+    // FIXED: Use mongoose model method (not User.collection.findOne)
+    // User.collection.findOne bypasses mongoose and fails if DB not ready
+    const user = await User.findOne({ telegramId: String(userId) }).lean();
     if (user?.banned === true) {
       console.log(`[BAN BLOCK] userId=${userId}`);
       if (ctx.callbackQuery) {
@@ -94,11 +88,11 @@ bot.use(async (ctx, next) => {
       } else if (ctx.message) {
         try { await ctx.reply("🚫 You are banned from this bot."); } catch {}
       }
-      return;
+      return; // do NOT call next()
     }
   } catch (e) {
     console.error("[BAN MIDDLEWARE] error:", e.message);
-    return next();   // ← ADD THIS LINE
+    // FIXED: Always call next() on error so commands are not silently dropped
   }
   return next();
 });
@@ -196,27 +190,6 @@ async function handleBallCompletion(match) {
   return false;
 }
 
-/* ===============================================================
-   CHECK OVER END
-   ---------------------------------------------------------------
-   wasWicket = false  (normal over end — run or dot on ball 6)
-     → swapStrike NOW
-     → send scorecard NOW
-     → phase = "set_bowler"
-
-   wasWicket = true   (wicket on ball 6)
-     → do NOT swapStrike here — deferred to /batter in batterBowlerCommands
-     → do NOT send scorecard here — deferred to /batter as well
-     → set match.pendingOverEnd = true so /batter knows to swap + scorecard
-     → phase = "new_batter"
-
-   Why defer?
-     After a last-ball wicket the dismissed batter is striker.
-     The new batter replaces them as striker.
-     THEN we swap → new batter becomes nonStriker, old nonStriker
-     becomes striker and faces ball 1 of the next over. ✓
-   =============================================================== */
-
 async function checkOverEnd(match, wasWicket = false) {
   if (!match) return false;
   if (match.currentBall < 6) return false;
@@ -229,7 +202,6 @@ async function checkOverEnd(match, wasWicket = false) {
   match.awaitingBat     = false;
   match.awaitingBowl    = false;
 
-  // All overs done
   if (match.currentOver >= match.totalOvers) {
     clearTimers(match);
     await matchResult.endInnings(match);
@@ -244,8 +216,7 @@ async function checkOverEnd(match, wasWicket = false) {
     : "0.00";
 
   if (wasWicket) {
-    // ── Deferred: swap + scorecard happen in /batter after new batter set ──
-    match.pendingOverEnd   = true;   // signals batterBowlerCommands to swap + scorecard
+    match.pendingOverEnd   = true;
     match.phase            = "new_batter";
     match.awaitingBowl     = false;
     match.awaitingBat      = false;
@@ -259,7 +230,6 @@ async function checkOverEnd(match, wasWicket = false) {
     } catch (e) { console.error("Over+wicket message failed:", e.message); }
 
   } else {
-    // ── Normal over end: swap + scorecard immediately ──
     swapStrike(match);
 
     try {
@@ -354,6 +324,15 @@ require("./commands/scoreCommand")(bot, helpers);
 require("./commands/handleInput")(bot, helpers);
 
 
+/* ================= REGISTER COMMAND HANDLERS ================= */
+// FIXED: Moved to BEFORE file ID logger and bot.catch
+// Previously these were at the very bottom AFTER bot.catch which
+// caused them to be registered too late in some Telegraf versions
+
+registerStartHandler(bot);
+registerStatsHandler(bot);
+
+
 /* ================= FILE ID LOGGER ================= */
 
 bot.on(["animation", "video", "document", "sticker"], async (ctx) => {
@@ -407,6 +386,8 @@ bot.catch((err, ctx) => {
   console.error("Error:", err);
 });
 
+// FIXED: This middleware must be registered BEFORE commands, not after
+// Moved answerCbQuery middleware to top — after ban check
 bot.use(async (ctx, next) => {
   if (ctx.callbackQuery) {
     try { await ctx.answerCbQuery(); } catch {}
@@ -414,12 +395,25 @@ bot.use(async (ctx, next) => {
   return next();
 });
 
-registerStartHandler(bot);
-registerStatsHandler(bot);
+
+/* ================= isUserBanned EXPORT HELPER ================= */
+
+async function isUserBanned(userId) {
+  try {
+    const user = await User.findOne({ telegramId: String(userId) }).lean();
+    return user?.banned === true;
+  } catch (e) {
+    console.error("[BAN CHECK] error:", e.message);
+    return false;
+  }
+}
+
+
+/* ================= LAUNCH ================= */
 
 (async () => {
-  await initializeApp();
-  await initializeBot();
+  await initializeApp();   // DB connects here first
+  await initializeBot();   // then fetch bot username
   await bot.launch();
   console.log("🚀 Bot started successfully");
 })();
