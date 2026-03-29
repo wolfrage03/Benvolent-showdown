@@ -124,8 +124,11 @@ module.exports = function (bot, helpers) {
 
     try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
 
-    // ── Save match snapshot to MongoDB before wiping ──
-    await archiveMatch(match, "force_ended");
+    // ── Save match snapshot to MongoDB + send JSON file ──
+    // sendTo: sends the file back to the group itself.
+    // Change match.groupId to your personal admin Telegram ID (a number)
+    // if you want it sent privately instead, e.g.: 764519233
+    await archiveMatch(match, "force_ended", ctx.telegram, match.groupId);
 
     await ctx.reply(
 "🛑 Match Ended\n\n<blockquote>Match data has been saved.\n👉 /start to begin a new match</blockquote>",
