@@ -39,7 +39,7 @@ const ALLOWED_GROUPS = new Set([
   "-1003631018582",
   "-1003240391473",
   "-1003047955907",
-  "1003774775125"
+  "-1003774775125"
 ]);
 
 // When bot is added to any group — leave if not whitelisted
