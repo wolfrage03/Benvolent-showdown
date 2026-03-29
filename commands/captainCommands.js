@@ -113,6 +113,65 @@ box("👑 Captain Selection", "Each team picks their own captain.", "Tap the but
   });
 
 
+  /* ================= SET CAP (HOST ASSIGNS DIRECTLY) ================= */
+  // Usage: /setcap A 2   or   /setcap B 1
+
+  bot.command("setcap", async (ctx) => {
+
+    const match = getMatch(ctx);
+    if (!match) return ctx.reply("⚠️ No active match.");
+
+    if (!isHost(match, ctx.from.id))
+      return ctx.reply("❌ Only host can assign captains with /setcap.");
+
+    if (!match.captains) match.captains = { A: null, B: null };
+
+    const args = ctx.message.text.trim().split(/\s+/);
+
+    if (args.length < 3)
+      return ctx.reply("ℹ️ Usage: /setcap A 2  or  /setcap B 1");
+
+    const teamLetter = args[1].toUpperCase();
+    const number     = parseInt(args[2]);
+
+    if (!["A", "B"].includes(teamLetter))
+      return ctx.reply("❌ Team must be A or B.");
+
+    const teamArr   = teamLetter === "A" ? match.teamA : match.teamB;
+    const captainId = match.captains?.[teamLetter];
+
+    // Build ordered list same as player list display (captain first)
+    const ordered = [
+      ...(teamArr || []).filter(p => p.id === captainId),
+      ...(teamArr || []).filter(p => p.id !== captainId)
+    ];
+
+    if (!ordered.length)
+      return ctx.reply(`⚠️ Team ${teamLetter} has no players yet.`);
+
+    if (isNaN(number) || number < 1 || number > ordered.length)
+      return ctx.reply(`❌ Invalid number. Team ${teamLetter} has ${ordered.length} player(s).`);
+
+    const newCaptain = ordered[number - 1];
+    match.captains[teamLetter] = newCaptain.id;
+
+    try { await ctx.deleteMessage(); } catch {}
+
+    await ctx.reply(
+box("👑 Captain Set", `${newCaptain.name}`, `🔵 〔Team ${teamLetter}〕 Captain assigned by host`)
+    );
+
+    await sendAndPinPlayerList(match, ctx.telegram);
+
+    // If both captains are now set and phase is still "captain", advance to toss
+    if (match.captains.A && match.captains.B && match.phase === "captain") {
+      match.phase = "toss";
+      await ctx.reply(box("✅ Both Captains Set", "Starting toss..."));
+      if (helpers.startToss) helpers.startToss(match);
+    }
+  });
+
+
   /* ================= CAPTAIN TEAM A ================= */
 
   bot.action("cap_A", async ctx => {

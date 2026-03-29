@@ -35,7 +35,19 @@ bot.action("select_host", async (ctx) => {
 });
 
 
-/* ================= HOST CHANGE ================= */
+/* ===============================================================
+   CHANGEHOST COMMAND
+   ---------------------------------------------------------------
+   Two cases:
+   1. Sender IS the current host
+      → Skip voting entirely. Immediately show "Take Host" button
+        so any non-playing member can grab the role.
+
+   2. Sender is a match PLAYER (not host)
+      → Start a 2-per-team vote. If it passes, show "Take Host".
+
+   3. Anyone else → reject.
+   =============================================================== */
 
 bot.command("changehost", async (ctx) => {
 
@@ -48,17 +60,27 @@ bot.command("changehost", async (ctx) => {
   const userId = ctx.from.id;
 
   if (match.hostChange?.active)
-    return ctx.reply("⚠️ Host change voting already active.");
+    return ctx.reply("⚠️ Host change process already active.");
 
-  if (userId === match.host)
-    return showHostSelection(match);
+  /* ── CASE 1: Current host initiates directly ── */
+  if (userId === match.host) {
+    match.hostChange = {
+      active: true,
+      phase: "selection",   // skip voting, go straight to selection
+      teamVotes: { teamA: new Set(), teamB: new Set() },
+      messageId: null,
+      timeout: null
+    };
+    return showHostSelection(match, ctx.telegram);
+  }
 
+  /* ── CASE 2: A player requests a vote ── */
   const isPlayer =
     match.teamA?.some(p => p.id === userId) ||
     match.teamB?.some(p => p.id === userId);
 
   if (!isPlayer)
-    return ctx.reply("❌ Only match players can request a host change.");
+    return ctx.reply("❌ Only the current host or match players can use /changehost.");
 
   return startHostVoting(match, ctx);
 });
@@ -79,6 +101,7 @@ async function startHostVoting(match, ctx) {
   const msg = await ctx.reply(
     getVoteText(match),
     {
+      parse_mode: "HTML",
       reply_markup: {
         inline_keyboard: [
           [{ text: "✅ Vote for Host Change", callback_data: "vote_host_change" }],
@@ -103,7 +126,7 @@ async function startHostVoting(match, ctx) {
 
     await bot.telegram.sendMessage(
       m.groupId,
-"⏱ Voting Expired\n\n<blockquote>No host change made.</blockquote>",
+      "⏱ Voting Expired\n\n<blockquote>No host change made.</blockquote>",
       { parse_mode: "HTML" }
     );
 
@@ -133,6 +156,8 @@ bot.action("vote_host_change", async (ctx) => {
     return ctx.answerCbQuery("Voting not active.");
 
   const userId = ctx.from.id;
+
+  // Host themselves can cast a vote too (counts for their own override)
   const isPlayer =
     match.teamA?.some(p => p.id === userId) ||
     match.teamB?.some(p => p.id === userId);
@@ -141,16 +166,18 @@ bot.action("vote_host_change", async (ctx) => {
     return ctx.answerCbQuery("Only match players can vote.");
 
   const team = getPlayerTeam(match, userId);
-  if (!team || !match.hostChange.teamVotes[team])
+  const teamKey = team === "A" ? "teamA" : "teamB";
+
+  if (!team || !match.hostChange.teamVotes[teamKey])
     return ctx.answerCbQuery("Invalid team.");
 
-  if (match.hostChange.teamVotes[team].has(userId))
+  if (match.hostChange.teamVotes[teamKey].has(userId))
     return ctx.answerCbQuery("You already voted.");
 
-  if (match.hostChange.teamVotes[team].size >= 2)
+  if (match.hostChange.teamVotes[teamKey].size >= 2)
     return ctx.answerCbQuery("Your team already has 2 votes.");
 
-  match.hostChange.teamVotes[team].add(userId);
+  match.hostChange.teamVotes[teamKey].add(userId);
   ctx.answerCbQuery("Vote counted ✅");
 
   try {
@@ -160,6 +187,7 @@ bot.action("vote_host_change", async (ctx) => {
       null,
       getVoteText(match),
       {
+        parse_mode: "HTML",
         reply_markup: {
           inline_keyboard: [
             [{ text: "✅ Vote for Host Change", callback_data: "vote_host_change" }],
@@ -170,8 +198,8 @@ bot.action("vote_host_change", async (ctx) => {
     );
   } catch {}
 
-  const requiredA = Math.min(2, match.teamA.length);
-  const requiredB = Math.min(2, match.teamB.length);
+  const requiredA = Math.min(2, match.teamA?.length || 0);
+  const requiredB = Math.min(2, match.teamB?.length || 0);
 
   if (
     match.hostChange.teamVotes.teamA.size >= requiredA &&
@@ -179,30 +207,28 @@ bot.action("vote_host_change", async (ctx) => {
   ) {
     clearTimeout(match.hostChange.timeout);
     match.hostChange.active = false;
-    return showHostSelection(match);
+
+    // Remove voting buttons before showing selection
+    try {
+      await bot.telegram.editMessageReplyMarkup(
+        match.groupId, match.hostChange.messageId, null, { inline_keyboard: [] }
+      );
+    } catch {}
+
+    return showHostSelection(match, bot.telegram);
   }
 });
 
 
 /* ================= HOST SELECTION ================= */
 
-async function showHostSelection(match) {
-
-  if (!match.hostChange) return;
+async function showHostSelection(match, telegram) {
 
   match.hostChange.phase = "selection";
 
-  if (match.hostChange?.messageId) {
-    try {
-      await bot.telegram.editMessageReplyMarkup(
-        match.groupId, match.hostChange.messageId, null, { inline_keyboard: [] }
-      );
-    } catch {}
-  }
-
-  const msg = await bot.telegram.sendMessage(
+  const msg = await telegram.sendMessage(
     match.groupId,
-    "✅ Voting Passed\n\n<blockquote>A non-playing member can now take host.</blockquote>",
+    "✅ Host Change Approved\n\n<blockquote>A non-playing member can now tap below to take host.</blockquote>",
     {
       parse_mode: "HTML",
       reply_markup: {
@@ -215,6 +241,19 @@ async function showHostSelection(match) {
   );
 
   match.hostChange.messageId = msg.message_id;
+
+  // Auto-expire selection after 60s
+  match.hostChange.timeout = setTimeout(async () => {
+    const m = matches.get(match.groupId);
+    if (!m?.hostChange || m.hostChange.phase !== "selection") return;
+    try {
+      await bot.telegram.editMessageReplyMarkup(
+        m.groupId, m.hostChange.messageId, null, { inline_keyboard: [] }
+      );
+    } catch {}
+    await bot.telegram.sendMessage(m.groupId, "⏱ Host selection expired. No change made.");
+    m.hostChange = null;
+  }, 60000);
 }
 
 
@@ -224,7 +263,7 @@ bot.action("take_host", async (ctx) => {
 
   const match = getMatch(ctx);
   if (!match?.hostChange || match.hostChange.phase !== "selection")
-    return ctx.answerCbQuery("Not allowed.");
+    return ctx.answerCbQuery("Not allowed now.");
 
   const userId = ctx.from.id;
   const isPlaying =
@@ -236,6 +275,12 @@ bot.action("take_host", async (ctx) => {
 
   if (ctx.from.is_bot)
     return ctx.answerCbQuery("Bots cannot become host.");
+
+  // Clear selection timer
+  if (match.hostChange.timeout) {
+    clearTimeout(match.hostChange.timeout);
+    match.hostChange.timeout = null;
+  }
 
   match.host = userId;
 
@@ -249,8 +294,8 @@ bot.action("take_host", async (ctx) => {
 
   await bot.telegram.sendMessage(
     match.groupId,
-`👑 New Host\n\n<blockquote>${getDisplayName(ctx.from)}</blockquote>`,
-      { parse_mode: "HTML" }
+    `👑 New Host\n\n<blockquote>${getDisplayName(ctx.from)}</blockquote>`,
+    { parse_mode: "HTML" }
   );
 
   ctx.answerCbQuery("You are now host 👑");
@@ -265,10 +310,17 @@ bot.action("cancel_host_vote", async (ctx) => {
   if (!match?.hostChange) return ctx.answerCbQuery("No active process.");
 
   const userId = ctx.from.id;
-  if (match.hostChange.phase !== "selection" && userId !== match.host)
-    return ctx.answerCbQuery("Only host can cancel.");
 
-  clearTimeout(match.hostChange.timeout);
+  // Only the current host OR anyone if in selection phase (vote already passed)
+  if (match.hostChange.phase === "voting" && userId !== match.host) {
+    // Players can't cancel a vote they started — only host can cancel
+    return ctx.answerCbQuery("Only the host can cancel the vote.");
+  }
+
+  if (match.hostChange.timeout) {
+    clearTimeout(match.hostChange.timeout);
+    match.hostChange.timeout = null;
+  }
 
   try {
     await bot.telegram.editMessageReplyMarkup(
@@ -276,9 +328,7 @@ bot.action("cancel_host_vote", async (ctx) => {
     );
   } catch {}
 
-  await bot.telegram.sendMessage(match.groupId,
-"✖️ Host Change Cancelled"
-  );
+  await bot.telegram.sendMessage(match.groupId, "✖️ Host Change Cancelled");
 
   match.hostChange = null;
   ctx.answerCbQuery("Cancelled.");

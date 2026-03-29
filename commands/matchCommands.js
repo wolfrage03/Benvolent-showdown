@@ -6,7 +6,8 @@ const {
   matches,
   deleteMatch
 } = require("../matchManager");
-const box = require("../utils/boxMessage");
+const box          = require("../utils/boxMessage");
+const archiveMatch = require("../utils/archiveMatch");
 
 module.exports = function (bot, helpers) {
 
@@ -123,15 +124,18 @@ module.exports = function (bot, helpers) {
 
     try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
 
+    // ── Save match snapshot to MongoDB before wiping ──
+    await archiveMatch(match, "force_ended");
+
     await ctx.reply(
-"🛑 Match Ended\n\n<blockquote>👉 /start to begin a new match</blockquote>",
+"🛑 Match Ended\n\n<blockquote>Match data has been saved.\n👉 /start to begin a new match</blockquote>",
       { parse_mode: "HTML" }
     );
 
     clearTimers(match);
     clearDelayTimers(match);
     clearActiveMatchPlayers(match);
-    match.phase = "idle";
+    match.phase      = "idle";
     match.matchEnded = true;
     match.inningsEnded = true;
 
