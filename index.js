@@ -74,7 +74,7 @@ bot.use(async (ctx, next) => {
 
 async function isUserBanned(userId) {
   try {
-    const user = await User.collection.findOne({ telegramId: String(userId) });
+    const user = await User.findOne({ telegramId: String(userId) });
     return user?.banned === true;
   } catch (e) {
     console.error("[BAN CHECK] error:", e.message);
@@ -86,7 +86,7 @@ bot.use(async (ctx, next) => {
   const userId = ctx.from?.id;
   if (!userId) return next();
   try {
-    const user = await User.collection.findOne({ telegramId: String(userId) });
+    const user = await User.findOne({ telegramId: String(userId) });
     if (user?.banned === true) {
       console.log(`[BAN BLOCK] userId=${userId}`);
       if (ctx.callbackQuery) {
@@ -98,6 +98,7 @@ bot.use(async (ctx, next) => {
     }
   } catch (e) {
     console.error("[BAN MIDDLEWARE] error:", e.message);
+    return next();   // ← ADD THIS LINE
   }
   return next();
 });
