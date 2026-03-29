@@ -78,8 +78,6 @@ bot.use(async (ctx, next) => {
   const userId = ctx.from?.id;
   if (!userId) return next();
   try {
-    // FIXED: Use mongoose model method (not User.collection.findOne)
-    // User.collection.findOne bypasses mongoose and fails if DB not ready
     const user = await User.findOne({ telegramId: String(userId) }).lean();
     if (user?.banned === true) {
       console.log(`[BAN BLOCK] userId=${userId}`);
@@ -88,14 +86,29 @@ bot.use(async (ctx, next) => {
       } else if (ctx.message) {
         try { await ctx.reply("🚫 You are banned from this bot."); } catch {}
       }
-      return; // do NOT call next()
+      return;
     }
   } catch (e) {
     console.error("[BAN MIDDLEWARE] error:", e.message);
-    // FIXED: Always call next() on error so commands are not silently dropped
   }
   return next();
 });
+
+
+/* ================= isUserBanned ================= */
+// FIXED: Must be defined BEFORE the helpers object below.
+// Previously it was defined at the bottom of the file, so helpers.isUserBanned
+// was undefined when passed into command files — causing the ban check to silently fail.
+
+async function isUserBanned(userId) {
+  try {
+    const user = await User.findOne({ telegramId: String(userId) }).lean();
+    return user?.banned === true;
+  } catch (e) {
+    console.error("[BAN CHECK] error:", e.message);
+    return false;
+  }
+}
 
 
 /* ================= HELPERS ================= */
@@ -299,7 +312,7 @@ const helpers = {
   clearTimers,
   clearDelayTimers,
   clearActiveMatchPlayers,
-  isUserBanned,
+  isUserBanned,          // ← now a real function, defined above
   startToss: null
 };
 
@@ -325,9 +338,6 @@ require("./commands/handleInput")(bot, helpers);
 
 
 /* ================= REGISTER COMMAND HANDLERS ================= */
-// FIXED: Moved to BEFORE file ID logger and bot.catch
-// Previously these were at the very bottom AFTER bot.catch which
-// caused them to be registered too late in some Telegraf versions
 
 registerStartHandler(bot);
 registerStatsHandler(bot);
@@ -386,8 +396,6 @@ bot.catch((err, ctx) => {
   console.error("Error:", err);
 });
 
-// FIXED: This middleware must be registered BEFORE commands, not after
-// Moved answerCbQuery middleware to top — after ban check
 bot.use(async (ctx, next) => {
   if (ctx.callbackQuery) {
     try { await ctx.answerCbQuery(); } catch {}
@@ -396,24 +404,11 @@ bot.use(async (ctx, next) => {
 });
 
 
-/* ================= isUserBanned EXPORT HELPER ================= */
-
-async function isUserBanned(userId) {
-  try {
-    const user = await User.findOne({ telegramId: String(userId) }).lean();
-    return user?.banned === true;
-  } catch (e) {
-    console.error("[BAN CHECK] error:", e.message);
-    return false;
-  }
-}
-
-
 /* ================= LAUNCH ================= */
 
 (async () => {
-  await initializeApp();   // DB connects here first
-  await initializeBot();   // then fetch bot username
+  await initializeApp();
+  await initializeBot();
   await bot.launch();
   console.log("🚀 Bot started successfully");
 })();
