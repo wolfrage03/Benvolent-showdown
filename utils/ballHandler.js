@@ -22,7 +22,6 @@ function init(deps) {
 
 /* ================= DISAPPEARING EMOJI ================= */
 
-// Text emoji — no file IDs needed, auto-deletes after 1.5s
 const RESULT_EMOJI = {
   skull: "💀",  // wicket
   fire:  "🔥",  // 4, 5, 6
@@ -40,8 +39,8 @@ async function sendDisappearingEmoji(groupId, replyToMsgId, emojiKey) {
   if (!emoji) return;
   try {
     const sent = await bot.telegram.sendMessage(groupId, emoji, {
-      reply_to_message_id:          replyToMsgId,
-      allow_sending_without_reply:  true,
+      reply_to_message_id:         replyToMsgId,
+      allow_sending_without_reply: true,
     });
     setTimeout(() => {
       bot.telegram.deleteMessage(groupId, sent.message_id).catch(() => {});
@@ -109,7 +108,6 @@ async function ballTimeout(match) {
         if (!match.suspendedBowlers) match.suspendedBowlers = {};
         match.suspendedBowlers[match.bowler] = match.currentOver + 1;
         match.phase = "set_bowler";
-
         await bot.telegram.sendMessage(
           match.groupId,
           "🚫 Bowler Suspended\n\n<blockquote>Consecutive delays\nCannot bowl this over or next</blockquote>\n\n👉 /bowler [number] new bowler",
@@ -294,10 +292,10 @@ async function processBall(match) {
         "⚠️ Hattrick Ball!\n\n<blockquote>Cannot play 0 — two wickets in a row!</blockquote>",
         { parse_mode: "HTML" }
       );
-      match.batNumber    = null;
-      match.awaitingBat  = true;
-      match.ballLocked   = false;
-      hattrickRetry      = true;
+      match.batNumber   = null;
+      match.awaitingBat = true;
+      match.ballLocked  = false;
+      hattrickRetry     = true;
       startTurnTimer(match, "bat");
       return;
     }
@@ -314,7 +312,7 @@ async function processBall(match) {
     match.bowlerStats[match.bowler].balls++;
     match.bowlerStats[match.bowler].history.push(bat);
 
-    /* ── WICKET ── */
+    /* ══════════════ WICKET ══════════════ */
     if (bat === bowl) {
       match.wickets++;
       match.wicketStreak++;
@@ -334,14 +332,7 @@ async function processBall(match) {
       const batterRunsAtDismissal = match.batterStats[match.striker]?.runs ?? 0;
       const isDuck     = batterRunsAtDismissal === 0;
       const isHattrick = match.wicketStreak === 3;
-
-      // ── Swap strike on last ball wicket BEFORE scorecard ──
-      // If the ball is ball 6 (over-ending wicket), swap ends now so
-      // the non-striker carries strike into the new over (dismissed batter is gone).
       const isLastBall = match.currentBall >= 6;
-      if (isLastBall) {
-        swapStrike(match);
-      }
 
       // Disappearing 💀
       await sendDisappearingEmoji(match.groupId, match.strikerMessageId, "skull");
@@ -396,9 +387,14 @@ async function processBall(match) {
         return;
       }
 
-      // ── Wicket on ball 6: over ends — pass wasWicket=true so
-      //    checkOverEnd skips its own swapStrike (we already swapped above)
       if (isLastBall) {
+        // ── Last ball wicket ──
+        // Do NOT swapStrike here.
+        // New batter will be set as striker by /batter.
+        // checkOverEnd (wasWicket=true) will then swap:
+        //   new batter (striker) ↔ nonStriker
+        // → nonStriker faces first ball of next over ✓
+        // → new batter is at nonStriker end ✓
         const overEnded = await checkOverEnd(match, true);
         if (overEnded) return;
       }
@@ -416,7 +412,7 @@ async function processBall(match) {
       return;
     }
 
-    /* ── RUNS ── */
+    /* ══════════════ RUNS ══════════════ */
     match.score                   += bat;
     match.currentOverRuns         += bat;
     match.currentPartnershipRuns  += bat;

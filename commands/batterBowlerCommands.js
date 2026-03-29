@@ -5,11 +5,11 @@ const ballHandler = require("../utils/ballHandler");
 
 module.exports = function (bot, helpers) {
 
-  const { isHost, getName } = helpers;
+  const { isHost, getName, swapStrike } = helpers;
 
   function orderedBattingPlayers(match) {
     if (!match) return [];
-    const players = match.battingTeam === "A" ? match.teamA : match.teamB;
+    const players   = match.battingTeam === "A" ? match.teamA : match.teamB;
     const captainId = match.battingTeam === "A" ? match.captains.A : match.captains.B;
     return [
       ...players.filter(p => p.id === captainId),
@@ -41,8 +41,8 @@ module.exports = function (bot, helpers) {
 
     try { await ctx.deleteMessage(); } catch {}
 
-    const args = ctx.message.text.trim().split(/\s+/);
-    const num  = parseInt(args[1], 10);
+    const args    = ctx.message.text.trim().split(/\s+/);
+    const num     = parseInt(args[1], 10);
     const players = orderedBattingPlayers(match);
 
     if (isNaN(num)) return ctx.reply("❌ Usage: /batter 2");
@@ -103,12 +103,13 @@ module.exports = function (bot, helpers) {
     }
 
 
-    /* ── NEW BATTER (mid-over or last-ball wicket) ── */
+    /* ── NEW BATTER (mid-over wicket OR last-ball wicket) ── */
     if (match.phase === "new_batter") {
 
       if (selected.id === match.nonStriker)
         return ctx.reply("⚠️ Choose a different player");
 
+      // New batter replaces dismissed striker
       match.striker = selected.id;
       match.batterStats[selected.id] = { runs: 0, balls: 0, fours: 0, fives: 0, sixes: 0 };
 
@@ -123,9 +124,18 @@ module.exports = function (bot, helpers) {
         { parse_mode: "HTML" }
       );
 
-      // ── Send deferred over scorecard (set when a wicket ended the over) ──
-      if (match.pendingOverScorecard) {
-        match.pendingOverScorecard = false;
+      // ── Last-ball wicket: pendingOverEnd was set by checkOverEnd ──
+      // Now that new batter is striker we can do the end-of-over swap:
+      //   striker (new batter) ↔ nonStriker (old nonStriker)
+      // Result: old nonStriker faces ball 1 of next over ✓
+      //         new batter is at nonStriker end ✓
+      if (match.pendingOverEnd) {
+        match.pendingOverEnd = false;
+
+        // Swap ends
+        swapStrike(match);
+
+        // Send over scorecard now that positions are correct
         try {
           await bot.telegram.sendMessage(
             match.groupId,
@@ -133,10 +143,8 @@ module.exports = function (bot, helpers) {
             { parse_mode: "HTML" }
           );
         } catch (e) { console.error("Deferred scorecard failed:", e.message); }
-      }
 
-      // New over — need a bowler first
-      if (match.bowler === null) {
+        // Need new bowler for the new over
         match.phase = "set_bowler";
         return ctx.reply(
           "👉 /bowler [number] set bowler for new over",
@@ -144,7 +152,16 @@ module.exports = function (bot, helpers) {
         );
       }
 
-      // Mid-over wicket — bowler already set, resume play
+      // ── Mid-over wicket: no over-end swap needed ──
+      if (match.bowler === null) {
+        match.phase = "set_bowler";
+        return ctx.reply(
+          "👉 /bowler [number] set bowler",
+          { parse_mode: "HTML" }
+        );
+      }
+
+      // Bowler already set — resume play immediately
       match.phase = "play";
       return ballHandler.startBall(match);
     }
