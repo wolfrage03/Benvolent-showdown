@@ -36,7 +36,11 @@ module.exports = function (bot, helpers) {
         return ctx.reply("⏳ Processing previous ball — please wait");
 
       match.batNumber = Number(text);
+      match.strikerMessageId = ctx.message.message_id;
       match.awaitingBat = false;
+
+      // Non-blocking delete — never holds up ball processing
+      ctx.deleteMessage().catch(() => {});
 
       if (match.bowlNumber === null) return;
 

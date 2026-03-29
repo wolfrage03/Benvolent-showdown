@@ -31,14 +31,14 @@ bot.command("createteam", async (ctx) => {
   // Delete the /createteam command message
   try { await ctx.deleteMessage(); } catch {}
 
-  // Send lobby message first
+  // Pin player list FIRST
+  await sendAndPinPlayerList(match, ctx.telegram);
+
+  // Lobby open message AFTER
   await ctx.reply(
 `🟢 Lobby Open\n\n<blockquote>🔵 ${match.teamAName} 〔Team A〕\n🔴 ${match.teamBName} 〔Team B〕</blockquote>\n\n/joina  /joinb\n⏱ Closes in 60s   /closejoin`,
     { parse_mode: "HTML" }
   );
-
-  // Then pin the player list (appears above lobby in chat, pinned at top)
-  await sendAndPinPlayerList(match, ctx.telegram);
 
   match.joinTimer = setTimeout(async () => {
 
