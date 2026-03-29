@@ -23,11 +23,10 @@ function init(deps) {
 
 /* ================= DISAPPEARING EMOJI ================= */
 
-// Sticker file IDs — fill these in after sending stickers to bot DM
-const RESULT_STICKERS = {
-  skull: "",  // 💀 wicket — paste file_id here
-  fire:  "",  // 🔥 4,5,6  — paste file_id here
-  fist:  "",  // 🤜 0,1,2,3 — paste file_id here
+const RESULT_EMOJI = {
+  skull: "💀",
+  fire:  "🔥",
+  fist:  "🤜",
 };
 
 function getResultEmoji(bat, isWicket) {
@@ -37,12 +36,12 @@ function getResultEmoji(bat, isWicket) {
 }
 
 async function sendDisappearingEmoji(groupId, replyToMsgId, emojiKey) {
-  const fileId = RESULT_STICKERS[emojiKey];
-  if (!fileId) return;
+  const emoji = RESULT_EMOJI[emojiKey];
+  if (!emoji) return;
   try {
-    const sent = await bot.telegram.sendSticker(groupId, fileId, {
+    const sent = await bot.telegram.sendMessage(groupId, emoji, {
       reply_to_message_id: replyToMsgId,
-      allow_sending_without_reply: true
+      allow_sending_without_reply: true,
     });
     setTimeout(() => {
       bot.telegram.deleteMessage(groupId, sent.message_id).catch(() => {});

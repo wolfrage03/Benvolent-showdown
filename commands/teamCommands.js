@@ -155,7 +155,7 @@ bot.command("joinb", async (ctx) => {
     return ctx.reply("⚠️ Already in Team B.");
 
   if (match.teamA.some(p => p.id === ctx.from.id))
-    return ctx.reply("⚠️ Already in Team A.");
+    return ctx.reply("⚠️ Already in Team B.");
 
   const name = ctx.from.first_name || "Player";
 
@@ -256,7 +256,6 @@ or reply to a message + /add A`
     let userId, name, mention;
 
     if (raw.startsWith("@")) {
-      // @username — look up in DB (user must have /start-ed the bot)
       const username = raw.replace("@", "").toLowerCase().trim();
       const user = await User.findOne({ username: { $regex: new RegExp(`^${username}$`, "i") } });
       if (!user) {
@@ -270,23 +269,19 @@ or reply to a message + /add A`
       mention = `<a href="tg://user?id=${userId}">${name}</a>`;
 
     } else if (/^\d+$/.test(raw)) {
-      // Numeric user ID — try DB first, then fetch live from Telegram
       userId = Number(raw);
       const dbUser = await User.findOne({ telegramId: String(userId) });
       if (dbUser) {
-        // Known user — use stored name
         name = dbUser.firstName
           ? (dbUser.lastName ? `${dbUser.firstName} ${dbUser.lastName}` : dbUser.firstName)
           : (dbUser.username || `User_${userId}`);
       } else {
-        // Not in DB — ask Telegram directly for their name
         try {
           const chat = await bot.telegram.getChat(userId);
           name = chat.first_name
             ? (chat.last_name ? `${chat.first_name} ${chat.last_name}` : chat.first_name)
             : (chat.username || `User_${userId}`);
         } catch (e) {
-          // Telegram can't resolve — user has never interacted with the bot
           name = `User_${userId}`;
         }
       }
@@ -312,7 +307,6 @@ or reply to a message + /add A`
     added.push(mention);
   }
 
-  // Recalculate maxWickets if match in progress
   const matchInProgress = ["set_striker","set_non_striker","set_bowler","play","new_batter"].includes(match.phase);
   if (matchInProgress && added.length) {
     const battingTeamArr = match.battingTeam === "A" ? match.teamA : match.teamB;
