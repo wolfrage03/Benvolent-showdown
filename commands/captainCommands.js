@@ -10,7 +10,7 @@ const box = require("../utils/boxMessage");
 function buildPlayerListText(match) {
 
   function formatTeam(teamArray, captainId) {
-    if (!teamArray || !teamArray.length) return "<blockquote>—</blockquote>";
+    if (!teamArray || !teamArray.length) return "<blockquote>Waiting for players...</blockquote>";
 
     const ordered = [
       ...teamArray.filter(p => p.id === captainId),

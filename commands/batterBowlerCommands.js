@@ -32,6 +32,9 @@ module.exports = function (bot, helpers) {
     if (ctx.chat.id !== match.groupId)
       return ctx.reply("⚠️ Send batter number in GROUP only.");
 
+    // Delete the command message
+    try { await ctx.deleteMessage(); } catch {}
+
     const args = ctx.message.text.trim().split(/\s+/);
     const num = parseInt(args[1], 10);
     const players = orderedBattingPlayers(match);
@@ -145,6 +148,9 @@ module.exports = function (bot, helpers) {
 
     if (!isHost(match, ctx.from.id))
       return ctx.reply("❌ Only host can set bowler.");
+
+    // Delete the command message
+    try { await ctx.deleteMessage(); } catch {}
 
     const num = parseInt(ctx.message.text.split(" ")[1]);
     if (isNaN(num)) return ctx.reply("❌ Usage: /bowler 2");

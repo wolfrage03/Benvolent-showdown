@@ -11,7 +11,7 @@ const { isHost, isUserBanned } = helpers;
 
 /* ================= CREATE TEAM ================= */
 
-bot.command("createteam", (ctx) => {
+bot.command("createteam", async (ctx) => {
 
   const match = getMatch(ctx);
   if (!match) return ctx.reply("⚠️ No active match.");
@@ -28,10 +28,17 @@ bot.command("createteam", (ctx) => {
 
   match.phase = "join";
 
-  ctx.reply(
+  // Delete the /createteam command message
+  try { await ctx.deleteMessage(); } catch {}
+
+  // Send lobby message first
+  await ctx.reply(
 `🟢 Lobby Open\n\n<blockquote>🔵 ${match.teamAName} 〔Team A〕\n🔴 ${match.teamBName} 〔Team B〕</blockquote>\n\n/joina  /joinb\n⏱ Closes in 60s   /closejoin`,
     { parse_mode: "HTML" }
   );
+
+  // Then pin the player list (appears above lobby in chat, pinned at top)
+  await sendAndPinPlayerList(match, ctx.telegram);
 
   match.joinTimer = setTimeout(async () => {
 
@@ -85,7 +92,8 @@ bot.command("joina", async (ctx) => {
   if (match.phase !== "join")
     return ctx.reply("⚠️ Joining is closed.");
 
-  // Ban check handled by global middleware in index.js — no duplicate check needed here
+  const dbUser = await User.collection.findOne({ telegramId: String(ctx.from.id) });
+  if (dbUser?.banned === true) return ctx.reply("🚫 You are banned from this bot.");
 
   if (playerActiveMatch.has(ctx.from.id))
     return ctx.reply("❌ You're already in a match.");
@@ -109,7 +117,14 @@ bot.command("joina", async (ctx) => {
 
   playerActiveMatch.set(ctx.from.id, match.groupId);
 
-  await ctx.reply(`✅ ${name} joined 🔵 〔Team A〕 ${match.teamAName}`);
+  // Delete /joina command message
+  try { await ctx.deleteMessage(); } catch {}
+
+  // Send join confirmation then delete it after 3s
+  const joinMsg = await ctx.reply(`✅ ${name} joined 🔵 〔Team A〕 ${match.teamAName}`);
+  setTimeout(() => {
+    bot.telegram.deleteMessage(match.groupId, joinMsg.message_id).catch(() => {});
+  }, 1500);
 
   await sendAndPinPlayerList(match, ctx.telegram);
 
@@ -126,7 +141,8 @@ bot.command("joinb", async (ctx) => {
   if (match.phase !== "join")
     return ctx.reply("⚠️ Joining is closed.");
 
-  // Ban check handled by global middleware in index.js — no duplicate check needed here
+  const dbUser = await User.collection.findOne({ telegramId: String(ctx.from.id) });
+  if (dbUser?.banned === true) return ctx.reply("🚫 You are banned from this bot.");
 
   if (playerActiveMatch.has(ctx.from.id))
     return ctx.reply("❌ You're already in a match.");
@@ -150,7 +166,14 @@ bot.command("joinb", async (ctx) => {
 
   playerActiveMatch.set(ctx.from.id, match.groupId);
 
-  await ctx.reply(`✅ ${name} joined 🔴 〔Team B〕 ${match.teamBName}`);
+  // Delete /joinb command message
+  try { await ctx.deleteMessage(); } catch {}
+
+  // Send join confirmation then delete it after 3s
+  const joinMsg = await ctx.reply(`✅ ${name} joined 🔴 〔Team B〕 ${match.teamBName}`);
+  setTimeout(() => {
+    bot.telegram.deleteMessage(match.groupId, joinMsg.message_id).catch(() => {});
+  }, 1500);
 
   await sendAndPinPlayerList(match, ctx.telegram);
 
