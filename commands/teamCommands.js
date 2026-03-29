@@ -8,6 +8,13 @@ module.exports = function (bot, helpers) {
 
 const { isHost, isUserBanned } = helpers;
 
+/* ================= AUTO-DELETE HELPER ================= */
+
+function autoDelete(bot, groupId, messageId, ms = 2000) {
+  setTimeout(() => {
+    bot.telegram.deleteMessage(groupId, messageId).catch(() => {});
+  }, ms);
+}
 
 /* ================= CREATE TEAM ================= */
 
@@ -28,30 +35,24 @@ bot.command("createteam", async (ctx) => {
 
   match.phase = "join";
 
-  // Delete the /createteam command message
   try { await ctx.deleteMessage(); } catch {}
 
-  // Pin player list FIRST
   await sendAndPinPlayerList(match, ctx.telegram);
 
-  // Lobby open message AFTER
   await ctx.reply(
 `🟢 Lobby Open\n\n<blockquote>🔵 ${match.teamAName} 〔Team A〕\n🔴 ${match.teamBName} 〔Team B〕</blockquote>\n\n/joina  /joinb\n⏱ Closes in 60s   /closejoin`,
     { parse_mode: "HTML" }
   );
 
   match.joinTimer = setTimeout(async () => {
-
     if (match.phase !== "join") return;
     match.phase = "teams_set";
     if (match.joinTimer) { clearTimeout(match.joinTimer); match.joinTimer = null; }
-
     await bot.telegram.sendMessage(
       match.groupId,
 `🔒 Joining Closed\n\n<blockquote>🔵 ${match.teamAName} 〔Team A〕  ${match.teamA.length}p\n🔴 ${match.teamBName} 〔Team B〕  ${match.teamB.length}p</blockquote>\n\n👉 /choosecap to continue`,
       { parse_mode: "HTML" }
     );
-
   }, 60000);
 
 });
@@ -77,7 +78,7 @@ bot.command("closejoin", async (ctx) => {
   try { await ctx.deleteMessage(); } catch {}
   await ctx.reply(
 `🔒 Joining Closed\n\n<blockquote>🔵 ${match.teamAName} 〔Team A〕  ${match.teamA.length}p\n🔴 ${match.teamBName} 〔Team B〕  ${match.teamB.length}p</blockquote>\n\n👉 /choosecap to continue`,
-      { parse_mode: "HTML" }
+    { parse_mode: "HTML" }
   );
 
 });
@@ -118,14 +119,10 @@ bot.command("joina", async (ctx) => {
 
   playerActiveMatch.set(ctx.from.id, match.groupId);
 
-  // Delete /joina command message
   try { await ctx.deleteMessage(); } catch {}
 
-  // Send join confirmation then delete it after 3s
   const joinMsg = await ctx.reply(`✅ ${name} joined 🔵 〔Team A〕 ${match.teamAName}`);
-  setTimeout(() => {
-    bot.telegram.deleteMessage(match.groupId, joinMsg.message_id).catch(() => {});
-  }, 1500);
+  autoDelete(bot, match.groupId, joinMsg.message_id);
 
   await sendAndPinPlayerList(match, ctx.telegram);
 
@@ -155,7 +152,7 @@ bot.command("joinb", async (ctx) => {
     return ctx.reply("⚠️ Already in Team B.");
 
   if (match.teamA.some(p => p.id === ctx.from.id))
-    return ctx.reply("⚠️ Already in Team B.");
+    return ctx.reply("⚠️ Already in Team A.");
 
   const name = ctx.from.first_name || "Player";
 
@@ -167,14 +164,10 @@ bot.command("joinb", async (ctx) => {
 
   playerActiveMatch.set(ctx.from.id, match.groupId);
 
-  // Delete /joinb command message
   try { await ctx.deleteMessage(); } catch {}
 
-  // Send join confirmation then delete it after 3s
   const joinMsg = await ctx.reply(`✅ ${name} joined 🔴 〔Team B〕 ${match.teamBName}`);
-  setTimeout(() => {
-    bot.telegram.deleteMessage(match.groupId, joinMsg.message_id).catch(() => {});
-  }, 1500);
+  autoDelete(bot, match.groupId, joinMsg.message_id);
 
   await sendAndPinPlayerList(match, ctx.telegram);
 
@@ -235,12 +228,12 @@ or reply to a message + /add A`
 
     try { await ctx.deleteMessage(); } catch {}
     const addMsg = await ctx.reply(`✅ ${mention} added to 〔<b>Team ${team}</b>〕`, { parse_mode: "HTML" });
-    setTimeout(() => { bot.telegram.deleteMessage(match.groupId, addMsg.message_id).catch(() => {}); }, 3000);
+    autoDelete(bot, match.groupId, addMsg.message_id);
     await sendAndPinPlayerList(match, ctx.telegram);
     return;
   }
 
-  /* ── MULTI-USER METHOD (@username or user ID, multiple allowed) ── */
+  /* ── MULTI-USER METHOD ── */
   const targets = args.slice(2);
   if (!targets.length)
     return ctx.reply(
@@ -321,7 +314,7 @@ or reply to a message + /add A`
 
   try { await ctx.deleteMessage(); } catch {}
   const addMsg = await ctx.reply(lines.join("\n\n"), { parse_mode: "HTML" });
-  setTimeout(() => { bot.telegram.deleteMessage(match.groupId, addMsg.message_id).catch(() => {}); }, 3000);
+  autoDelete(bot, match.groupId, addMsg.message_id);
 
   if (added.length) await sendAndPinPlayerList(match, ctx.telegram);
 
@@ -344,10 +337,7 @@ bot.command("remove", async (ctx) => {
   const args = ctx.message.text.trim().split(/\s+/);
 
   if (args.length < 2)
-    return ctx.reply(
-`ℹ️ Usage
-/remove A1  or  /remove B2`
-    );
+    return ctx.reply("ℹ️ Usage\n/remove A1  or  /remove B2");
 
   const arg  = args[1].toUpperCase();
   const team = arg[0];
@@ -392,7 +382,7 @@ bot.command("remove", async (ctx) => {
 
   try { await ctx.deleteMessage(); } catch {}
   const removeMsg = await ctx.reply(`✖️ ${removed.name} removed from 〔Team ${team}〕`);
-  setTimeout(() => { bot.telegram.deleteMessage(match.groupId, removeMsg.message_id).catch(() => {}); }, 3000);
+  autoDelete(bot, match.groupId, removeMsg.message_id);
 
   await sendAndPinPlayerList(match, ctx.telegram);
 
@@ -490,7 +480,7 @@ bot.action("confirm_team_change", async (ctx) => {
 `✅ ${player.mention} moved to 〔<b>Team ${target}</b>〕`,
     { parse_mode: "HTML" }
   );
-  setTimeout(() => { bot.telegram.deleteMessage(match.groupId, moveMsg.message_id).catch(() => {}); }, 3000);
+  autoDelete(bot, match.groupId, moveMsg.message_id);
 
   await sendAndPinPlayerList(match, ctx.telegram);
 

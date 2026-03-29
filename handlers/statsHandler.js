@@ -13,10 +13,13 @@ function isAdmin(ctx) {
   return result;
 }
 
-/* ================= ESCAPE UTILITY ================= */
+/* ================= HTML ESCAPE ================= */
 
 function esc(v) {
-  return String(v ?? "").replace(/([_*[\]()~`>#+\-=|{}.!\\])/g, "\\$1");
+  return String(v ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;");
 }
 
 /* ================= CARD BUILDER ================= */
@@ -24,50 +27,51 @@ function esc(v) {
 function buildStatsCard(displayName, firstName, stats, bat, bowl) {
   const lost = (stats.matches ?? 0) - (stats.matchesWon ?? 0);
 
-  return [
-    `*📊 Career Stats*`,
-    `*👤* ${firstName ? esc(firstName) + ' ' : ''}*${esc(displayName)}*`,
+  const lines = [
+    `<b>📊 Career Stats</b>`,
     ``,
-    `*🏟 Matches:* ${esc(stats.matches ?? 0)}`,
-    `*✅ Won:* ${esc(stats.matchesWon ?? 0)}  \\|  *❌ Lost:* ${esc(lost)}`,
-    `*🏅 MOM:* ${esc(stats.motm ?? 0)}`,
-    `*🎙 Hosted:* ${esc(stats.hosted ?? 0)}`,
+    `<b>👤 ${esc(firstName ? firstName + " " : "")}${esc(displayName)}</b>`,
     ``,
-    `*─── 🏏 Batting ───*`,
-    `*🔢  Innings:* ${esc(stats.inningsBatting ?? 0)}`,
-    `*🏃  Runs:* ${esc(stats.runs ?? 0)}  \\|  *⚾ Balls:* ${esc(stats.balls ?? 0)}`,
-    `*📈  Avg:* ${esc(bat.average)}  \\|  *⚡ SR:* ${esc(bat.strikeRate)}`,
-    `*🏏  Fours:* ${esc(stats.fours ?? 0)}`,
-    `*💫  Fives:* ${esc(stats.fives ?? 0)}`,
-    `*🚀  Sixes:* ${esc(stats.sixes ?? 0)}`,
-    `*⑤⓪ Half Century:* ${esc(stats.fifties ?? 0)}`,
-    `*💯  Century:* ${esc(stats.hundreds ?? 0)}`,
-    `*🌟  Best:* ${esc(stats.bestScore ?? 0)}  \\|  *🦆 Ducks:* ${esc(stats.ducks ?? 0)}`,
+    `<b>🏟 Matches:</b> ${stats.matches ?? 0}`,
+    `<b>✅ Won:</b> ${stats.matchesWon ?? 0}  |  <b>❌ Lost:</b> ${lost}`,
+    `<b>🏅 MOM:</b> ${stats.motm ?? 0}`,
     ``,
-    `*─── 🎯 Bowling ───*`,
-    `*🔢 Innings:* ${esc(stats.inningsBowling ?? 0)}`,
-    `*🎳 Wickets:* ${esc(stats.wickets ?? 0)}  \\|  *⚾ Balls:* ${esc(stats.ballsBowled ?? 0)}`,
-    `*💸 Runs:* ${esc(stats.runsConceded ?? 0)}  \\|  *🔒 Maidens:* ${esc(stats.maidens ?? 0)}`,
-    `*📉 Econ:* ${esc(bowl.economy)}  \\|  *⚡ SR:* ${esc(bowl.strikeRate)}`,
-    `*📊 Avg:* ${esc(bowl.average)}`,
-    `*🎩 3\\-Wicket Haul:* ${esc(stats.threeW ?? 0)}`,
-    `*👑 5\\-Wicket Haul:* ${esc(stats.fiveW ?? 0)}`,
-    `*🏆 Best:* ${esc(stats.bestBowlingWickets ?? 0)} / ${esc(stats.bestBowlingRuns ?? 0)}`,
-  ].join("\n");
+    `<b>─── 🏏 Batting ───</b>`,
+    `<b>🔢 Innings:</b> ${stats.inningsBatting ?? 0}`,
+    `<b>🏃 Runs:</b> ${stats.runs ?? 0}  |  <b>⚾ Balls:</b> ${stats.balls ?? 0}`,
+    `<b>📈 Avg:</b> ${bat.average}  |  <b>⚡ SR:</b> ${bat.strikeRate}`,
+    `<b>🏏 Fours:</b> ${stats.fours ?? 0}`,
+    `<b>💫 Fives:</b> ${stats.fives ?? 0}`,
+    `<b>🚀 Sixes:</b> ${stats.sixes ?? 0}`,
+    `<b>5️⃣0️⃣ Half Century:</b> ${stats.fifties ?? 0}`,
+    `<b>💯 Century:</b> ${stats.hundreds ?? 0}`,
+    `<b>🌟 Best:</b> ${stats.bestScore ?? 0}  |  <b>🦆 Ducks:</b> ${stats.ducks ?? 0}`,
+    ``,
+    `<b>─── 🎯 Bowling ───</b>`,
+    `<b>🔢 Innings:</b> ${stats.inningsBowling ?? 0}`,
+    `<b>🎳 Wickets:</b> ${stats.wickets ?? 0}  |  <b>⚾ Balls:</b> ${stats.ballsBowled ?? 0}`,
+    `<b>💸 Runs:</b> ${stats.runsConceded ?? 0}  |  <b>🔒 Maidens:</b> ${stats.maidens ?? 0}`,
+    `<b>📉 Econ:</b> ${bowl.economy}  |  <b>⚡ SR:</b> ${bowl.strikeRate}`,
+    `<b>📊 Avg:</b> ${bowl.average}`,
+    `<b>🎩 3-Wicket Haul:</b> ${stats.threeW ?? 0}`,
+    `<b>👑 5-Wicket Haul:</b> ${stats.fiveW ?? 0}`,
+    `<b>🏆 Best:</b> ${stats.bestBowlingWickets ?? 0} / ${stats.bestBowlingRuns ?? 0}`,
+  ];
+
+  return lines.join("\n");
 }
 
 /* ================= HANDLER ================= */
 
 function registerStatsHandler(bot) {
 
-  /* ================= MYID — check your Telegram ID ================= */
-  // Send /myid in DM to see your exact Telegram ID.
-  // If it doesn't match what's in ADMIN_IDS above, update ADMIN_IDS.
+  /* ================= MYID ================= */
+
   bot.command("myid", (ctx) => {
-    const id = ctx.from?.id;
+    const id       = ctx.from?.id;
     const username = ctx.from?.username || "no username";
     console.log(`[MYID] userId=${id} username=${username}`);
-    ctx.reply(`Your Telegram ID: \`${id}\`\nUsername: @${username}`, { parse_mode: "Markdown" });
+    ctx.reply(`Your Telegram ID: <code>${id}</code>\nUsername: @${esc(username)}`, { parse_mode: "HTML" });
   });
 
   /* ================= MY STATS ================= */
@@ -85,7 +89,10 @@ Play some matches first!`
       const username  = ctx.from.username ? `@${ctx.from.username}` : null;
       const firstName = ctx.from.first_name || "";
       const display   = username || firstName;
-      await ctx.reply(buildStatsCard(display, username ? firstName : "", stats, bat, bowl), { parse_mode: "MarkdownV2" });
+      await ctx.reply(
+        buildStatsCard(display, username ? firstName : "", stats, bat, bowl),
+        { parse_mode: "HTML" }
+      );
     } catch (err) {
       console.error("mystats error:", err);
       ctx.reply("⚠️ Error: " + err.message);
@@ -102,9 +109,10 @@ Play some matches first!`
 
       const arg = parts[1];
 
+      /* ── By user ID ── */
       if (/^\d+$/.test(arg)) {
         const userId = arg;
-        const stats = await PlayerStats.findOne({ userId });
+        const stats  = await PlayerStats.findOne({ userId });
         if (!stats) return ctx.reply(`📊 User ID ${userId} has no stats yet.`);
         const bat  = calculateBatting(stats);
         const bowl = calculateBowling(stats);
@@ -113,22 +121,29 @@ Play some matches first!`
           ? (user.username ? `@${user.username}` : (user.firstName || userId))
           : userId;
         const firstName = user?.firstName || "";
-        await ctx.reply(buildStatsCard(displayName, firstName, stats, bat, bowl), { parse_mode: "MarkdownV2" });
+        await ctx.reply(
+          buildStatsCard(displayName, firstName, stats, bat, bowl),
+          { parse_mode: "HTML" }
+        );
         return;
       }
 
+      /* ── By @username ── */
       if (!arg.startsWith("@"))
         return ctx.reply("ℹ️ Usage: /stats @username  or  /stats 123456789");
 
       const username = arg.replace("@", "").toLowerCase();
-      const user = await User.findOne({ username });
-      if (!user) return ctx.reply(`❌ User @${username} not found.`);
+      const user     = await User.findOne({ username });
+      if (!user) return ctx.reply(`❌ User @${esc(username)} not found.`);
       const stats = await PlayerStats.findOne({ userId: user.telegramId });
-      if (!stats) return ctx.reply(`📊 @${username} has no stats yet.`);
+      if (!stats) return ctx.reply(`📊 @${esc(username)} has no stats yet.`);
       const bat  = calculateBatting(stats);
       const bowl = calculateBowling(stats);
       const firstName = user.firstName || user.first_name || "";
-      await ctx.reply(buildStatsCard(`@${username}`, firstName, stats, bat, bowl), { parse_mode: "MarkdownV2" });
+      await ctx.reply(
+        buildStatsCard(`@${username}`, firstName, stats, bat, bowl),
+        { parse_mode: "HTML" }
+      );
     } catch (err) {
       console.error("stats error:", err);
       ctx.reply("⚠️ Error: " + err.message);
@@ -163,9 +178,7 @@ Play some matches first!`
         if (/^\d+$/.test(arg)) {
           targetUserId  = arg;
           const user    = await User.findOne({ telegramId: arg });
-          displayHandle = user
-            ? (user.firstName || user.username || arg)
-            : arg;
+          displayHandle = user ? (user.firstName || user.username || arg) : arg;
         } else if (arg.startsWith("@")) {
           const username = arg.replace("@", "").toLowerCase();
           const user = await User.findOne({ username });
@@ -185,8 +198,8 @@ Are you sure you want to wipe all career stats?`,
         {
           reply_markup: {
             inline_keyboard: [[
-              { text: "✅ Yes, Reset",  callback_data: `reset_confirm:${targetUserId}:${displayHandle}` },
-              { text: "❌ Cancel",      callback_data: `reset_cancel` }
+              { text: "✅ Yes, Reset", callback_data: `reset_confirm:${targetUserId}:${displayHandle}` },
+              { text: "❌ Cancel",     callback_data: `reset_cancel` }
             ]]
           }
         }
@@ -213,10 +226,7 @@ Are you sure you want to wipe all career stats?`,
       await ctx.editMessageText(
         result.deletedCount === 0
           ? `⚠️ ${displayHandle} has no stats to reset.`
-          :
-`✅ Stats Reset
-──────────────
-👤 ${displayHandle}'s career stats have been wiped.`
+          : `✅ Stats Reset\n──────────────\n👤 ${displayHandle}'s career stats have been wiped.`
       );
       await ctx.answerCbQuery("Done!");
 

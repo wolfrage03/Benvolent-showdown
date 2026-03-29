@@ -20,18 +20,18 @@ function init(deps) {
 }
 
 
-
 /* ================= DISAPPEARING EMOJI ================= */
 
+// Text emoji — no file IDs needed, auto-deletes after 1.5s
 const RESULT_EMOJI = {
-  skull: "💀",
-  fire:  "🔥",
-  fist:  "🤜",
+  skull: "💀",  // wicket
+  fire:  "🔥",  // 4, 5, 6
+  fist:  "🤜",  // 0, 1, 2, 3
 };
 
 function getResultEmoji(bat, isWicket) {
   if (isWicket)                return "skull";
-  if ([4,5,6].includes(bat))   return "fire";
+  if ([4, 5, 6].includes(bat)) return "fire";
   return "fist";
 }
 
@@ -40,8 +40,8 @@ async function sendDisappearingEmoji(groupId, replyToMsgId, emojiKey) {
   if (!emoji) return;
   try {
     const sent = await bot.telegram.sendMessage(groupId, emoji, {
-      reply_to_message_id: replyToMsgId,
-      allow_sending_without_reply: true,
+      reply_to_message_id:          replyToMsgId,
+      allow_sending_without_reply:  true,
     });
     setTimeout(() => {
       bot.telegram.deleteMessage(groupId, sent.message_id).catch(() => {});
@@ -52,35 +52,27 @@ async function sendDisappearingEmoji(groupId, replyToMsgId, emojiKey) {
 }
 
 
-
+/* ================= TURN TIMER ================= */
 
 function startTurnTimer(match, type) {
 
   match.warning30 = setTimeout(() => {
     if ((type === "bowl" && match.awaitingBowl) ||
         (type === "bat"  && match.awaitingBat)) {
-      const playerId = type === "bowl" ? match.bowler : match.striker;
+      const playerId   = type === "bowl" ? match.bowler : match.striker;
       const playerName = getName(match, playerId);
-      const ping = playerId ? `<a href="tg://user?id=${playerId}">${playerName}</a>` : "";
-      bot.telegram.sendMessage(
-        match.groupId,
-        `${ping} ⏳ 30s left`,
-        { parse_mode: "HTML" }
-      );
+      const ping       = playerId ? `<a href="tg://user?id=${playerId}">${playerName}</a>` : "";
+      bot.telegram.sendMessage(match.groupId, `${ping} ⏳ 30s left`, { parse_mode: "HTML" });
     }
   }, 30000);
 
   match.warning10 = setTimeout(() => {
     if ((type === "bowl" && match.awaitingBowl) ||
         (type === "bat"  && match.awaitingBat)) {
-      const playerId = type === "bowl" ? match.bowler : match.striker;
+      const playerId   = type === "bowl" ? match.bowler : match.striker;
       const playerName = getName(match, playerId);
-      const ping = playerId ? `<a href="tg://user?id=${playerId}">${playerName}</a>` : "";
-      bot.telegram.sendMessage(
-        match.groupId,
-        `${ping} 🚨 10s left`,
-        { parse_mode: "HTML" }
-      );
+      const ping       = playerId ? `<a href="tg://user?id=${playerId}">${playerName}</a>` : "";
+      bot.telegram.sendMessage(match.groupId, `${ping} 🚨 10s left`, { parse_mode: "HTML" });
     }
   }, 50000);
 
@@ -102,15 +94,15 @@ async function ballTimeout(match) {
 
     /* BOWLER MISSED */
     if (match.awaitingBowl) {
-
-      match.awaitingBowl = false;
+      match.awaitingBowl    = false;
       match.bowlerMissCount = (match.bowlerMissCount || 0) + 1;
-      match.score += 6;
+      match.score          += 6;
 
       await bot.telegram.sendMessage(
         match.groupId,
-"⏱ Bowler Timed Out\n\n<blockquote>+6 runs to batting team\nBall does not count</blockquote>",
-      { parse_mode: "HTML" });
+        "⏱ Bowler Timed Out\n\n<blockquote>+6 runs to batting team\nBall does not count</blockquote>",
+        { parse_mode: "HTML" }
+      );
 
       if (match.bowlerMissCount >= 2) {
         match.bowlerMissCount = 0;
@@ -120,8 +112,9 @@ async function ballTimeout(match) {
 
         await bot.telegram.sendMessage(
           match.groupId,
-"🚫 Bowler Suspended\n\n<blockquote>Consecutive delays\nCannot bowl this over or next</blockquote>\n\n👉 /bowler [number] new bowler",
-      { parse_mode: "HTML" });
+          "🚫 Bowler Suspended\n\n<blockquote>Consecutive delays\nCannot bowl this over or next</blockquote>\n\n👉 /bowler [number] new bowler",
+          { parse_mode: "HTML" }
+        );
         return;
       }
 
@@ -132,8 +125,7 @@ async function ballTimeout(match) {
 
     /* BATTER MISSED */
     if (match.awaitingBat) {
-
-      match.awaitingBat = false;
+      match.awaitingBat     = false;
       match.batterMissCount = (match.batterMissCount || 0) + 1;
 
       match.currentBall++;
@@ -149,8 +141,9 @@ async function ballTimeout(match) {
 
       await bot.telegram.sendMessage(
         match.groupId,
-"⏱ Batter Timed Out\n\n<blockquote>-6 run penalty\nBall counted</blockquote>",
-      { parse_mode: "HTML" });
+        "⏱ Batter Timed Out\n\n<blockquote>-6 run penalty\nBall counted</blockquote>",
+        { parse_mode: "HTML" }
+      );
 
       if (match.batterMissCount >= 2) {
         match.batterMissCount = 0;
@@ -161,8 +154,9 @@ async function ballTimeout(match) {
 
         await bot.telegram.sendMessage(
           match.groupId,
-"💥 Batter Dismissed\n\n<blockquote>Consecutive delays</blockquote>\n\n👉 /batter [number] new batter",
-      { parse_mode: "HTML" });
+          "💥 Batter Dismissed\n\n<blockquote>Consecutive delays</blockquote>\n\n👉 /batter [number] new batter",
+          { parse_mode: "HTML" }
+        );
 
         if (match.wickets >= match.maxWickets) {
           match.awaitingBowl = false;
@@ -215,7 +209,9 @@ async function announceBall(match) {
 
   if (bowlingGif) {
     try {
-      await bot.telegram.sendVideo(match.groupId, bowlingGif, { caption: bowlCaption, parse_mode: "HTML", supports_streaming: true, ...bowlingOpts });
+      await bot.telegram.sendVideo(match.groupId, bowlingGif, {
+        caption: bowlCaption, parse_mode: "HTML", supports_streaming: true, ...bowlingOpts
+      });
     } catch (e) {
       console.error("Bowling gif failed:", e.message);
       await bot.telegram.sendMessage(match.groupId, bowlCaption, { parse_mode: "HTML", ...bowlingOpts });
@@ -295,9 +291,10 @@ async function processBall(match) {
     if (match.wicketStreak === 2 && bat === 0) {
       await bot.telegram.sendMessage(
         match.groupId,
-"⚠️ Hattrick Ball!\n\n<blockquote>Cannot play 0 — two wickets in a row!</blockquote>",
-      { parse_mode: "HTML" });
-      match.batNumber  = null;
+        "⚠️ Hattrick Ball!\n\n<blockquote>Cannot play 0 — two wickets in a row!</blockquote>",
+        { parse_mode: "HTML" }
+      );
+      match.batNumber    = null;
       match.awaitingBat  = true;
       match.ballLocked   = false;
       hattrickRetry      = true;
@@ -317,7 +314,7 @@ async function processBall(match) {
     match.bowlerStats[match.bowler].balls++;
     match.bowlerStats[match.bowler].history.push(bat);
 
-    /* WICKET */
+    /* ── WICKET ── */
     if (bat === bowl) {
       match.wickets++;
       match.wicketStreak++;
@@ -334,20 +331,25 @@ async function processBall(match) {
       match.currentPartnershipRuns  = 0;
       match.currentPartnershipBalls = 0;
 
-      // ── Duck check ──
       const batterRunsAtDismissal = match.batterStats[match.striker]?.runs ?? 0;
-      const isDuck = batterRunsAtDismissal === 0;
+      const isDuck     = batterRunsAtDismissal === 0;
       const isHattrick = match.wicketStreak === 3;
 
-      // Disappearing emoji — 💀 for wicket
+      // ── Swap strike on last ball wicket BEFORE scorecard ──
+      // If the ball is ball 6 (over-ending wicket), swap ends now so
+      // the non-striker carries strike into the new over (dismissed batter is gone).
+      const isLastBall = match.currentBall >= 6;
+      if (isLastBall) {
+        swapStrike(match);
+      }
+
+      // Disappearing 💀
       await sendDisappearingEmoji(match.groupId, match.strikerMessageId, "skull");
 
-      // Only show wicket gif if it's NOT a duck and NOT a hattrick
       if (!isDuck && !isHattrick) {
         await sendWithGif(match.groupId, "wicket", randomLine("wicket"));
       }
 
-      // Duck gif (replaces wicket gif)
       if (isDuck) {
         match.duckStreak = (match.duckStreak || 0) + 1;
         if (match.duckStreak >= 3) {
@@ -360,14 +362,14 @@ async function processBall(match) {
         match.duckStreak = 0;
       }
 
-      // ── Bowling fer milestones ──
+      // Bowling fer milestones
       const bowlerWkts = match.bowlerStats[match.bowler]?.wickets ?? 0;
       if      (bowlerWkts === 3) await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('threeFer'));
       else if (bowlerWkts === 4) await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('fourFer'));
       else if (bowlerWkts === 5) await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('fiveFer'));
       else if (bowlerWkts >= 6)  await bot.telegram.sendMessage(match.groupId, randomMilestoneLine('sixFer'));
 
-      // ── Hattrick (replaces wicket gif) ──
+      // Hattrick
       if (isHattrick) {
         const hattrickCall = getHattrickCall();
         if (hattrickCall.gif) {
@@ -394,26 +396,27 @@ async function processBall(match) {
         return;
       }
 
-      // ── Wicket on ball 6: over ends, pass wasWicket=true ──
-      if (match.currentBall >= 6) {
+      // ── Wicket on ball 6: over ends — pass wasWicket=true so
+      //    checkOverEnd skips its own swapStrike (we already swapped above)
+      if (isLastBall) {
         const overEnded = await checkOverEnd(match, true);
         if (overEnded) return;
       }
 
-      // ── Mid-over wicket: prompt for new batter ──
+      // Mid-over wicket
       match.phase        = "new_batter";
       match.awaitingBowl = false;
       match.awaitingBat  = false;
 
       await bot.telegram.sendMessage(
         match.groupId,
-"💥 Wicket!\n\n👉 /batter [number] new batter",
+        "💥 Wicket!\n\n👉 /batter [number] new batter",
         { parse_mode: "HTML" }
       );
       return;
     }
 
-    /* RUNS */
+    /* ── RUNS ── */
     match.score                   += bat;
     match.currentOverRuns         += bat;
     match.currentPartnershipRuns  += bat;
@@ -434,7 +437,7 @@ async function processBall(match) {
     // Disappearing emoji — 🔥 for 4/5/6, 🤜 for 0/1/2/3
     await sendDisappearingEmoji(match.groupId, match.strikerMessageId, getResultEmoji(bat, false));
 
-    // ── Partnership milestones ──
+    // Partnership milestones
     if (match.currentPartnershipRuns === 50)
       await sendWithGif(match.groupId, 'partnership', randomMilestoneLine('partnership50'));
     else if (match.currentPartnershipRuns === 100)
@@ -442,7 +445,7 @@ async function processBall(match) {
 
     await sendWithGif(match.groupId, bat, randomLine(bat));
 
-    // ── Batter milestones ──
+    // Batter milestones
     const bRuns       = match.batterStats[match.striker]?.runs ?? 0;
     const bRunsBefore = bRuns - bat;
     if (bRunsBefore < 50 && bRuns >= 50 && bRuns < 100)

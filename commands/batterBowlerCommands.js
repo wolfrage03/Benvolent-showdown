@@ -1,5 +1,6 @@
 const { getMatch, playerActiveMatch } = require("../matchManager");
 const { sendAndPinPlayerList } = require("./captainCommands");
+const generateScorecard = require("../utils/scorecardGenerator");
 const ballHandler = require("../utils/ballHandler");
 
 module.exports = function (bot, helpers) {
@@ -20,6 +21,12 @@ module.exports = function (bot, helpers) {
     return match.bowlingTeam === "A" ? match.teamA : match.teamB;
   }
 
+  const ordinal = (n) => {
+    const s = ["th", "st", "nd", "rd"];
+    const v = n % 100;
+    return n + (s[(v - 20) % 10] || s[v] || s[0]);
+  };
+
 
   /* ================= SET BATTER ================= */
 
@@ -32,11 +39,10 @@ module.exports = function (bot, helpers) {
     if (ctx.chat.id !== match.groupId)
       return ctx.reply("⚠️ Send batter number in GROUP only.");
 
-    // Delete the command message
     try { await ctx.deleteMessage(); } catch {}
 
     const args = ctx.message.text.trim().split(/\s+/);
-    const num = parseInt(args[1], 10);
+    const num  = parseInt(args[1], 10);
     const players = orderedBattingPlayers(match);
 
     if (isNaN(num)) return ctx.reply("❌ Usage: /batter 2");
@@ -49,16 +55,11 @@ module.exports = function (bot, helpers) {
     if (match.usedBatters.includes(selected.id))
       return ctx.reply("⚠️ Player already batted / dismissed");
 
-    const name = selected.name;
+    const name        = selected.name;
     const orderNumber = match.usedBatters.length + 1;
 
-    const ordinal = (n) => {
-      const s = ["th","st","nd","rd"];
-      const v = n % 100;
-      return n + (s[(v-20)%10] || s[v] || s[0]);
-    };
 
-    /* STRIKER */
+    /* ── STRIKER ── */
     if (match.phase === "set_striker") {
 
       if (match.maxWickets == null) {
@@ -83,7 +84,8 @@ module.exports = function (bot, helpers) {
       );
     }
 
-    /* NON STRIKER */
+
+    /* ── NON-STRIKER ── */
     if (match.phase === "set_non_striker") {
 
       if (selected.id === match.striker)
@@ -100,7 +102,8 @@ module.exports = function (bot, helpers) {
       );
     }
 
-    /* NEW BATTER */
+
+    /* ── NEW BATTER (mid-over or last-ball wicket) ── */
     if (match.phase === "new_batter") {
 
       if (selected.id === match.nonStriker)
@@ -108,8 +111,10 @@ module.exports = function (bot, helpers) {
 
       match.striker = selected.id;
       match.batterStats[selected.id] = { runs: 0, balls: 0, fours: 0, fives: 0, sixes: 0 };
+
       if (!match.battingOrder.includes(selected.id))
         match.battingOrder.push(selected.id);
+
       match.usedBatters.push(selected.id);
       await sendAndPinPlayerList(match, ctx.telegram);
 
@@ -118,14 +123,28 @@ module.exports = function (bot, helpers) {
         { parse_mode: "HTML" }
       );
 
+      // ── Send deferred over scorecard (set when a wicket ended the over) ──
+      if (match.pendingOverScorecard) {
+        match.pendingOverScorecard = false;
+        try {
+          await bot.telegram.sendMessage(
+            match.groupId,
+            generateScorecard(match, getName),
+            { parse_mode: "HTML" }
+          );
+        } catch (e) { console.error("Deferred scorecard failed:", e.message); }
+      }
+
+      // New over — need a bowler first
       if (match.bowler === null) {
         match.phase = "set_bowler";
         return ctx.reply(
-`👉 /bowler [number] set bowler for new over`,
+          "👉 /bowler [number] set bowler for new over",
           { parse_mode: "HTML" }
         );
       }
 
+      // Mid-over wicket — bowler already set, resume play
       match.phase = "play";
       return ballHandler.startBall(match);
     }
@@ -149,15 +168,14 @@ module.exports = function (bot, helpers) {
     if (!isHost(match, ctx.from.id))
       return ctx.reply("❌ Only host can set bowler.");
 
-    // Delete the command message
     try { await ctx.deleteMessage(); } catch {}
 
     const num = parseInt(ctx.message.text.split(" ")[1]);
     if (isNaN(num)) return ctx.reply("❌ Usage: /bowler 2");
 
-    const base = bowlingPlayers(match);
+    const base      = bowlingPlayers(match);
     const captainId = match.bowlingTeam === "A" ? match.captains.A : match.captains.B;
-    const players = [
+    const players   = [
       ...base.filter(p => p.id === captainId),
       ...base.filter(p => p.id !== captainId)
     ];
@@ -173,15 +191,16 @@ module.exports = function (bot, helpers) {
     if (match.suspendedBowlers?.[player.id] >= match.currentOver)
       return ctx.reply("⚠️ This bowler is suspended for this over.");
 
-    match.bowler = player.id;
+    match.bowler         = player.id;
     match.lastOverBowler = player.id;
-    match.phase = "play";
+    match.phase          = "play";
     playerActiveMatch.set(player.id, match.groupId);
 
     await ctx.reply(
 `🏐 Bowler Set\n\n<blockquote>🏐 ${player.name} is bowling</blockquote>`,
       { parse_mode: "HTML" }
     );
+
     await ballHandler.startBall(match);
   });
 

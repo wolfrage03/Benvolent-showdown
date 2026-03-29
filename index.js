@@ -97,7 +97,7 @@ bot.use(async (ctx, next) => {
       } else if (ctx.message) {
         try { await ctx.reply("🚫 You are banned from this bot."); } catch {}
       }
-      return; // do NOT call next()
+      return;
     }
   } catch (e) {
     console.error("[BAN MIDDLEWARE] error:", e.message);
@@ -144,8 +144,8 @@ function getPlayerTeam(match, userId) {
 
 function swapStrike(match) {
   if (!match || !match.striker || !match.nonStriker) return;
-  const temp = match.striker;
-  match.striker = match.nonStriker;
+  const temp       = match.striker;
+  match.striker    = match.nonStriker;
   match.nonStriker = temp;
 }
 
@@ -160,7 +160,7 @@ function getDisplayName(user) {
 function getName(match, id) {
   if (!match) return "Player";
   const all = [...(match.teamA || []), ...(match.teamB || [])];
-  const p = all.find(x => x.id === id);
+  const p   = all.find(x => x.id === id);
   return p ? p.name : "Player";
 }
 
@@ -168,7 +168,7 @@ function clearTimers(match) {
   if (!match) return;
   if (match.warning30) { clearTimeout(match.warning30); match.warning30 = null; }
   if (match.warning10) { clearTimeout(match.warning10); match.warning10 = null; }
-  if (match.ballTimer)  { clearTimeout(match.ballTimer);  match.ballTimer  = null; }
+  if (match.ballTimer) { clearTimeout(match.ballTimer); match.ballTimer  = null; }
 }
 
 function clearDelayTimers(match) {
@@ -198,50 +198,47 @@ async function handleBallCompletion(match) {
   return false;
 }
 
-// wasWicket = true when a wicket caused the over to end (ball 6 = W).
-// This skips swapStrike (dismissed batter is gone, not rotating ends)
-// and sets phase to "new_batter" so host is prompted for a batter before bowler.
+/* ================= CHECK OVER END ================= */
+//
+// wasWicket = true  → wicket ended the over (ball 6 = W)
+//   • ballHandler already did swapStrike before calling us
+//   • scorecard is DEFERRED — shown after new batter is confirmed in /batter
+//
+// wasWicket = false → normal over end (run or dot on ball 6)
+//   • swapStrike happens here
+//   • scorecard shown immediately
+
 async function checkOverEnd(match, wasWicket = false) {
   if (!match) return false;
   if (match.currentBall < 6) return false;
   if (match.inningsEnded) return true;
 
   match.currentOver++;
-  match.currentBall = 0;
+  match.currentBall     = 0;
   match.currentOverRuns = 0;
-  match.wicketStreak = 0;
-  match.awaitingBat = false;
-  match.awaitingBowl = false;
+  match.wicketStreak    = 0;
+  match.awaitingBat     = false;
+  match.awaitingBowl    = false;
 
+  // End of all overs
   if (match.currentOver >= match.totalOvers) {
     clearTimers(match);
     await matchResult.endInnings(match);
     return true;
   }
 
-  // Send over-end scorecard
-  try {
-    await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "HTML" });
-  } catch (e) { console.error("Scorecard failed:", e.message); }
-
   match.lastOverBowler = match.bowler;
-  match.bowler = null;
-
-  // Only swap strike on a normal over-end (run/dot).
-  // When a wicket ends the over the dismissed striker is out —
-  // swapping would ghost them as non-striker.
-  if (!wasWicket) {
-    swapStrike(match);
-  }
+  match.bowler         = null;
 
   const rr = match.currentOver > 0
     ? (match.score / (match.currentOver * 6) * 6).toFixed(2)
     : "0.00";
 
   if (wasWicket) {
-    // Need both a new batter AND a new bowler.
-    // Prompt batter first — /batter handler advances to set_bowler after.
-    match.phase = "new_batter";
+    // ── Scorecard deferred — sent by /batter after striker replaced ──
+    match.pendingOverScorecard = true;
+
+    match.phase        = "new_batter";
     match.awaitingBowl = false;
     match.awaitingBat  = false;
 
@@ -254,7 +251,17 @@ async function checkOverEnd(match, wasWicket = false) {
     } catch (e) { console.error("Over+wicket message failed:", e.message); }
 
   } else {
-    // Normal over end — just need a bowler.
+    // ── Normal over end: swap strike, send scorecard immediately ──
+    swapStrike(match);
+
+    try {
+      await bot.telegram.sendMessage(
+        match.groupId,
+        generateScorecard(match, getName),
+        { parse_mode: "HTML" }
+      );
+    } catch (e) { console.error("Scorecard failed:", e.message); }
+
     match.phase = "set_bowler";
 
     try {
@@ -269,6 +276,9 @@ async function checkOverEnd(match, wasWicket = false) {
   return true;
 }
 
+
+/* ================= BOWL DM BUTTON ================= */
+
 function bowlDMButton() {
   return {
     reply_markup: {
@@ -280,7 +290,8 @@ function bowlDMButton() {
 }
 
 
-// ── Send a GIF/video + text message together ──
+/* ================= SEND WITH GIF ================= */
+
 async function sendWithGif(groupId, gifType, text) {
   const fileId = randomGif(gifType);
   if (!fileId) {
@@ -297,6 +308,9 @@ async function sendWithGif(groupId, gifType, text) {
     await bot.telegram.sendMessage(groupId, text);
   }
 }
+
+
+/* ================= HELPERS OBJECT ================= */
 
 const helpers = {
   isHost,
@@ -326,7 +340,6 @@ require("./commands/tossCommands")(bot, helpers);
 
 module.exports = { getName };
 
-
 require("./commands/batterBowlerCommands")(bot, helpers);
 require("./commands/scoreCommand")(bot, helpers);
 require("./commands/handleInput")(bot, helpers);
@@ -334,7 +347,6 @@ require("./commands/handleInput")(bot, helpers);
 
 /* ================= FILE ID LOGGER ================= */
 
-// Regular stickers, videos, animations, documents (send in DM)
 bot.on(["animation", "video", "document", "sticker"], async (ctx) => {
   if (ctx.chat.type !== "private") return;
   const msg = ctx.message;
@@ -354,8 +366,6 @@ bot.on(["animation", "video", "document", "sticker"], async (ctx) => {
   await ctx.reply(`\`${type}${extra}\n${fileId}\``, { parse_mode: "Markdown" });
 });
 
-// Custom emoji file IDs — send any message in DM that contains a custom emoji
-// (the animated ones from the emoji picker, not regular stickers)
 bot.on("message", async (ctx) => {
   if (ctx.chat.type !== "private") return;
 
@@ -373,7 +383,6 @@ bot.on("message", async (ctx) => {
     const stickers = await ctx.telegram.callApi("getCustomEmojiStickers", {
       custom_emoji_ids: ids
     });
-
     for (const s of stickers) {
       const line = `custom_emoji  emoji=${s.emoji}  animated=${s.is_animated}  video=${s.is_video}\n${s.file_id}`;
       console.log(`[GIF LOG] ${line}`);
