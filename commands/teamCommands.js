@@ -39,8 +39,12 @@ bot.command("createteam", async (ctx) => {
 
   await sendAndPinPlayerList(match, ctx.telegram);
 
+  const modeTag = match.mode === "independent"
+    ? `\n🎮 <i>Host Independent — host may join a team</i>`
+    : `\n👑 <i>Host Dependent — host cannot join as player</i>`;
+
   await ctx.reply(
-`🟢 Lobby Open\n\n<blockquote>🔵 ${match.teamAName} 〔Team A〕\n🔴 ${match.teamBName} 〔Team B〕</blockquote>\n\n/joina  /joinb\n⏱ Closes in 60s   /closejoin`,
+`🟢 Lobby Open${modeTag}\n\n<blockquote>🔵 ${match.teamAName} 〔Team A〕\n🔴 ${match.teamBName} 〔Team B〕</blockquote>\n\n/joina  /joinb\n⏱ Closes in 60s   /closejoin`,
     { parse_mode: "HTML" }
   );
 
@@ -94,14 +98,17 @@ bot.command("joina", async (ctx) => {
   if (match.phase !== "join")
     return ctx.reply("⚠️ Joining is closed.");
 
-  const dbUser = await User.collection.findOne({ telegramId: String(ctx.from.id) });
+  const dbUser = await User.findOne({ telegramId: String(ctx.from.id) });
   if (dbUser?.banned === true) return ctx.reply("🚫 You are banned from this bot.");
 
   if (playerActiveMatch.has(ctx.from.id))
     return ctx.reply("❌ You're already in a match.");
 
-  if (ctx.from.id === match.host)
-    return ctx.reply("❌ Host cannot join as player.");
+  // ── HOST JOIN GUARD ──
+  // Dependent mode: host cannot join as player
+  // Independent mode: host can join freely
+  if (ctx.from.id === match.host && match.mode !== "independent")
+    return ctx.reply("❌ Host cannot join as a player in Host Dependent mode.");
 
   if (match.teamA.some(p => p.id === ctx.from.id))
     return ctx.reply("⚠️ Already in Team A.");
@@ -139,14 +146,15 @@ bot.command("joinb", async (ctx) => {
   if (match.phase !== "join")
     return ctx.reply("⚠️ Joining is closed.");
 
-  const dbUser = await User.collection.findOne({ telegramId: String(ctx.from.id) });
+  const dbUser = await User.findOne({ telegramId: String(ctx.from.id) });
   if (dbUser?.banned === true) return ctx.reply("🚫 You are banned from this bot.");
 
   if (playerActiveMatch.has(ctx.from.id))
     return ctx.reply("❌ You're already in a match.");
 
-  if (ctx.from.id === match.host)
-    return ctx.reply("❌ Host cannot join as player.");
+  // ── HOST JOIN GUARD ──
+  if (ctx.from.id === match.host && match.mode !== "independent")
+    return ctx.reply("❌ Host cannot join as a player in Host Dependent mode.");
 
   if (match.teamB.some(p => p.id === ctx.from.id))
     return ctx.reply("⚠️ Already in Team B.");
@@ -211,8 +219,10 @@ or reply to a message + /add A`
     const name    = user.first_name || user.username || "Player";
     const mention = `<a href="tg://user?id=${userId}">${name}</a>`;
 
-    if (userId === match.host)
-      return ctx.reply("❌ Host cannot be added as a player.");
+    // In dependent mode, host cannot be added as a player
+    if (userId === match.host && match.mode !== "independent")
+      return ctx.reply("❌ Host cannot be added as a player in Host Dependent mode.");
+
     if (match.teamA.some(p => p.id === userId) || match.teamB.some(p => p.id === userId))
       return ctx.reply("⚠️ Player already in a team.");
 
@@ -285,8 +295,9 @@ or reply to a message + /add A`
       continue;
     }
 
-    if (userId === match.host) {
-      skipped.push(`${name} (host cannot be a player)`);
+    // In dependent mode, host cannot be added as a player
+    if (userId === match.host && match.mode !== "independent") {
+      skipped.push(`${name} (host cannot be a player in Host Dependent mode)`);
       continue;
     }
     if (match.teamA.some(p => p.id === userId) || match.teamB.some(p => p.id === userId)) {

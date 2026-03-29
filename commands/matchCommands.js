@@ -24,7 +24,7 @@ module.exports = function (bot, helpers) {
 
     console.log("[START] phase:", match?.phase, "matchEnded:", match?.matchEnded, "host:", match?.host);
 
-    if (match && !match.matchEnded && match.phase !== "idle" && match.phase !== "host_select" && match.phase !== "team_create") {
+    if (match && !match.matchEnded && match.phase !== "idle" && match.phase !== "host_select" && match.phase !== "team_create" && match.phase !== "mode_select") {
       console.log("[START] BLOCKED — match still active");
       return ctx.reply("⚠️ A match is already running.");
     }
@@ -35,10 +35,10 @@ module.exports = function (bot, helpers) {
         { telegramId: String(id) },
         {
           $set: {
-            telegramId:  String(id),
-            username:    username?.toLowerCase(),
-            firstName:   first_name,
-            lastName:    last_name
+            telegramId: String(id),
+            username:   username?.toLowerCase(),
+            firstName:  first_name,
+            lastName:   last_name
           }
         },
         { upsert: true }
@@ -50,12 +50,81 @@ module.exports = function (bot, helpers) {
     match = resetMatch(ctx.chat.id);
     clearActiveMatchPlayers(match);
     match.groupId = ctx.chat.id;
-    match.phase   = "host_select";
+    match.phase   = "mode_select";
 
-    console.log("[START] New match created, phase:", match.phase);
+    console.log("[START] Asking for mode selection");
 
-    ctx.reply(
-"🏏 Match Lobby\n\n<blockquote>A new match is starting!\nFirst player to press becomes host.</blockquote>",
+    await ctx.reply(
+`🏏 <b>New Match</b>
+
+Select a match mode to continue:
+
+<blockquote>👑 <b>Host Dependent</b>
+Host manages the match only and cannot join as a player. Best for organised matches with a dedicated manager.</blockquote>
+
+<blockquote>🎮 <b>Host Independent</b>
+Host manages AND plays. Host can join a team like any other player.</blockquote>`,
+      {
+        parse_mode: "HTML",
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback("👑 Host Dependent",   "mode_dependent")],
+          [Markup.button.callback("🎮 Host Independent", "mode_independent")]
+        ])
+      }
+    );
+  });
+
+
+  /* ================= MODE: DEPENDENT ================= */
+
+  bot.action("mode_dependent", async (ctx) => {
+
+    const match = getMatch(ctx);
+    if (!match || match.phase !== "mode_select")
+      return ctx.answerCbQuery("No match waiting for mode selection.");
+
+    match.mode  = "dependent";
+    match.phase = "host_select";
+
+    await ctx.answerCbQuery("👑 Host Dependent selected");
+    try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
+
+    await ctx.reply(
+`👑 <b>Host Dependent Mode</b>
+
+<blockquote>Host manages the match only — cannot join as a player.
+
+First player to press becomes host.</blockquote>`,
+      {
+        parse_mode: "HTML",
+        ...Markup.inlineKeyboard([
+          [Markup.button.callback("👑 Become Host", "select_host")]
+        ])
+      }
+    );
+  });
+
+
+  /* ================= MODE: INDEPENDENT ================= */
+
+  bot.action("mode_independent", async (ctx) => {
+
+    const match = getMatch(ctx);
+    if (!match || match.phase !== "mode_select")
+      return ctx.answerCbQuery("No match waiting for mode selection.");
+
+    match.mode  = "independent";
+    match.phase = "host_select";
+
+    await ctx.answerCbQuery("🎮 Host Independent selected");
+    try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
+
+    await ctx.reply(
+`🎮 <b>Host Independent Mode</b>
+
+<blockquote>Host manages AND plays as a regular player.
+
+First player to press becomes host.</blockquote>`,
       {
         parse_mode: "HTML",
         ...Markup.inlineKeyboard([
@@ -124,10 +193,6 @@ module.exports = function (bot, helpers) {
 
     try { await ctx.editMessageReplyMarkup({ inline_keyboard: [] }); } catch {}
 
-    // ── Save match snapshot to MongoDB + send JSON file ──
-    // sendTo: sends the file back to the group itself.
-    // Change match.groupId to your personal admin Telegram ID (a number)
-    // if you want it sent privately instead, e.g.: 764519233
     await archiveMatch(match, "force_ended", ctx.telegram, match.groupId);
 
     await ctx.reply(
@@ -138,8 +203,8 @@ module.exports = function (bot, helpers) {
     clearTimers(match);
     clearDelayTimers(match);
     clearActiveMatchPlayers(match);
-    match.phase      = "idle";
-    match.matchEnded = true;
+    match.phase        = "idle";
+    match.matchEnded   = true;
     match.inningsEnded = true;
 
     console.log("[CONFIRM_END] calling deleteMatch for groupId:", match.groupId);
