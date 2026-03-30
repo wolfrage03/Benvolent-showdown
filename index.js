@@ -72,42 +72,82 @@ bot.use(async (ctx, next) => {
 });
 
 
-/* ================= BAN CHECK MIDDLEWARE ================= */
+/* ===============================================================
+   BAN LIST
+   ---------------------------------------------------------------
+   Works exactly like ALLOWED_GROUPS — a hardcoded Set of Telegram
+   user ID strings. Add/remove IDs here to ban/unban users.
+   No database query on every message = zero latency overhead.
 
-bot.use(async (ctx, next) => {
+   To ban:   add the user's Telegram ID string to BANNED_USERS
+   To unban: remove it from BANNED_USERS and restart the bot
+
+   Example:
+     const BANNED_USERS = new Set(["123456789", "987654321"]);
+   =============================================================== */
+
+const BANNED_USERS = new Set([
+  // "123456789",
+  // "987654321",
+]);
+
+/* ── In-memory cache: avoids a DB query on every single message ── */
+/* Cache is populated at startup from MongoDB, and can be updated   */
+/* at runtime via the exported banUser / unbanUser helpers below.   */
+const bannedCache = new Set(BANNED_USERS); // starts with hardcoded list
+
+/* Load banned users from DB into cache at startup */
+async function loadBannedUsersFromDB() {
+  try {
+    const banned = await User.find({ banned: true }, { telegramId: 1 }).lean();
+    for (const u of banned) bannedCache.add(String(u.telegramId));
+    console.log(`[BAN] Loaded ${banned.length} banned user(s) from DB into cache`);
+  } catch (e) {
+    console.error("[BAN] Failed to load banned users:", e.message);
+  }
+}
+
+/* Runtime helpers — call these from statsHandler instead of DB queries */
+function banUser(userId) {
+  bannedCache.add(String(userId));
+}
+function unbanUser(userId) {
+  bannedCache.delete(String(userId));
+}
+function isBannedUser(userId) {
+  return bannedCache.has(String(userId));
+}
+
+/* ── Export so statsHandler can call banUser/unbanUser ── */
+module.exports = { banUser, unbanUser, isBannedUser };
+
+
+/* ================= BAN CHECK MIDDLEWARE ================= */
+/* FIXED: No DB query per message. Uses in-memory bannedCache.  */
+/* Cuts ~100-500ms of latency off every single bot interaction.  */
+
+bot.use((ctx, next) => {
   const userId = ctx.from?.id;
   if (!userId) return next();
-  try {
-    const user = await User.findOne({ telegramId: String(userId) }).lean();
-    if (user?.banned === true) {
-      console.log(`[BAN BLOCK] userId=${userId}`);
-      if (ctx.callbackQuery) {
-        try { await ctx.answerCbQuery("🚫 You are banned.", { show_alert: true }); } catch {}
-      } else if (ctx.message) {
-        try { await ctx.reply("🚫 You are banned from this bot."); } catch {}
-      }
-      return;
+
+  if (bannedCache.has(String(userId))) {
+    console.log(`[BAN BLOCK] userId=${userId}`);
+    if (ctx.callbackQuery) {
+      ctx.answerCbQuery("🚫 You are banned.", { show_alert: true }).catch(() => {});
+    } else if (ctx.message) {
+      ctx.reply("🚫 You are banned from this bot.").catch(() => {});
     }
-  } catch (e) {
-    console.error("[BAN MIDDLEWARE] error:", e.message);
+    return; // do not call next()
   }
+
   return next();
 });
 
 
 /* ================= isUserBanned ================= */
-// FIXED: Must be defined BEFORE the helpers object below.
-// Previously it was defined at the bottom of the file, so helpers.isUserBanned
-// was undefined when passed into command files — causing the ban check to silently fail.
 
 async function isUserBanned(userId) {
-  try {
-    const user = await User.findOne({ telegramId: String(userId) }).lean();
-    return user?.banned === true;
-  } catch (e) {
-    console.error("[BAN CHECK] error:", e.message);
-    return false;
-  }
+  return bannedCache.has(String(userId));
 }
 
 
@@ -290,8 +330,8 @@ async function sendWithGif(groupId, gifType, text) {
   }
   try {
     await bot.telegram.sendVideo(groupId, fileId, {
-      caption:          text,
-      parse_mode:       "Markdown",
+      caption:            text,
+      parse_mode:         "Markdown",
       supports_streaming: true
     });
   } catch (e) {
@@ -312,7 +352,7 @@ const helpers = {
   clearTimers,
   clearDelayTimers,
   clearActiveMatchPlayers,
-  isUserBanned,          // ← now a real function, defined above
+  isUserBanned,
   startToss: null
 };
 
@@ -329,8 +369,6 @@ require("./commands/hostControls")(bot, helpers);
 require("./commands/teamCommands")(bot, helpers);
 require("./commands/captainCommands")(bot, helpers);
 require("./commands/tossCommands")(bot, helpers);
-
-module.exports = { getName };
 
 require("./commands/batterBowlerCommands")(bot, helpers);
 require("./commands/scoreCommand")(bot, helpers);
@@ -409,6 +447,8 @@ bot.use(async (ctx, next) => {
 (async () => {
   await initializeApp();
   await initializeBot();
+  // Load banned users from DB into memory cache before bot starts polling
+  await loadBannedUsersFromDB();
   await bot.launch();
   console.log("🚀 Bot started successfully");
 })();

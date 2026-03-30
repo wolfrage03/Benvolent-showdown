@@ -1,6 +1,5 @@
 const { Markup } = require("telegraf");
 const { getMatch, matches, playerActiveMatch } = require("../matchManager");
-const User = require("../User");
 const { sendAndPinPlayerList } = require("./captainCommands");
 const box = require("../utils/boxMessage");
 
@@ -98,15 +97,13 @@ bot.command("joina", async (ctx) => {
   if (match.phase !== "join")
     return ctx.reply("⚠️ Joining is closed.");
 
-  const dbUser = await User.findOne({ telegramId: String(ctx.from.id) });
-  if (dbUser?.banned === true) return ctx.reply("🚫 You are banned from this bot.");
+  // FIX: Use in-memory cache via isUserBanned — no DB query
+  if (await isUserBanned(ctx.from.id))
+    return ctx.reply("🚫 You are banned from this bot.");
 
   if (playerActiveMatch.has(ctx.from.id))
     return ctx.reply("❌ You're already in a match.");
 
-  // ── HOST JOIN GUARD ──
-  // Dependent mode: host cannot join as player
-  // Independent mode: host can join freely
   if (ctx.from.id === match.host && match.mode !== "independent")
     return ctx.reply("❌ Host cannot join as a player in Host Dependent mode.");
 
@@ -146,13 +143,13 @@ bot.command("joinb", async (ctx) => {
   if (match.phase !== "join")
     return ctx.reply("⚠️ Joining is closed.");
 
-  const dbUser = await User.findOne({ telegramId: String(ctx.from.id) });
-  if (dbUser?.banned === true) return ctx.reply("🚫 You are banned from this bot.");
+  // FIX: Use in-memory cache via isUserBanned — no DB query
+  if (await isUserBanned(ctx.from.id))
+    return ctx.reply("🚫 You are banned from this bot.");
 
   if (playerActiveMatch.has(ctx.from.id))
     return ctx.reply("❌ You're already in a match.");
 
-  // ── HOST JOIN GUARD ──
   if (ctx.from.id === match.host && match.mode !== "independent")
     return ctx.reply("❌ Host cannot join as a player in Host Dependent mode.");
 
@@ -160,7 +157,7 @@ bot.command("joinb", async (ctx) => {
     return ctx.reply("⚠️ Already in Team B.");
 
   if (match.teamA.some(p => p.id === ctx.from.id))
-    return ctx.reply("⚠️ Already in Team A.");
+    return ctx.reply("⚠️ Already in Team B.");
 
   const name = ctx.from.first_name || "Player";
 
@@ -219,7 +216,6 @@ or reply to a message + /add A`
     const name    = user.first_name || user.username || "Player";
     const mention = `<a href="tg://user?id=${userId}">${name}</a>`;
 
-    // In dependent mode, host cannot be added as a player
     if (userId === match.host && match.mode !== "independent")
       return ctx.reply("❌ Host cannot be added as a player in Host Dependent mode.");
 
@@ -254,6 +250,9 @@ or reply to a message + /add A`
 
   const added   = [];
   const skipped = [];
+
+  // Use User model only here (add command) — not on every message
+  const User = require("../User");
 
   for (const raw of targets) {
     let userId, name, mention;
@@ -295,7 +294,6 @@ or reply to a message + /add A`
       continue;
     }
 
-    // In dependent mode, host cannot be added as a player
     if (userId === match.host && match.mode !== "independent") {
       skipped.push(`${name} (host cannot be a player in Host Dependent mode)`);
       continue;

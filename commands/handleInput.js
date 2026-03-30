@@ -27,16 +27,14 @@ module.exports = function (bot, helpers) {
       if (match.ballLocked)
         return ctx.reply("⏳ Processing previous ball — please wait");
 
-      // FIX 1: Set strikerMessageId BEFORE calling processBall
-      // Previously it was set after, so sendDisappearingEmoji always got null
+      // FIX: Set strikerMessageId BEFORE processBall so emoji can reply to it
       match.strikerMessageId = ctx.message.message_id;
       match.batNumber        = Number(text);
       match.awaitingBat      = false;
 
-      // FIX 2: Do NOT delete batter's message here.
-      // The disappearing emoji replies to it — deleting it first makes the emoji
-      // appear as a standalone message with no reply context (looks broken).
-      // Instead we delete it AFTER the emoji has been sent, inside processBall.
+      // FIX: Do NOT delete the batter's number message at all.
+      // The disappearing emoji replies to it — only the emoji disappears.
+      // The batter's number message stays so the group can see what was played.
 
       if (match.bowlNumber === null) return;
 
