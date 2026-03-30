@@ -87,8 +87,7 @@ bot.use(async (ctx, next) => {
    =============================================================== */
 
 const BANNED_USERS = new Set([
-  // "123456789",
-  // "987654321",
+  "8026561800",
 ]);
 
 /* ── In-memory cache: avoids a DB query on every single message ── */
