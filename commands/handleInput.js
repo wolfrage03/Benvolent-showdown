@@ -6,13 +6,16 @@ module.exports = function (bot, helpers) {
   const { getName, clearTimers } = helpers;
 
   /* ================= HANDLE TEXT INPUT ================= */
+
   bot.on("text", async (ctx, next) => {
     if (ctx.message.text.startsWith("/")) return next();
+
     const match = getMatch(ctx);
     if (!match) return next();
+
     const text = ctx.message.text.trim();
 
-    /* GROUP BATTER INPUT */
+    /* ─── GROUP: BATTER INPUT ─── */
     if (ctx.chat.type !== "private") {
       const ballInProgress = match.awaitingBowl || match.awaitingBat;
       if (!ballInProgress) return;
@@ -24,20 +27,25 @@ module.exports = function (bot, helpers) {
       if (match.ballLocked)
         return ctx.reply("⏳ Processing previous ball — please wait");
 
-      match.batNumber = Number(text);
+      // FIX 1: Set strikerMessageId BEFORE calling processBall
+      // Previously it was set after, so sendDisappearingEmoji always got null
       match.strikerMessageId = ctx.message.message_id;
-      match.awaitingBat = false;
+      match.batNumber        = Number(text);
+      match.awaitingBat      = false;
 
-      // Non-blocking delete of batter's number message
-      ctx.deleteMessage().catch(() => {});
+      // FIX 2: Do NOT delete batter's message here.
+      // The disappearing emoji replies to it — deleting it first makes the emoji
+      // appear as a standalone message with no reply context (looks broken).
+      // Instead we delete it AFTER the emoji has been sent, inside processBall.
 
       if (match.bowlNumber === null) return;
+
       match.ballLocked = true;
       clearTimers(match);
       return ballHandler.processBall(match);
     }
 
-    /* PRIVATE BOWLER INPUT */
+    /* ─── PRIVATE: BOWLER INPUT ─── */
     if (match.phase !== "play")
       return ctx.reply("⚠️ No active ball.");
     if (!match.awaitingBowl)
@@ -48,20 +56,20 @@ module.exports = function (bot, helpers) {
       return ctx.reply("❌ Send a number between 1–6.");
 
     clearTimers(match);
-    match.bowlNumber = Number(text);
+    match.bowlNumber   = Number(text);
     match.awaitingBowl = false;
 
     if (match.batNumber !== null) {
       match.awaitingBat = false;
-      match.ballLocked = true;
+      match.ballLocked  = true;
       clearTimers(match);
-      await ctx.reply(`✅ Submitted`);
+      await ctx.reply("✅ Submitted");
       return ballHandler.processBall(match);
     }
 
     match.awaitingBat = true;
-    match.ballLocked = false;
-    await ctx.reply(`✅ Submitted — waiting for batter`);
+    match.ballLocked  = false;
+    await ctx.reply("✅ Submitted — waiting for batter");
 
     const ballNumber  = `${match.currentOver}.${match.currentBall + 1}`;
     const battingCall = getBattingCall();
@@ -72,8 +80,8 @@ module.exports = function (bot, helpers) {
     if (battingCall.gif) {
       try {
         await bot.telegram.sendVideo(match.groupId, battingCall.gif, {
-          caption: batCaption,
-          parse_mode: "HTML",
+          caption:            batCaption,
+          parse_mode:         "HTML",
           supports_streaming: true,
         });
       } catch (e) {

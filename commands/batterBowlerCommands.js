@@ -109,9 +109,14 @@ module.exports = function (bot, helpers) {
       if (selected.id === match.nonStriker)
         return ctx.reply("⚠️ Choose a different player");
 
-      // New batter replaces dismissed striker
       match.striker = selected.id;
       match.batterStats[selected.id] = { runs: 0, balls: 0, fours: 0, fives: 0, sixes: 0 };
+
+      // FIX: Reset this new batter's miss count so they start fresh.
+      // Previously batterMissCount was shared on match — now it's per-batter
+      // but we still explicitly clear it here for the incoming batter.
+      if (!match.batterMissCounts) match.batterMissCounts = {};
+      match.batterMissCounts[selected.id] = 0;
 
       if (!match.battingOrder.includes(selected.id))
         match.battingOrder.push(selected.id);
@@ -125,17 +130,11 @@ module.exports = function (bot, helpers) {
       );
 
       // ── Last-ball wicket: pendingOverEnd was set by checkOverEnd ──
-      // Now that new batter is striker we can do the end-of-over swap:
-      //   striker (new batter) ↔ nonStriker (old nonStriker)
-      // Result: old nonStriker faces ball 1 of next over ✓
-      //         new batter is at nonStriker end ✓
       if (match.pendingOverEnd) {
         match.pendingOverEnd = false;
 
-        // Swap ends
         swapStrike(match);
 
-        // Send over scorecard now that positions are correct
         try {
           await bot.telegram.sendMessage(
             match.groupId,
@@ -144,7 +143,6 @@ module.exports = function (bot, helpers) {
           );
         } catch (e) { console.error("Deferred scorecard failed:", e.message); }
 
-        // Need new bowler for the new over
         match.phase = "set_bowler";
         return ctx.reply(
           "👉 /bowler [number] set bowler for new over",
@@ -152,7 +150,7 @@ module.exports = function (bot, helpers) {
         );
       }
 
-      // ── Mid-over wicket: no over-end swap needed ──
+      // ── Mid-over wicket ──
       if (match.bowler === null) {
         match.phase = "set_bowler";
         return ctx.reply(
@@ -161,7 +159,7 @@ module.exports = function (bot, helpers) {
         );
       }
 
-      // Bowler already set — resume play immediately
+      // Bowler already set — resume play
       match.phase = "play";
       return ballHandler.startBall(match);
     }
@@ -212,6 +210,11 @@ module.exports = function (bot, helpers) {
     match.lastOverBowler = player.id;
     match.phase          = "play";
     playerActiveMatch.set(player.id, match.groupId);
+
+    // FIX: Sync match.wicketStreak to this bowler's personal streak.
+    // When a new bowler comes in, match.wicketStreak resets to their count (0 if first time).
+    // This ensures hattrick block and streak milestones are bowler-specific, not team-level.
+    ballHandler.resetBowlerStreak(match, player.id);
 
     await ctx.reply(
 `🏐 Bowler Set\n\n<blockquote>🏐 ${player.name} is bowling</blockquote>`,

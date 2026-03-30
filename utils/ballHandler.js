@@ -23,9 +23,9 @@ function init(deps) {
 /* ================= DISAPPEARING EMOJI ================= */
 
 const RESULT_EMOJI = {
-  skull: "💀",  // wicket
-  fire:  "🔥",  // 4, 5, 6
-  fist:  "🤜",  // 0, 1, 2, 3
+  skull: "💀",
+  fire:  "🔥",
+  fist:  "🤜",
 };
 
 function getResultEmoji(bat, isWicket) {
@@ -36,25 +36,33 @@ function getResultEmoji(bat, isWicket) {
 
 async function sendDisappearingEmoji(groupId, replyToMsgId, emojiKey) {
   const emoji = RESULT_EMOJI[emojiKey];
-  if (!emoji) return;
+  if (!emoji) return null;
   try {
     const sent = await bot.telegram.sendMessage(groupId, emoji, {
       reply_to_message_id:         replyToMsgId,
       allow_sending_without_reply: true,
     });
-    setTimeout(() => {
-      bot.telegram.deleteMessage(groupId, sent.message_id).catch(() => {});
-    }, 1500);
+    // FIX: return the sent message_id so caller can delete batter message AFTER emoji is sent
+    return sent.message_id;
   } catch (e) {
     console.error("Disappearing emoji failed:", e.message);
+    return null;
   }
+}
+
+// Delete the emoji after delay, and also delete the batter's number message
+function scheduleCleanup(groupId, emojiMsgId, batterMsgId) {
+  setTimeout(() => {
+    if (emojiMsgId)  bot.telegram.deleteMessage(groupId, emojiMsgId).catch(() => {});
+    // FIX: Batter message deleted AFTER emoji has been sent and is visible
+    if (batterMsgId) bot.telegram.deleteMessage(groupId, batterMsgId).catch(() => {});
+  }, 1500);
 }
 
 
 /* ================= TURN TIMER ================= */
 
 function startTurnTimer(match, type) {
-
   match.warning30 = setTimeout(() => {
     if ((type === "bowl" && match.awaitingBowl) ||
         (type === "bat"  && match.awaitingBat)) {
@@ -82,16 +90,19 @@ function startTurnTimer(match, type) {
 /* ================= BALL TIMEOUT ================= */
 
 async function ballTimeout(match) {
-
-  if (!match || match.phase === "idle") return;
-  if (match.phase !== "play") return;
+  if (!match) return;
+  // FIX: Removed `match.phase !== "play"` check — phase can shift to "new_batter"
+  // or "set_bowler" during processing, causing timeout to silently do nothing.
+  // Instead only bail if match is truly idle or innings ended.
+  if (match.phase === "idle") return;
+  if (match.inningsEnded) return;
   if (match.ballLocked) return;
   match.ballLocked = true;
 
   try {
     clearTimers(match);
 
-    /* BOWLER MISSED */
+    /* ── BOWLER MISSED ── */
     if (match.awaitingBowl) {
       match.awaitingBowl    = false;
       match.bowlerMissCount = (match.bowlerMissCount || 0) + 1;
@@ -121,10 +132,17 @@ async function ballTimeout(match) {
       return;
     }
 
-    /* BATTER MISSED */
+    /* ── BATTER MISSED ── */
     if (match.awaitingBat) {
-      match.awaitingBat     = false;
-      match.batterMissCount = (match.batterMissCount || 0) + 1;
+      match.awaitingBat = false;
+
+      // FIX: batterMissCount is now per-batter (keyed by striker id)
+      // Previously it was a single match-level counter, so it carried over
+      // to the next batter after a wicket or over change — unfairly penalising them.
+      if (!match.batterMissCounts) match.batterMissCounts = {};
+      match.batterMissCounts[match.striker] =
+        (match.batterMissCounts[match.striker] || 0) + 1;
+      const thisBatterMissCount = match.batterMissCounts[match.striker];
 
       match.currentBall++;
       match.score -= 6;
@@ -143,8 +161,9 @@ async function ballTimeout(match) {
         { parse_mode: "HTML" }
       );
 
-      if (match.batterMissCount >= 2) {
-        match.batterMissCount = 0;
+      if (thisBatterMissCount >= 2) {
+        // Reset this batter's count on dismissal
+        match.batterMissCounts[match.striker] = 0;
         match.wickets++;
 
         if (!match.timedOutBatters) match.timedOutBatters = [];
@@ -301,7 +320,8 @@ async function processBall(match) {
     }
 
     match.bowlerMissCount = 0;
-    match.batterMissCount = 0;
+    // FIX: Reset only this batter's miss count on a valid ball, not a shared counter
+    if (match.batterMissCounts) match.batterMissCounts[match.striker] = 0;
 
     if (!match.batterStats[match.striker])
       match.batterStats[match.striker] = { runs: 0, balls: 0, fours: 0, fives: 0, sixes: 0 };
@@ -315,10 +335,21 @@ async function processBall(match) {
     /* ══════════════ WICKET ══════════════ */
     if (bat === bowl) {
       match.wickets++;
-      match.wicketStreak++;
       match.currentBall++;
       match.currentPartnershipBalls++;
       match.bowlerStats[match.bowler].wickets++;
+
+      // FIX: wicketStreak is now per-bowler, not per-team.
+      // Each bowler has their own streak counter. When bowler changes the new
+      // bowler starts from 0, so hattricks and streaks are correctly bowler-specific.
+      if (!match.bowlerWicketStreak) match.bowlerWicketStreak = {};
+      match.bowlerWicketStreak[match.bowler] =
+        (match.bowlerWicketStreak[match.bowler] || 0) + 1;
+      const bowlerStreak = match.bowlerWicketStreak[match.bowler];
+
+      // Also keep match.wicketStreak for the hattrick-block (bat===0 guard)
+      // but only for the CURRENT bowler's streak, not global
+      match.wicketStreak = bowlerStreak;
 
       if (match.batterStats[match.striker])
         match.batterStats[match.striker].dismissedBy = match.bowler;
@@ -331,11 +362,12 @@ async function processBall(match) {
 
       const batterRunsAtDismissal = match.batterStats[match.striker]?.runs ?? 0;
       const isDuck     = batterRunsAtDismissal === 0;
-      const isHattrick = match.wicketStreak === 3;
+      const isHattrick = bowlerStreak === 3;
       const isLastBall = match.currentBall >= 6;
 
-      // Disappearing 💀
-      await sendDisappearingEmoji(match.groupId, match.strikerMessageId, "skull");
+      // Send emoji, then delete batter message AFTER emoji is confirmed sent
+      const emojiMsgId = await sendDisappearingEmoji(match.groupId, match.strikerMessageId, "skull");
+      scheduleCleanup(match.groupId, emojiMsgId, match.strikerMessageId);
 
       if (!isDuck && !isHattrick) {
         await sendWithGif(match.groupId, "wicket", randomLine("wicket"));
@@ -377,6 +409,8 @@ async function processBall(match) {
         } else {
           await bot.telegram.sendMessage(match.groupId, hattrickCall.text);
         }
+        // FIX: Reset only THIS bowler's streak after hattrick, not global wicketStreak
+        match.bowlerWicketStreak[match.bowler] = 0;
         match.wicketStreak = 0;
       }
 
@@ -388,18 +422,10 @@ async function processBall(match) {
       }
 
       if (isLastBall) {
-        // ── Last ball wicket ──
-        // Do NOT swapStrike here.
-        // New batter will be set as striker by /batter.
-        // checkOverEnd (wasWicket=true) will then swap:
-        //   new batter (striker) ↔ nonStriker
-        // → nonStriker faces first ball of next over ✓
-        // → new batter is at nonStriker end ✓
         const overEnded = await checkOverEnd(match, true);
         if (overEnded) return;
       }
 
-      // Mid-over wicket
       match.phase        = "new_batter";
       match.awaitingBowl = false;
       match.awaitingBat  = false;
@@ -428,10 +454,16 @@ async function processBall(match) {
     const lastOver = match.overHistory[match.overHistory.length - 1];
     if (lastOver) lastOver.balls.push(bat);
 
+    // FIX: Reset only THIS bowler's wicket streak on a run (not scored off them)
+    if (!match.bowlerWicketStreak) match.bowlerWicketStreak = {};
+    match.bowlerWicketStreak[match.bowler] = 0;
     match.wicketStreak = 0;
 
-    // Disappearing emoji — 🔥 for 4/5/6, 🤜 for 0/1/2/3
-    await sendDisappearingEmoji(match.groupId, match.strikerMessageId, getResultEmoji(bat, false));
+    // FIX: Send emoji first, THEN schedule cleanup of both emoji + batter message
+    const emojiMsgId = await sendDisappearingEmoji(
+      match.groupId, match.strikerMessageId, getResultEmoji(bat, false)
+    );
+    scheduleCleanup(match.groupId, emojiMsgId, match.strikerMessageId);
 
     // Partnership milestones
     if (match.currentPartnershipRuns === 50)
@@ -470,6 +502,21 @@ async function processBall(match) {
 }
 
 
+/* ================= BOWLER CHANGE — RESET STREAK ================= */
+// Call this from batterBowlerCommands when a new bowler is set,
+// so the new bowler starts with a fresh streak.
+function resetBowlerStreak(match, bowlerId) {
+  if (!match.bowlerWicketStreak) match.bowlerWicketStreak = {};
+  // Do NOT reset previous bowler's streak (history is preserved)
+  // Just ensure new bowler starts at 0 if they haven't bowled yet
+  if (match.bowlerWicketStreak[bowlerId] === undefined) {
+    match.bowlerWicketStreak[bowlerId] = 0;
+  }
+  // Reset the global wicketStreak to the new bowler's current streak
+  match.wicketStreak = match.bowlerWicketStreak[bowlerId];
+}
+
+
 /* ================= EXPORTS ================= */
 
-module.exports = { init, startBall, processBall, startTurnTimer };
+module.exports = { init, startBall, processBall, startTurnTimer, resetBowlerStreak };
