@@ -131,12 +131,19 @@ bot.use((ctx, next) => {
 
   if (bannedCache.has(String(userId))) {
     console.log(`[BAN BLOCK] userId=${userId}`);
-    if (ctx.callbackQuery) {
-      ctx.answerCbQuery("🚫 You are banned.", { show_alert: true }).catch(() => {});
-    } else if (ctx.message) {
-      ctx.reply("🚫 You are banned from this bot.").catch(() => {});
+
+    const isCommand = ctx.message?.entities?.some(e => e.type === "command") ||
+                      ctx.callbackQuery;
+
+    if (isCommand) {
+      if (ctx.callbackQuery) {
+        ctx.answerCbQuery("🚫 You are banned.", { show_alert: true }).catch(() => {});
+      } else {
+        ctx.reply("🚫 You are banned from this bot.").catch(() => {});
+      }
     }
-    return; // do not call next()
+    // Silent block for everything else (joins, messages, etc.)
+    return; // never calls next()
   }
 
   return next();
