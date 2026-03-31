@@ -10,7 +10,7 @@ const {
   deleteSoloMatch,
 } = require("./soloMatchManager");
 
-const soloBallHandler = require("./soloBallHandler");
+const soloBallHandler = require("./soloballHandler");
 const generateSoloScorecard = require("./soloScorecard");
 
 // ✅ FIXED: correct filename (case-sensitive)
