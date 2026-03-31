@@ -456,6 +456,39 @@ module.exports = function registerSoloCommands(bot, helpers) {
      /endsolo  — admin only
   ══════════════════════════════════════════ */
 
+  /* ══════════════════════════════════════════
+     /closejoin  — admin manually starts match early
+  ══════════════════════════════════════════ */
+
+  bot.command("closejoin", async (ctx) => {
+    if (ctx.chat.type === "private")
+      return ctx.reply("⚠️ Use this command in a group.");
+
+    try {
+      const member = await ctx.telegram.getChatMember(ctx.chat.id, ctx.from.id);
+      if (!["administrator", "creator"].includes(member.status))
+        return ctx.reply("🚫 Only admins can close the lobby.");
+    } catch {
+      return ctx.reply("⚠️ Could not verify admin status.");
+    }
+
+    const match = soloMatches.get(ctx.chat.id);
+    if (!match || match.phase !== "join")
+      return ctx.reply("❌ No open solo lobby right now.");
+
+    if (match.players.length < 3)
+      return ctx.reply(`❌ Need at least 3 players to start. Currently: ${match.players.length}/3`);
+
+    clearLobbyTimers(match);
+    await ctx.reply(`✅ Lobby closed by admin — starting with ${match.players.length} players!`);
+    return startSoloMatch(match);
+  });
+
+
+  /* ══════════════════════════════════════════
+     /endsolo  — admin force-end (with confirmation)
+  ══════════════════════════════════════════ */
+
   bot.command("endsolo", async (ctx) => {
     if (ctx.chat.type === "private")
       return ctx.reply("⚠️ Use this command in a group.");
@@ -472,8 +505,45 @@ module.exports = function registerSoloCommands(bot, helpers) {
     if (!match || match.matchEnded)
       return ctx.reply("❌ No active solo match in this group.");
 
-    await ctx.reply("🛑 Solo match ended by admin.");
+    await ctx.reply(
+      "⚠️ <b>Are you sure you want to end the solo match?</b>\n\nThis will save all current stats and post the final scorecard.",
+      {
+        parse_mode: "HTML",
+        reply_markup: {
+          inline_keyboard: [[
+            { text: "✅ Yes, End Match", callback_data: `endsolo_confirm_${ctx.chat.id}` },
+            { text: "❌ Cancel",         callback_data: `endsolo_cancel_${ctx.chat.id}` },
+          ]],
+        },
+      }
+    );
+  });
+
+  /* Confirmation callback */
+  bot.action(/^endsolo_confirm_(-\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery();
+    const groupId = Number(ctx.match[1]);
+
+    // Verify the person clicking is still an admin
+    try {
+      const member = await ctx.telegram.getChatMember(groupId, ctx.from.id);
+      if (!["administrator", "creator"].includes(member.status)) {
+        return ctx.answerCbQuery("🚫 Only admins can confirm this.", { show_alert: true });
+      }
+    } catch { /* ignore */ }
+
+    const match = soloMatches.get(groupId);
+    if (!match || match.matchEnded) {
+      return ctx.editMessageText("❌ No active solo match found.").catch(() => {});
+    }
+
+    await ctx.editMessageText("🛑 <b>Solo match ended by admin.</b>", { parse_mode: "HTML" }).catch(() => {});
     return endSoloMatch(match);
+  });
+
+  bot.action(/^endsolo_cancel_(-\d+)$/, async (ctx) => {
+    await ctx.answerCbQuery("Cancelled.");
+    await ctx.editMessageText("✅ End match cancelled.").catch(() => {});
   });
 
 

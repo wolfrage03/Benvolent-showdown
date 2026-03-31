@@ -71,18 +71,37 @@ async function sendGif(groupId, gifId, text, replyToMsgId) {
   }
 }
 
-/* ── Send gif to DM (bowler) ── */
-async function sendDMGif(userId, gifId, text) {
-  const extra = { caption: text, parse_mode: "HTML" };
+/* ── Send a disappearing gif/video to group (auto-deletes after delayMs) ── */
+async function sendDisappearing(chatId, gifId, text, replyToMsgId, delayMs = 8000) {
+  let sentMsg = null;
+  const extra = {
+    caption:    text,
+    parse_mode: "HTML",
+    ...(replyToMsgId ? { reply_parameters: { message_id: replyToMsgId } } : {}),
+  };
   try {
-    await bot.telegram.sendAnimation(userId, gifId, extra);
+    sentMsg = await bot.telegram.sendAnimation(chatId, gifId, extra);
   } catch {
     try {
-      await bot.telegram.sendVideo(userId, gifId, extra);
-    } catch {
-      await bot.telegram.sendMessage(userId, text).catch(() => {});
-    }
+      sentMsg = await bot.telegram.sendVideo(chatId, gifId, extra);
+    } catch { /* ignore */ }
   }
+  if (sentMsg) {
+    setTimeout(() => bot.telegram.deleteMessage(chatId, sentMsg.message_id).catch(() => {}), delayMs);
+  }
+}
+
+/* ── Send a disappearing emoji/text message ── */
+async function sendDisappearingText(chatId, text, replyToMsgId, delayMs = 5000) {
+  try {
+    const msg = await bot.telegram.sendMessage(chatId, text, {
+      parse_mode: "HTML",
+      ...(replyToMsgId ? { reply_parameters: { message_id: replyToMsgId } } : {}),
+    });
+    if (msg) {
+      setTimeout(() => bot.telegram.deleteMessage(chatId, msg.message_id).catch(() => {}), delayMs);
+    }
+  } catch { /* ignore */ }
 }
 
 /* ── Milestone check (50, 100) for a batter ── */
@@ -247,16 +266,20 @@ async function startBall(match) {
   const bowlerName  = getSoloName(match, match.bowler);
   const ballDisplay = `Ball ${match.ballsThisSet + 1}/3`;
 
-  /* Group announcement */
-  await bot.telegram.sendMessage(
-    match.groupId,
-    `🎯 <b>${ballDisplay}</b>\n\n<blockquote>🏏 ${batterName}  batting\n🎯 ${bowlerName}  bowling</blockquote>\n\n${ping(match.bowler, bowlerName)} — send your number in DM 👇`,
-    { parse_mode: "HTML", ...bowlDMButton() }
-  ).catch(e => console.error("[SOLO startBall]", e.message));
+  /* Group announcement — save message_id so bowling gif can reply to it */
+  let ballAnnounceMsgId = null;
+  try {
+    const annoMsg = await bot.telegram.sendMessage(
+      match.groupId,
+      `🎯 <b>${ballDisplay}</b>\n\n<blockquote>🏏 ${batterName}  batting\n🎯 ${bowlerName}  bowling</blockquote>\n\n${ping(match.bowler, bowlerName)} — send your number in DM 👇`,
+      { parse_mode: "HTML", ...bowlDMButton() }
+    );
+    ballAnnounceMsgId = annoMsg?.message_id || null;
+  } catch (e) { console.error("[SOLO startBall]", e.message); }
 
-  /* Bowling call gif → DM */
+  /* Bowling call gif → group as disappearing, replied to ball announcement */
   const call = getBowlingCall();
-  await sendDMGif(match.bowler, call.gif, call.text).catch(() => {});
+  await sendDisappearing(match.groupId, call.gif, call.text, ballAnnounceMsgId, 8000).catch(() => {});
 
   startTurnTimer(match, "bowl");
 }
@@ -307,11 +330,14 @@ async function processBall(match) {
         ? `💀 <b>OUT!</b>  🦆 <b>DUCK!</b>\n\n<blockquote>🏏 ${batterName} dismissed for 0!\n🎯 b ${bowlerName}\n\n${commentLine}</blockquote>`
         : `💀 <b>OUT!</b>\n\n<blockquote>🏏 ${batterName} dismissed for ${bs.runs}!\n🎯 b ${bowlerName}\n\n${commentLine}</blockquote>`;
 
-      if (gif) await sendGif(match.groupId, gif, text, replyTo);
+      const wicketEmoji = isDuck ? "🦆💀" : "💀🎯";
+      if (gif) await sendDisappearing(match.groupId, gif, text, replyTo, 10000);
       else await bot.telegram.sendMessage(match.groupId, text, {
         parse_mode: "HTML",
         ...(replyTo ? { reply_parameters: { message_id: replyTo } } : {}),
       }).catch(() => {});
+      // Separate disappearing emoji reply to batter's number message
+      await sendDisappearingText(match.groupId, wicketEmoji, replyTo, 6000).catch(() => {});
 
       // Bowling milestones
       await checkBowlerMilestone(match, ws).catch(() => {});
@@ -340,13 +366,24 @@ async function processBall(match) {
       bat === 5 ? "FIVE! ⚡" :
       `${bat} run${bat > 1 ? "s" : ""}`;
 
+    // Emoji shown as separate disappearing reply to batter's number
+    const runEmoji =
+      bat === 6 ? "🔥🔥🔥" :
+      bat === 4 ? "🚀💥"   :
+      bat === 5 ? "⚡🌟"   :
+      bat === 3 ? "✅✅✅"  :
+      bat === 2 ? "✅✅"    :
+               "✅";
+
     const text = `⚡ <b>${runLabel}</b>\n\n<blockquote>🏏 ${batterName}: ${bs.runs} runs (${bs.balls} balls)\n${commentLine}</blockquote>`;
 
-    if (gif) await sendGif(match.groupId, gif, text, replyTo);
+    if (gif) await sendDisappearing(match.groupId, gif, text, replyTo, 10000);
     else await bot.telegram.sendMessage(match.groupId, text, {
       parse_mode: "HTML",
       ...(replyTo ? { reply_parameters: { message_id: replyTo } } : {}),
     }).catch(() => {});
+    // Separate disappearing emoji reply to batter's number message
+    await sendDisappearingText(match.groupId, runEmoji, replyTo, 5000).catch(() => {});
 
     // Batting milestones (50, 100)
     await checkMilestone(match, prevRuns, bs.runs).catch(() => {});
