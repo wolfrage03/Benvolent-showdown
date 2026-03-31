@@ -50,12 +50,10 @@ async function sendDisappearingEmoji(groupId, replyToMsgId, emojiKey) {
   }
 }
 
-// Delete the emoji after delay, and also delete the batter's number message
-function scheduleCleanup(groupId, emojiMsgId, batterMsgId) {
+
+function scheduleCleanup(groupId, emojiMsgId) {
   setTimeout(() => {
     if (emojiMsgId)  bot.telegram.deleteMessage(groupId, emojiMsgId).catch(() => {});
-    // FIX: Batter message deleted AFTER emoji has been sent and is visible
-    if (batterMsgId) bot.telegram.deleteMessage(groupId, batterMsgId).catch(() => {});
   }, 1500);
 }
 
@@ -503,16 +501,12 @@ async function processBall(match) {
 
 
 /* ================= BOWLER CHANGE — RESET STREAK ================= */
-// Call this from batterBowlerCommands when a new bowler is set,
-// so the new bowler starts with a fresh streak.
+
 function resetBowlerStreak(match, bowlerId) {
   if (!match.bowlerWicketStreak) match.bowlerWicketStreak = {};
-  // Do NOT reset previous bowler's streak (history is preserved)
-  // Just ensure new bowler starts at 0 if they haven't bowled yet
   if (match.bowlerWicketStreak[bowlerId] === undefined) {
     match.bowlerWicketStreak[bowlerId] = 0;
   }
-  // Reset the global wicketStreak to the new bowler's current streak
   match.wicketStreak = match.bowlerWicketStreak[bowlerId];
 }
 
