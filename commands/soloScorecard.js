@@ -14,7 +14,10 @@ function safeNum(n) {
   return typeof n === "number" && !isNaN(n) ? n : 0;
 }
 
-/* ── PINNED PLAYER LIST (mirrors team mode style) ── */
+
+/* ══════════════════════════════════════════════
+   PINNED PLAYER LIST  (mirrors team mode style)
+══════════════════════════════════════════════ */
 
 function buildSoloPlayerList(match) {
   if (!match) return "No match data.";
@@ -26,14 +29,14 @@ function buildSoloPlayerList(match) {
     const s = match.stats[p.id] || {};
     const isBatter  = match.phase === "play" && p.id === match.batter;
     const isBowler  = match.phase === "play" && p.id === match.bowler;
-    const isOut     = s.out;
     const isRemoved = s.timedOut;
+    const isOut     = s.out && !s.timedOut;
 
     let tag = "";
-    if (isBatter)       tag = " 🏏";
-    else if (isBowler)  tag = " 🎯";
-    else if (isRemoved) tag = " ✗";
-    else if (isOut)     tag = " ✗";
+    if (isRemoved)     tag = " ✗";
+    else if (isOut)    tag = " ✗";
+    else if (isBatter) tag = " 🏏";
+    else if (isBowler) tag = " 🎯";
 
     const name = h(p.name || "Player");
     lines.push(`<blockquote>${i + 1}. ${name}${tag}</blockquote>`);
@@ -41,7 +44,7 @@ function buildSoloPlayerList(match) {
 
   if (match.phase === "join") {
     lines.push(``);
-    lines.push(`👉 /solojoin to join  (120s)`);
+    lines.push(`👉 /solojoin to join  •  /sololeave to leave  (120s)`);
   }
 
   return lines.join("\n");
@@ -61,7 +64,7 @@ async function sendAndPinSoloPlayerList(match, telegram) {
         );
       } catch (e) {
         if (!e.message?.includes("message is not modified")) {
-          console.error("[SOLO PlayerList edit error]", e.message);
+          console.error("[SOLO PlayerList edit]", e.message);
         }
       }
     } else {
@@ -81,7 +84,9 @@ async function sendAndPinSoloPlayerList(match, telegram) {
 }
 
 
-/* ── SCORECARD (live & final) ── */
+/* ══════════════════════════════════════════════
+   SCORECARD  (live & final)
+══════════════════════════════════════════════ */
 
 /**
  * @param {object} match
@@ -94,11 +99,11 @@ function generateSoloScorecard(match, opts = {}) {
 
   const { final = false } = opts;
 
-  const roster = match.allPlayers || match.players;
+  const roster  = match.allPlayers || match.players;
   const nameMap = {};
   for (const p of roster) nameMap[p.id] = p.name;
 
-  // Final: show all non-timed-out players; Live: show current active players
+  // Show all non-timedOut on final; current active players on live
   const showIds = final
     ? roster.filter(p => !match.stats[p.id]?.timedOut).map(p => p.id)
     : match.players.map(p => p.id);
@@ -122,13 +127,12 @@ function generateSoloScorecard(match, opts = {}) {
     const sixes = safeNum(s.sixes);
     const sr    = balls > 0 ? ((runs / balls) * 100).toFixed(0) : "0";
 
-    // Bowling stats
     const bBalls = safeNum(s.ballsBowled);
     const bRuns  = safeNum(s.runsConceded);
     const bWkts  = safeNum(s.wickets);
     const econ   = bBalls > 0 ? ((bRuns / bBalls) * 6).toFixed(2) : "0.00";
 
-    // Status tag
+    // Status indicator
     let indicator = "";
     if (!final) {
       if (id === match.batter)       indicator = " 🏏";
@@ -141,7 +145,6 @@ function generateSoloScorecard(match, opts = {}) {
     lines.push(`<b>${name}${indicator}</b>`);
     lines.push(`<blockquote>🏏 ${runs}(${balls})  SR:${sr}  4s:${fours} 5s:${fives} 6s:${sixes}</blockquote>`);
 
-    // Bowling history
     const history = (s.ballHistory || []).map(x => (x === "W" ? "W" : String(x)));
     const histStr = history.length > 0 ? history.join(" ") : "—";
     lines.push(`<blockquote>🎯 ${bBalls}b  ${bRuns}r  ${bWkts}w  eco:${econ}  [ ${histStr} ]</blockquote>`);
@@ -158,7 +161,7 @@ function generateSoloScorecard(match, opts = {}) {
     ).length;
     lines.push(
       `<blockquote>🏏 ${batterName}  |  🎯 ${bowlerName}\n` +
-      `Players: ${alive}/${match.players.length}  |  Ball: ${safeNum(match.ballsThisSet)}/3</blockquote>`
+      `Remaining: ${alive}/${match.players.length}  |  Ball: ${safeNum(match.ballsThisSet)}/3</blockquote>`
     );
   }
 

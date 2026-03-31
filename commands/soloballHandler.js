@@ -2,6 +2,14 @@
 // SOLO BALL HANDLER — soloballHandler.js
 // ===============================================================
 
+const {
+  randomLine,
+  randomGif,
+  getBowlingCall,
+  getBattingCall,
+  randomMilestoneLine,
+} = require("../commentary");
+
 let bot, getSoloName, clearSoloTimers, advanceSolo, endSoloMatch;
 
 function init(deps) {
@@ -42,18 +50,70 @@ function ensureStats(match, id) {
   return match.stats[id];
 }
 
+/* ── Send animation/video with optional reply ── */
+async function sendGif(groupId, gifId, text, replyToMsgId) {
+  const extra = {
+    caption:    text,
+    parse_mode: "HTML",
+    ...(replyToMsgId ? { reply_parameters: { message_id: replyToMsgId } } : {}),
+  };
+  try {
+    await bot.telegram.sendAnimation(groupId, gifId, extra);
+  } catch {
+    try {
+      await bot.telegram.sendVideo(groupId, gifId, extra);
+    } catch {
+      await bot.telegram.sendMessage(groupId, text, {
+        parse_mode: "HTML",
+        ...(replyToMsgId ? { reply_parameters: { message_id: replyToMsgId } } : {}),
+      }).catch(() => {});
+    }
+  }
+}
+
+/* ── Send gif to DM (bowler) ── */
+async function sendDMGif(userId, gifId, text) {
+  const extra = { caption: text, parse_mode: "HTML" };
+  try {
+    await bot.telegram.sendAnimation(userId, gifId, extra);
+  } catch {
+    try {
+      await bot.telegram.sendVideo(userId, gifId, extra);
+    } catch {
+      await bot.telegram.sendMessage(userId, text).catch(() => {});
+    }
+  }
+}
+
+/* ── Milestone check (50, 100) for a batter ── */
+async function checkMilestone(match, prevRuns, newRuns) {
+  if (prevRuns < 100 && newRuns >= 100) {
+    const text = randomMilestoneLine("hundred") || "🥇 CENTURY!";
+    const gif  = randomGif("hundred");
+    if (gif) await sendGif(match.groupId, gif, text, null).catch(() => {});
+    else await bot.telegram.sendMessage(match.groupId, text, { parse_mode: "HTML" }).catch(() => {});
+  } else if (prevRuns < 50 && newRuns >= 50) {
+    const text = randomMilestoneLine("fifty") || "🥈 FIFTY!";
+    const gif  = randomGif("fifty");
+    if (gif) await sendGif(match.groupId, gif, text, null).catch(() => {});
+    else await bot.telegram.sendMessage(match.groupId, text, { parse_mode: "HTML" }).catch(() => {});
+  }
+}
+
 
 /* ─────────────────────────────────────────
-   TURN TIMER  (60s total, warn at 30s & 10s)
+   TURN TIMER  (60s — same as team mode)
+   30s warning at 30s elapsed
+   10s warning at 50s elapsed
+   Timeout  at 60s elapsed
 ───────────────────────────────────────── */
 
 function startTurnTimer(match, type) {
-  // 30s warning
   match.warning30 = setTimeout(async () => {
     const id   = type === "bowl" ? match.bowler : match.batter;
     const name = getSoloName(match, id);
-    if ((type === "bowl" && match.awaitingBowl) ||
-        (type === "bat"  && match.awaitingBat)) {
+    const still = type === "bowl" ? match.awaitingBowl : match.awaitingBat;
+    if (still) {
       await bot.telegram.sendMessage(
         match.groupId,
         `${ping(id, name)} ⏳ 30s left`,
@@ -62,12 +122,11 @@ function startTurnTimer(match, type) {
     }
   }, 30_000);
 
-  // 10s warning (at 50s)
   match.warning10 = setTimeout(async () => {
     const id   = type === "bowl" ? match.bowler : match.batter;
     const name = getSoloName(match, id);
-    if ((type === "bowl" && match.awaitingBowl) ||
-        (type === "bat"  && match.awaitingBat)) {
+    const still = type === "bowl" ? match.awaitingBowl : match.awaitingBat;
+    if (still) {
       await bot.telegram.sendMessage(
         match.groupId,
         `${ping(id, name)} 🚨 10s left`,
@@ -76,7 +135,6 @@ function startTurnTimer(match, type) {
     }
   }, 50_000);
 
-  // Timeout at 60s
   match.ballTimer = setTimeout(() => ballTimeout(match, type), 60_000);
 }
 
@@ -86,7 +144,7 @@ function startTurnTimer(match, type) {
 ───────────────────────────────────────── */
 
 async function ballTimeout(match, type) {
-  if (!match || match.matchEnded || match.phase === "idle") return;
+  if (!match || match.matchEnded || match.phase !== "play") return;
   if (match.ballLocked) return;
   match.ballLocked = true;
 
@@ -96,36 +154,27 @@ async function ballTimeout(match, type) {
     /* ── Bowler timed out ── */
     if (match.awaitingBowl) {
       match.awaitingBowl = false;
-      const s  = ensureStats(match, match.bowler);
+      const s = ensureStats(match, match.bowler);
       s.consecutiveTimeouts = (s.consecutiveTimeouts || 0) + 1;
 
       if (s.consecutiveTimeouts >= 2) {
-        // Remove from game
         s.timedOut = true;
         await bot.telegram.sendMessage(
           match.groupId,
-          `⏱ <b>Bowler Removed</b>\n\n<blockquote>${getSoloName(match, match.bowler)} timed out twice — removed from the game.\nBall does not count.</blockquote>`,
+          `⏱ <b>Bowler Removed</b>\n\n<blockquote>${getSoloName(match, match.bowler)} timed out twice and is removed.\nBall does not count.</blockquote>`,
           { parse_mode: "HTML" }
         ).catch(() => {});
 
         match.players = match.players.filter(p => p.id !== match.bowler);
-
-        if (match.players.length < 2) {
-          match.ballLocked = false;
-          return endSoloMatch(match);
-        }
-
+        if (match.players.length < 2) { match.ballLocked = false; return endSoloMatch(match); }
         match.ballLocked = false;
-        return advanceSolo(match, false, true); // force rotate bowler
-
+        return advanceSolo(match, false, true);
       } else {
-        // 1st timeout — warn, rotate bowler, ball doesn't count
         await bot.telegram.sendMessage(
           match.groupId,
-          `⏱ <b>Bowler Timed Out</b>\n\n<blockquote>${getSoloName(match, match.bowler)} failed to bowl in time.\n⚠️ Warning ${s.consecutiveTimeouts}/2 — ball skipped, rotating bowler.</blockquote>`,
+          `⏱ <b>Bowler Timed Out</b>\n\n<blockquote>${getSoloName(match, match.bowler)} did not bowl in time.\n⚠️ Warning ${s.consecutiveTimeouts}/2 — ball skipped, next bowler.</blockquote>`,
           { parse_mode: "HTML" }
         ).catch(() => {});
-
         match.ballLocked = false;
         return advanceSolo(match, false, true);
       }
@@ -134,57 +183,41 @@ async function ballTimeout(match, type) {
     /* ── Batter timed out ── */
     if (match.awaitingBat) {
       match.awaitingBat = false;
-      const s  = ensureStats(match, match.batter);
-      s.consecutiveTimeouts = (s.consecutiveTimeouts || 0) + 1;
+      const bs = ensureStats(match, match.batter);
+      bs.consecutiveTimeouts = (bs.consecutiveTimeouts || 0) + 1;
 
-      // Record W in bowler history for timeout ball
-      const bs = ensureStats(match, match.bowler);
-      bs.ballHistory.push("W");
-      bs.ballsBowled++;
-      bs.wickets++;
+      const ws = ensureStats(match, match.bowler);
+      ws.ballHistory.push("W");
+      ws.ballsBowled++;
+      ws.wickets++;
       match.ballsThisSet++;
 
-      if (s.consecutiveTimeouts >= 2) {
-        s.timedOut = true;
-        s.out      = true;
-
+      if (bs.consecutiveTimeouts >= 2) {
+        bs.timedOut = true;
+        bs.out      = true;
         await bot.telegram.sendMessage(
           match.groupId,
-          `⏱ <b>Batter Removed</b>\n\n<blockquote>${getSoloName(match, match.batter)} timed out twice — removed from the game. OUT!</blockquote>`,
+          `⏱ <b>Batter Removed</b>\n\n<blockquote>${getSoloName(match, match.batter)} timed out twice and is removed. OUT!</blockquote>`,
           { parse_mode: "HTML" }
         ).catch(() => {});
-
         match.players = match.players.filter(p => p.id !== match.batter);
-
         const alive = match.players.filter(p => !match.stats[p.id]?.out && !match.stats[p.id]?.timedOut);
-        if (alive.length < 1 || match.players.length < 2) {
-          match.ballLocked = false;
-          return endSoloMatch(match);
-        }
-
+        if (alive.length < 1 || match.players.length < 2) { match.ballLocked = false; return endSoloMatch(match); }
         match.ballLocked = false;
-        return advanceSolo(match, true); // wicket = true, move to next batter
-
+        return advanceSolo(match, true);
       } else {
-        s.out = true;
-
+        bs.out = true;
         await bot.telegram.sendMessage(
           match.groupId,
-          `⏱ <b>Batter Timed Out</b>\n\n<blockquote>${getSoloName(match, match.batter)} failed to bat in time.\n⚠️ Warning ${s.consecutiveTimeouts}/2 — OUT!</blockquote>`,
+          `⏱ <b>Batter Timed Out</b>\n\n<blockquote>${getSoloName(match, match.batter)} did not bat in time.\n⚠️ Warning ${bs.consecutiveTimeouts}/2 — OUT!</blockquote>`,
           { parse_mode: "HTML" }
         ).catch(() => {});
-
-        const outCount = match.players.filter(p => match.stats[p.id]?.out || match.stats[p.id]?.timedOut).length;
-        if (outCount >= match.players.length) {
-          match.ballLocked = false;
-          return endSoloMatch(match);
-        }
-
+        const alive = match.players.filter(p => !match.stats[p.id]?.out && !match.stats[p.id]?.timedOut);
+        if (alive.length < 1) { match.ballLocked = false; return endSoloMatch(match); }
         match.ballLocked = false;
         return advanceSolo(match, true);
       }
     }
-
   } catch (err) {
     console.error("[SOLO ballTimeout]", err.message);
     match.ballLocked = false;
@@ -194,6 +227,8 @@ async function ballTimeout(match, type) {
 
 /* ─────────────────────────────────────────
    START BALL
+   • Bowling call gif → DM to bowler
+   • Ball announcement → Group (with DM button)
 ───────────────────────────────────────── */
 
 async function startBall(match) {
@@ -201,21 +236,27 @@ async function startBall(match) {
 
   clearSoloTimers(match);
 
-  match.batNumber    = null;
-  match.bowlNumber   = null;
-  match.ballLocked   = false;
-  match.awaitingBowl = true;
-  match.awaitingBat  = false;
+  match.batNumber       = null;
+  match.bowlNumber      = null;
+  match.ballLocked      = false;
+  match.awaitingBowl    = true;
+  match.awaitingBat     = false;
+  match.batterMessageId = null;
 
   const batterName  = getSoloName(match, match.batter);
   const bowlerName  = getSoloName(match, match.bowler);
   const ballDisplay = `Ball ${match.ballsThisSet + 1}/3`;
 
+  /* Group announcement */
   await bot.telegram.sendMessage(
     match.groupId,
-    `🎯 <b>${ballDisplay}</b>\n\n<blockquote>🏏 ${batterName}  batting\n🎯 ${bowlerName}  bowling</blockquote>\n\n${ping(match.bowler, bowlerName)} — send your number (1–6) in DM 👇`,
+    `🎯 <b>${ballDisplay}</b>\n\n<blockquote>🏏 ${batterName}  batting\n🎯 ${bowlerName}  bowling</blockquote>\n\n${ping(match.bowler, bowlerName)} — send your number in DM 👇`,
     { parse_mode: "HTML", ...bowlDMButton() }
   ).catch(e => console.error("[SOLO startBall]", e.message));
+
+  /* Bowling call gif → DM */
+  const call = getBowlingCall();
+  await sendDMGif(match.bowler, call.gif, call.text).catch(() => {});
 
   startTurnTimer(match, "bowl");
 }
@@ -223,6 +264,8 @@ async function startBall(match) {
 
 /* ─────────────────────────────────────────
    PROCESS BALL
+   • Result gif sent as REPLY to batter's group message
+   • Batting call gif sent to group after bowler confirms
 ───────────────────────────────────────── */
 
 async function processBall(match) {
@@ -243,39 +286,53 @@ async function processBall(match) {
     ws.ballHistory.push(bat === bowl ? "W" : bat);
     match.ballsThisSet++;
 
-    // Reset consecutive timeout counter on successful play
+    // Successful play resets consecutive timeout counter for both
     bs.consecutiveTimeouts = 0;
     ws.consecutiveTimeouts = 0;
 
     const batterName = getSoloName(match, match.batter);
     const bowlerName = getSoloName(match, match.bowler);
+    const replyTo    = match.batterMessageId || null;
 
     /* ══ WICKET ══ */
     if (bat === bowl) {
       bs.out = true;
       ws.wickets++;
-      ws.runsConceded += 0;
 
-      await bot.telegram.sendMessage(
-        match.groupId,
-        `💀 <b>OUT!</b>\n\n<blockquote>🏏 ${batterName} dismissed!\n🎯 b ${bowlerName}</blockquote>`,
-        { parse_mode: "HTML" }
-      ).catch(() => {});
+      const commentLine = randomLine("wicket") || "";
+      const isDuck      = bs.runs === 0;
+      const gif         = randomGif(isDuck ? "duck" : "wicket");
+
+      const text = isDuck
+        ? `💀 <b>OUT!</b>  🦆 <b>DUCK!</b>\n\n<blockquote>🏏 ${batterName} dismissed for 0!\n🎯 b ${bowlerName}\n\n${commentLine}</blockquote>`
+        : `💀 <b>OUT!</b>\n\n<blockquote>🏏 ${batterName} dismissed for ${bs.runs}!\n🎯 b ${bowlerName}\n\n${commentLine}</blockquote>`;
+
+      if (gif) await sendGif(match.groupId, gif, text, replyTo);
+      else await bot.telegram.sendMessage(match.groupId, text, {
+        parse_mode: "HTML",
+        ...(replyTo ? { reply_parameters: { message_id: replyTo } } : {}),
+      }).catch(() => {});
+
+      // Bowling milestones
+      await checkBowlerMilestone(match, ws).catch(() => {});
 
       const alive = match.players.filter(
         p => !match.stats[p.id]?.out && !match.stats[p.id]?.timedOut
       );
       if (alive.length < 1) return endSoloMatch(match);
-
       return advanceSolo(match, true);
     }
 
     /* ══ RUNS ══ */
-    bs.runs += bat;
+    const prevRuns = bs.runs;
+    bs.runs        += bat;
     ws.runsConceded += bat;
     if (bat === 4) bs.fours++;
     if (bat === 5) bs.fives++;
     if (bat === 6) bs.sixes++;
+
+    const commentLine = randomLine(bat) || "";
+    const gif         = randomGif(bat);
 
     const runLabel =
       bat === 0 ? "Dot 🔵" :
@@ -284,20 +341,41 @@ async function processBall(match) {
       bat === 5 ? "FIVE! ⚡" :
       `${bat} run${bat > 1 ? "s" : ""}`;
 
-    await bot.telegram.sendMessage(
-      match.groupId,
-      `⚡ <b>${runLabel}</b>\n\n<blockquote>🏏 ${batterName}: ${bs.runs} runs (${bs.balls} balls)</blockquote>`,
-      { parse_mode: "HTML" }
-    ).catch(() => {});
+    const text = `⚡ <b>${runLabel}</b>\n\n<blockquote>🏏 ${batterName}: ${bs.runs} runs (${bs.balls} balls)\n${commentLine}</blockquote>`;
+
+    if (gif) await sendGif(match.groupId, gif, text, replyTo);
+    else await bot.telegram.sendMessage(match.groupId, text, {
+      parse_mode: "HTML",
+      ...(replyTo ? { reply_parameters: { message_id: replyTo } } : {}),
+    }).catch(() => {});
+
+    // Batting milestones (50, 100)
+    await checkMilestone(match, prevRuns, bs.runs).catch(() => {});
 
     return advanceSolo(match, false);
 
   } catch (err) {
     console.error("[SOLO processBall]", err.message);
   } finally {
-    match.batNumber  = null;
-    match.bowlNumber = null;
-    match.ballLocked = false;
+    match.batNumber       = null;
+    match.bowlNumber      = null;
+    match.ballLocked      = false;
+    match.batterMessageId = null;
+  }
+}
+
+/* ── Bowler haul milestones ── */
+async function checkBowlerMilestone(match, ws) {
+  const w = ws.wickets;
+  let text = null;
+  let gif  = null;
+  if      (w === 3) { text = randomMilestoneLine("threeFer"); gif = randomGif("hattrick"); }
+  else if (w === 4) { text = randomMilestoneLine("fourFer");  gif = randomGif("wicket"); }
+  else if (w === 5) { text = randomMilestoneLine("fiveFer");  gif = randomGif("wicket"); }
+  else if (w >= 6)  { text = randomMilestoneLine("sixFer");   gif = randomGif("wicket"); }
+  if (text) {
+    if (gif) await sendGif(match.groupId, gif, text, null).catch(() => {});
+    else await bot.telegram.sendMessage(match.groupId, text, { parse_mode: "HTML" }).catch(() => {});
   }
 }
 

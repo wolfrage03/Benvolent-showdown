@@ -1,21 +1,25 @@
 // ===============================================================
 // SOLO COMMANDS — soloCommands.js
 // ===============================================================
-// Commands:
-//   /solostart   — open lobby (group only)
-//   /solojoin    — join open lobby
-//   /sololeave   — leave lobby before match starts
-//   /soloscore   — live scorecard
-//   /solostats   — personal lifetime stats
-//   /endsolo     — admin force-end current match
 //
-// Game rules:
-//   • Order-based: P1 bats first, P2 bowls first
-//   • 3 balls per bowler set, then next eligible player bowls
-//   • Batter cannot bowl to himself — skipped in bowler rotation
-//   • After last player in rotation, wraps back to P1
-//   • 2 consecutive timeouts → player removed from game
-//   • Auto-start at 120s (or when 3+ players join for 5s)
+// GAME RULES:
+//   • Minimum 3, maximum 10 players
+//   • ALL players bat individually in join order (P1, P2, P3 … Pn)
+//   • Bowler starts at P2, bowls 3 balls, then P3, P4 … wraps back to P1
+//   • Batter can NEVER bowl to himself — bowler rotation skips him
+//   • If a bowler gets out as batter while still having balls left,
+//     the NEXT player becomes bowler with a FULL 3 balls (no reduction)
+//   • After last player bowls, rotation wraps to P1 (circular, skip batter)
+//   • 2 consecutive timeouts → player removed
+//   • First timeout = warning, ball doesn't count, next bowler
+//
+// COMMANDS:
+//   /solostart  — open lobby
+//   /solojoin   — join lobby
+//   /sololeave  — leave lobby (lobby phase only)
+//   /soloscore  — live scorecard
+//   /solostats  — personal stats
+//   /endsolo    — admin force-end
 // ===============================================================
 
 const {
@@ -39,8 +43,11 @@ const {
   getSoloStatsText,
 } = require("./soloStats");
 
+const {
+  getBattingCall,
+} = require("../commentary");
+
 module.exports = function registerSoloCommands(bot, helpers) {
-  const { isUserBanned } = helpers;
 
   /* ══════════════════════════════════════════
      TINY HELPERS
@@ -65,37 +72,102 @@ module.exports = function registerSoloCommands(bot, helpers) {
     });
   };
 
+  function freshStats() {
+    return {
+      runs: 0, balls: 0, fours: 0, fives: 0, sixes: 0,
+      wickets: 0, out: false,
+      ballsBowled: 0, runsConceded: 0,
+      ballHistory: [],
+      timedOut: false,
+      consecutiveTimeouts: 0,
+    };
+  }
+
+  /* ── send batting call gif to group ── */
+  async function sendBattingCallToGroup(match, batterName) {
+    const call = getBattingCall();
+    const text = `${ping(match.batter, batterName)} — ${call.text}`;
+    try {
+      await bot.telegram.sendAnimation(match.groupId, call.gif, {
+        caption: text, parse_mode: "HTML",
+      });
+    } catch {
+      try {
+        await bot.telegram.sendVideo(match.groupId, call.gif, {
+          caption: text, parse_mode: "HTML",
+        });
+      } catch {
+        await bot.telegram.sendMessage(match.groupId, text, { parse_mode: "HTML" }).catch(() => {});
+      }
+    }
+  }
+
 
   /* ══════════════════════════════════════════
-     ROTATION HELPERS
+     ROTATION LOGIC
   ══════════════════════════════════════════ */
 
   /**
-   * Find next eligible index in match.players after `afterIndex`.
-   * type = "bowler" → skip the current batter's index too.
-   * Wraps around (circular). Returns -1 if no eligible player found.
+   * Find the next eligible bowler index in match.players[].
+   *
+   * Rules:
+   *  - Wraps circularly after last player → back to index 0
+   *  - Skips players who are timedOut or removed
+   *  - Skips the current batterIndex (batter cannot bowl to himself)
+   *  - Starts search AFTER afterIndex (not inclusive)
+   *
+   * Returns index, or -1 if no eligible bowler exists.
    */
-  function nextEligibleIndex(match, afterIndex, type) {
+  function nextBowlerIndex(match, afterIndex) {
     const n = match.players.length;
     for (let i = 1; i <= n; i++) {
       const idx = (afterIndex + i) % n;
       const p   = match.players[idx];
-      const s   = match.stats[p.id];
-      if (s?.out || s?.timedOut) continue;
-      if (type === "bowler" && idx === match.batterIndex) continue;
+      if (!p) continue;
+      const s = match.stats[p.id];
+      // Skip removed players
+      if (s?.timedOut) continue;
+      // Skip the current batter (cannot bowl to himself)
+      if (idx === match.batterIndex) continue;
       return idx;
     }
     return -1;
   }
 
   /**
-   * Rotate to next bowler (after 3-ball set or force-rotate).
+   * Find the next eligible batter index in match.players[].
+   *
+   * Rules:
+   *  - Sequential: next player in join order after current batter
+   *  - Skips out / timedOut players
+   *  - Does NOT wrap (each player bats only once in order)
+   *
+   * Returns index, or -1 if no more batters.
    */
+  function nextBatterIndex(match) {
+    const n = match.players.length;
+    // Look strictly forward from current batter
+    for (let i = match.batterIndex + 1; i < n; i++) {
+      const p = match.players[i];
+      if (!p) continue;
+      const s = match.stats[p.id];
+      if (s?.timedOut) continue;  // removed player
+      if (s?.out)      continue;  // already dismissed
+      return i;
+    }
+    return -1;
+  }
+
+
+  /* ══════════════════════════════════════════
+     BOWLER ROTATION
+  ══════════════════════════════════════════ */
+
   async function rotateBowler(match) {
     match.ballsThisSet = 0;
     match.setCount++;
 
-    const next = nextEligibleIndex(match, match.bowlerIndex, "bowler");
+    const next = nextBowlerIndex(match, match.bowlerIndex);
     if (next === -1) return endSoloMatch(match);
 
     match.bowlerIndex = next;
@@ -111,26 +183,29 @@ module.exports = function registerSoloCommands(bot, helpers) {
     return soloBallHandler.startBall(match);
   }
 
+
+  /* ══════════════════════════════════════════
+     ADVANCE SOLO  (called after every ball)
+  ══════════════════════════════════════════ */
+
   /**
-   * Called after every ball resolves.
-   * wicket=true  → advance batter
-   * force=true   → skip to next bowler immediately (timeout rotation)
+   * @param {object}  match
+   * @param {boolean} wicket  – true if batter just got out
+   * @param {boolean} force   – true to skip immediately to next bowler (timeout)
    */
   async function advanceSolo(match, wicket = false, force = false) {
     if (!match || match.matchEnded) return;
 
-    // Count players still eligible (not out, not timed-out)
-    const alive = match.players.filter(
-      p => !match.stats[p.id]?.out && !match.stats[p.id]?.timedOut
-    );
-
-    // Need at least 2 alive to continue (1 batter + 1 bowler)
-    if (alive.length < 2) return endSoloMatch(match);
-    if (force)            return rotateBowler(match);
+    if (force) return rotateBowler(match);
 
     if (wicket) {
-      const next = nextEligibleIndex(match, match.batterIndex, "batter");
-      if (next === -1) return endSoloMatch(match);
+      // ── Find next batter ──
+      const next = nextBatterIndex(match);
+
+      if (next === -1) {
+        // No more batters → match over
+        return endSoloMatch(match);
+      }
 
       match.batterIndex = next;
       match.batter      = match.players[next].id;
@@ -143,14 +218,21 @@ module.exports = function registerSoloCommands(bot, helpers) {
 
       await sendAndPinSoloPlayerList(match, bot.telegram);
 
-      // If bowler is now also the batter, rotate bowler first
-      if (match.bowler === match.batter) return rotateBowler(match);
+      // If current bowler is the new batter → rotate bowler first (full 3 balls)
+      // Key rule: if bowler is now also the batter, give next bowler a FULL 3-ball set
+      if (match.bowler === match.batter) {
+        match.ballsThisSet = 0; // reset so new bowler gets full 3 balls
+        return rotateBowler(match);
+      }
 
+      // If 3-ball set is done, rotate bowler
       if (match.ballsThisSet >= 3) return rotateBowler(match);
+
+      // Continue same bowler, same set
       return soloBallHandler.startBall(match);
     }
 
-    // Normal ball — just check if set is done
+    // No wicket — just check if set is done
     if (match.ballsThisSet >= 3) return rotateBowler(match);
     return soloBallHandler.startBall(match);
   }
@@ -162,8 +244,8 @@ module.exports = function registerSoloCommands(bot, helpers) {
 
   async function endSoloMatch(match) {
     if (!match || match.matchEnded) return;
-
     match.matchEnded = true;
+
     clearSoloTimers(match);
     clearLobbyTimers(match);
 
@@ -173,12 +255,10 @@ module.exports = function registerSoloCommands(bot, helpers) {
     const card = generateSoloScorecard(match, { final: true, motm: match.motm });
     await bot.telegram.sendMessage(match.groupId, card, { parse_mode: "HTML" }).catch(() => {});
 
-    // Unpin player list
     if (match.playerListMessageId) {
       await bot.telegram.unpinChatMessage(match.groupId, match.playerListMessageId).catch(() => {});
     }
 
-    // Clean up active player map
     const allIds = match.allPlayers || match.players;
     allIds.forEach(p => soloPlayerActive.delete(p.id));
     deleteSoloMatch(match.groupId);
@@ -218,11 +298,9 @@ module.exports = function registerSoloCommands(bot, helpers) {
 
     const name      = ctx.from.first_name || "Player";
     const playerObj = { id: ctx.from.id, name };
-
     match.players    = [playerObj];
     match.allPlayers = [playerObj];
     match.stats[ctx.from.id] = freshStats();
-
     soloPlayerActive.set(ctx.from.id, ctx.chat.id);
 
     // Send + pin player list
@@ -233,7 +311,7 @@ module.exports = function registerSoloCommands(bot, helpers) {
       if (match.phase !== "join") return;
       await bot.telegram.sendMessage(
         match.groupId,
-        `⏳ <b>60 seconds left</b> to join!\n👥 ${match.players.length} player(s) so far\n👉 /solojoin`,
+        `⏳ <b>60 seconds left</b> to join the solo lobby!\n👥 ${match.players.length} player(s) joined\n👉 /solojoin`,
         { parse_mode: "HTML" }
       ).catch(() => {});
     }, 60_000);
@@ -286,58 +364,56 @@ module.exports = function registerSoloCommands(bot, helpers) {
       return ctx.reply("❌ Lobby is full (max 10 players).");
 
     if (soloPlayerActive.has(ctx.from.id))
-      return ctx.reply("⚠️ You already joined this lobby.");
+      return ctx.reply("⚠️ You are already in this lobby.");
 
     const name      = ctx.from.first_name || "Player";
     const playerObj = { id: ctx.from.id, name };
-
     match.players.push(playerObj);
     match.allPlayers.push(playerObj);
     match.stats[ctx.from.id] = freshStats();
-
     soloPlayerActive.set(ctx.from.id, match.groupId);
 
-    // Update pinned list
     await sendAndPinSoloPlayerList(match, ctx.telegram);
     await ctx.reply(`✅ <b>${name} joined!</b>`, { parse_mode: "HTML" });
 
-    // Auto-start guard: once 3+ in lobby, wait 5s then start if still in join phase
-    if (match.players.length >= 3 && !match._autoStartScheduled) {
+   
+    // Auto-start ONLY when 10 players join
+    if (match.players.length === 10 && !match._autoStartScheduled) {
       match._autoStartScheduled = true;
       setTimeout(async () => {
         if (match.phase !== "join") return;
-        if (match.players.length >= 3) {
+        if (match.players.length === 10) {
           clearLobbyTimers(match);
           await startSoloMatch(match);
         }
-      }, 5_000);
+      }, 1000); // small delay (optional, can be 0)
     }
   });
 
 
   /* ══════════════════════════════════════════
-     /sololeave  (lobby phase only)
+     /sololeave  (lobby only)
   ══════════════════════════════════════════ */
 
   bot.command("sololeave", async (ctx) => {
+    if (ctx.chat.type === "private")
+      return ctx.reply("⚠️ Use this command in a group.");
+
     const match = soloMatches.get(ctx.chat?.id);
     if (!match || match.phase !== "join")
-      return ctx.reply("❌ No open lobby to leave. Match in progress cannot be left.");
+      return ctx.reply("❌ You can only leave during the lobby phase.");
 
     if (!soloPlayerActive.has(ctx.from.id))
       return ctx.reply("⚠️ You are not in this lobby.");
 
     const name = getSoloName(match, ctx.from.id);
-
     match.players    = match.players.filter(p => p.id !== ctx.from.id);
     match.allPlayers = match.allPlayers.filter(p => p.id !== ctx.from.id);
     delete match.stats[ctx.from.id];
     soloPlayerActive.delete(ctx.from.id);
 
     await ctx.reply(`👋 <b>${name}</b> left the lobby.`, { parse_mode: "HTML" });
-    await sendAndPinSoloPlayerList(match, ctx.telegram);
 
-    // Cancel if no players left
     if (match.players.length === 0) {
       clearLobbyTimers(match);
       if (match.playerListMessageId) {
@@ -346,6 +422,8 @@ module.exports = function registerSoloCommands(bot, helpers) {
       deleteSoloMatch(match.groupId);
       return ctx.reply("❌ Lobby closed — no players remaining.");
     }
+
+    await sendAndPinSoloPlayerList(match, ctx.telegram);
   });
 
 
@@ -381,7 +459,6 @@ module.exports = function registerSoloCommands(bot, helpers) {
     if (ctx.chat.type === "private")
       return ctx.reply("⚠️ Use this command in a group.");
 
-    // Check admin
     try {
       const member = await ctx.telegram.getChatMember(ctx.chat.id, ctx.from.id);
       if (!["administrator", "creator"].includes(member.status))
@@ -407,25 +484,25 @@ module.exports = function registerSoloCommands(bot, helpers) {
     if (match.phase !== "join") return;
     match.phase = "play";
 
-    // Reset rotation
-    match.batterIndex = 0;
-    match.bowlerIndex = 1;
-    match.batter      = match.players[0].id;
-    match.bowler      = match.players[1].id;
+    // P1 bats, P2 bowls, both start at index 0 and 1
+    match.batterIndex  = 0;
+    match.bowlerIndex  = 1;
+    match.batter       = match.players[0].id;
+    match.bowler       = match.players[1].id;
     match.ballsThisSet = 0;
     match.setCount     = 0;
 
-    const playerList = match.players.map((p, i) => `${i + 1}. ${p.name}`).join("\n");
     const batterName = getSoloName(match, match.batter);
     const bowlerName = getSoloName(match, match.bowler);
+    const playerList = match.players.map((p, i) => `${i + 1}. ${p.name}`).join("\n");
 
     await bot.telegram.sendMessage(
       match.groupId,
-      `🏏 <b>Solo Match Started!</b>\n\n<blockquote>${playerList}</blockquote>\n\n🏏 <b>${batterName}</b> batting\n🎯 <b>${bowlerName}</b> bowling`,
+      `🏏 <b>Solo Match Started!</b>\n\n<blockquote>${playerList}</blockquote>\n\n🏏 <b>${batterName}</b> batting first\n🎯 <b>${bowlerName}</b> bowling`,
       { parse_mode: "HTML" }
     ).catch(() => {});
 
-    // Update pinned player list to show batting/bowling roles
+    // Update pinned list with roles
     await sendAndPinSoloPlayerList(match, bot.telegram);
 
     soloBallHandler.startBall(match);
@@ -446,11 +523,13 @@ module.exports = function registerSoloCommands(bot, helpers) {
 
     /* ── Group: batter input (0–6) ── */
     if (ctx.chat.type !== "private") {
-      if (ctx.from.id !== match.batter)     return next();
-      if (!match.awaitingBat)               return next();
-      if (!/^[0-6]$/.test(text))            return next();
+      if (ctx.from.id !== match.batter)  return next();
+      if (!match.awaitingBat)            return next();
+      if (!/^[0-6]$/.test(text))         return next();
 
-      match.batNumber = Number(text);
+      // Capture the message ID so the result gif can reply to it
+      match.batterMessageId = ctx.message.message_id;
+      match.batNumber       = Number(text);
 
       if (match.bowlNumber !== null)
         return soloBallHandler.processBall(match);
@@ -467,16 +546,14 @@ module.exports = function registerSoloCommands(bot, helpers) {
     match.awaitingBowl = false;
     match.awaitingBat  = true;
 
-    const batterName = getSoloName(match, match.batter);
-    await bot.telegram.sendMessage(
-      match.groupId,
-      `✅ Bowler sent number!\n\n${ping(match.batter, batterName)} — send your number (0–6) in the group 🏏`,
-      { parse_mode: "HTML" }
-    ).catch(() => {});
-
     await ctx.reply("✅ Number received!").catch(() => {});
 
-    // Start batter turn timer (fresh 60s)
+    const batterName = getSoloName(match, match.batter);
+
+    // Send batting call gif to group (reply prompt to batter)
+    await sendBattingCallToGroup(match, batterName).catch(() => {});
+
+    // Clear existing timer, start fresh 60s for batter
     clearSoloTimers(match);
     soloBallHandler.startTurnTimer(match, "bat");
 
@@ -484,20 +561,4 @@ module.exports = function registerSoloCommands(bot, helpers) {
     if (match.batNumber !== null)
       return soloBallHandler.processBall(match);
   });
-
-
-  /* ══════════════════════════════════════════
-     FRESH STATS OBJECT
-  ══════════════════════════════════════════ */
-
-  function freshStats() {
-    return {
-      runs: 0, balls: 0, fours: 0, fives: 0, sixes: 0,
-      wickets: 0, out: false,
-      ballsBowled: 0, runsConceded: 0,
-      ballHistory: [],
-      timedOut: false,
-      consecutiveTimeouts: 0,
-    };
-  }
 };

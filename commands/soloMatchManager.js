@@ -1,8 +1,6 @@
 // ===============================================================
 // SOLO MATCH STORAGE — soloMatchManager.js
 // ===============================================================
-// soloMatches:      groupId → soloMatch
-// soloPlayerActive: userId  → groupId
 
 const soloMatches      = new Map();
 const soloPlayerActive = new Map();
@@ -22,10 +20,8 @@ function deleteSoloMatch(groupId) {
 
 function resetSoloMatch(groupId) {
   const old = soloMatches.get(groupId);
-
   if (old) {
-    ["ballTimer", "warning30", "warning10",
-     "joinTimer", "alert60", "alert30"].forEach(k => {
+    ["ballTimer", "warning30", "warning10", "joinTimer", "alert60", "alert30"].forEach(k => {
       if (old[k]) { clearTimeout(old[k]); }
     });
     for (const [uid, gid] of soloPlayerActive.entries()) {
@@ -38,40 +34,35 @@ function resetSoloMatch(groupId) {
     phase:   "idle",   // "idle" | "join" | "play"
     groupId,
 
-    // Ordered player list [{ id, name }] — join order preserved forever
-    // players is the live list (removed when kicked mid-game)
+    // Ordered player list [{id, name}] — join order = batting/bowling order
     players:    [],
-    allPlayers: [],   // full roster including removed, for scorecard name lookup
+    allPlayers: [],   // full ever-joined roster for scorecard name lookup
 
-    // Rotation state
+    // Current rotation indices into players[]
     batterIndex:  0,
     bowlerIndex:  1,
     ballsThisSet: 0,   // balls bowled in current 3-ball set
-    setCount:     0,   // total sets completed
+    setCount:     0,   // total bowler sets completed
 
     // Active role IDs
     batter:  null,
     bowler:  null,
 
     // Ball state
-    batNumber:    null,
-    bowlNumber:   null,
-    awaitingBat:  false,
-    awaitingBowl: false,
-    ballLocked:   false,
+    batNumber:       null,
+    bowlNumber:      null,
+    awaitingBat:     false,
+    awaitingBowl:    false,
+    ballLocked:      false,
+    batterMessageId: null,   // group message id of batter's reply (for gif reply)
 
-    // Per-player stats keyed by userId
-    // {
-    //   runs, balls, fours, fives, sixes,
-    //   wickets, out,
-    //   ballsBowled, runsConceded,
-    //   ballHistory: [],
-    //   timedOut: false,
-    //   consecutiveTimeouts: 0,
-    // }
+    // Per-player stats keyed by userId (number)
+    // { runs, balls, fours, fives, sixes,
+    //   wickets, out, ballsBowled, runsConceded,
+    //   ballHistory[], timedOut, consecutiveTimeouts }
     stats: {},
 
-    // Pinned player list message
+    // Pinned player list
     playerListMessageId: null,
 
     // Timers
