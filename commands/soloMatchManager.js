@@ -1,5 +1,6 @@
-// ================= SOLO MATCH STORAGE =================
-// Completely isolated from team match storage.
+// ===============================================================
+// SOLO MATCH STORAGE — soloMatchManager.js
+// ===============================================================
 // soloMatches:      groupId → soloMatch
 // soloPlayerActive: userId  → groupId
 
@@ -23,13 +24,10 @@ function resetSoloMatch(groupId) {
   const old = soloMatches.get(groupId);
 
   if (old) {
-    if (old.ballTimer) clearTimeout(old.ballTimer);
-    if (old.warning30) clearTimeout(old.warning30);
-    if (old.warning10) clearTimeout(old.warning10);
-    if (old.joinTimer) clearTimeout(old.joinTimer);
-    if (old.alert60)   clearTimeout(old.alert60);
-    if (old.alert30)   clearTimeout(old.alert30);
-
+    ["ballTimer", "warning30", "warning10",
+     "joinTimer", "alert60", "alert30"].forEach(k => {
+      if (old[k]) { clearTimeout(old[k]); }
+    });
     for (const [uid, gid] of soloPlayerActive.entries()) {
       if (gid === groupId) soloPlayerActive.delete(uid);
     }
@@ -37,22 +35,23 @@ function resetSoloMatch(groupId) {
 
   const match = {
     type:    "solo",
-    phase:   "idle",
+    phase:   "idle",   // "idle" | "join" | "play"
     groupId,
 
-    // Players in join order: [{ id, name }]
-    players: [],
+    // Ordered player list [{ id, name }] — join order preserved forever
+    // players is the live list (removed when kicked mid-game)
+    players:    [],
+    allPlayers: [],   // full roster including removed, for scorecard name lookup
 
-    // Rotation indices into players[]
+    // Rotation state
     batterIndex:  0,
     bowlerIndex:  1,
-    ballsThisSet: 0,   // balls in current 3-ball set
+    ballsThisSet: 0,   // balls bowled in current 3-ball set
     setCount:     0,   // total sets completed
 
-    // Active participants (userIds)
+    // Active role IDs
     batter:  null,
     bowler:  null,
-    striker: null,     // alias for DM lookup
 
     // Ball state
     batNumber:    null,
@@ -61,25 +60,30 @@ function resetSoloMatch(groupId) {
     awaitingBowl: false,
     ballLocked:   false,
 
-    // Per-player stats keyed by userId (number)
+    // Per-player stats keyed by userId
     // {
     //   runs, balls, fours, fives, sixes,
-    //   wickets, out, ballsBowled, runsConceded,
-    //   ballHistory: [],   ← bowling history: each entry is run value or "W"
-    //   timedOut: false
+    //   wickets, out,
+    //   ballsBowled, runsConceded,
+    //   ballHistory: [],
+    //   timedOut: false,
+    //   consecutiveTimeouts: 0,
     // }
     stats: {},
 
-    // Lobby join timers
+    // Pinned player list message
+    playerListMessageId: null,
+
+    // Timers
     warning30: null,
     warning10: null,
     ballTimer: null,
     joinTimer: null,
-    alert60:   null,   // 60s lobby alert
-    alert30:   null,   // 30s lobby alert
+    alert60:   null,
+    alert30:   null,
 
-    matchEnded:       false,
-    strikerMessageId: null,
+    matchEnded: false,
+    motm:       null,
   };
 
   soloMatches.set(groupId, match);
