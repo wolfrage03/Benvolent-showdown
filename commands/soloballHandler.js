@@ -186,18 +186,19 @@ async function ballTimeout(match, type) {
       const bs = ensureStats(match, match.batter);
       bs.consecutiveTimeouts = (bs.consecutiveTimeouts || 0) + 1;
 
-      const ws = ensureStats(match, match.bowler);
-      ws.ballHistory.push("W");
-      ws.ballsBowled++;
-      ws.wickets++;
-      match.ballsThisSet++;
-
       if (bs.consecutiveTimeouts >= 2) {
+        // 2nd consecutive timeout → dismissed & removed from game
+        const ws = ensureStats(match, match.bowler);
+        ws.ballHistory.push("W");
+        ws.ballsBowled++;
+        ws.wickets++;
+        match.ballsThisSet++;
+
         bs.timedOut = true;
         bs.out      = true;
         await bot.telegram.sendMessage(
           match.groupId,
-          `⏱ <b>Batter Removed</b>\n\n<blockquote>${getSoloName(match, match.batter)} timed out twice and is removed. OUT!</blockquote>`,
+          `⏱ <b>Batter Removed</b>\n\n<blockquote>${getSoloName(match, match.batter)} timed out twice and is permanently removed. OUT!</blockquote>`,
           { parse_mode: "HTML" }
         ).catch(() => {});
         match.players = match.players.filter(p => p.id !== match.batter);
@@ -206,16 +207,15 @@ async function ballTimeout(match, type) {
         match.ballLocked = false;
         return advanceSolo(match, true);
       } else {
-        bs.out = true;
+        // 1st timeout → warning only, ball skipped (NOT out, NOT a wicket)
         await bot.telegram.sendMessage(
           match.groupId,
-          `⏱ <b>Batter Timed Out</b>\n\n<blockquote>${getSoloName(match, match.batter)} did not bat in time.\n⚠️ Warning ${bs.consecutiveTimeouts}/2 — OUT!</blockquote>`,
+          `⏱ <b>Batter Timed Out</b>\n\n<blockquote>${getSoloName(match, match.batter)} did not bat in time.\n⚠️ Warning 1/2 — ball skipped. Next timeout = OUT!</blockquote>`,
           { parse_mode: "HTML" }
         ).catch(() => {});
-        const alive = match.players.filter(p => !match.stats[p.id]?.out && !match.stats[p.id]?.timedOut);
-        if (alive.length < 1) { match.ballLocked = false; return endSoloMatch(match); }
+        // Ball is skipped — advance without wicket, bowler set continues
         match.ballLocked = false;
-        return advanceSolo(match, true);
+        return advanceSolo(match, false);
       }
     }
   } catch (err) {
@@ -335,7 +335,6 @@ async function processBall(match) {
     const gif         = randomGif(bat);
 
     const runLabel =
-      bat === 0 ? "Dot 🔵" :
       bat === 6 ? "SIX! 🔥" :
       bat === 4 ? "FOUR! 🚀" :
       bat === 5 ? "FIVE! ⚡" :

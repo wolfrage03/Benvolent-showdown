@@ -25,10 +25,14 @@ const User = require("../User");
 ───────────────────────────────────────── */
 
 async function saveSoloMatchStats(match) {
-  const promises = match.players.map(async (p) => {
+  // Use allPlayers — match.players gets filtered when players are removed mid-game,
+  // so some valid (non-timedOut) players would be missed if we only iterate match.players.
+  const roster = match.allPlayers || match.players;
+
+  const promises = roster.map(async (p) => {
     const s = match.stats[p.id];
     if (!s) return;
-    if (s.timedOut) return; // timed-out players are excluded
+    if (s.timedOut) return; // timed-out/removed players are excluded from stats
 
     const isDuck    = s.runs === 0 && s.out && !s.timedOut;
     const isFifty   = s.runs >= 50 && s.runs < 100;

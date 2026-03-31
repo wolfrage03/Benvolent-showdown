@@ -218,10 +218,11 @@ module.exports = function registerSoloCommands(bot, helpers) {
 
       await sendAndPinSoloPlayerList(match, bot.telegram);
 
-      // If current bowler is the new batter → rotate bowler first (full 3 balls)
-      // Key rule: if bowler is now also the batter, give next bowler a FULL 3-ball set
       if (match.bowler === match.batter) {
-        match.ballsThisSet = 0; // reset so new bowler gets full 3 balls
+        // The old bowler is now the new batter.
+        // Point bowlerIndex at the new batter so nextBowlerIndex searches *after* them.
+        match.bowlerIndex  = match.batterIndex;
+        match.ballsThisSet = 0; // new bowler gets a full 3-ball set
         return rotateBowler(match);
       }
 
@@ -519,13 +520,16 @@ module.exports = function registerSoloCommands(bot, helpers) {
     const match = getSoloMatch(ctx);
     if (!match || match.phase !== "play") return next();
 
-    const text = ctx.message.text.trim();
+    // Extract just the digits from the message (strip emojis/spaces around numbers)
+    const rawText  = ctx.message.text.trim();
+    const extracted = rawText.replace(/[^\d]/g, "");  // keep only digit characters
+    const text      = extracted.length === 1 ? extracted : rawText; // use extracted if single digit
 
     /* ── Group: batter input (0–6) ── */
     if (ctx.chat.type !== "private") {
       if (ctx.from.id !== match.batter)  return next();
       if (!match.awaitingBat)            return next();
-      if (!/^[0-6]$/.test(text))         return next();
+      if (!/^[1-6]$/.test(text))         return next();
 
       // Capture the message ID so the result gif can reply to it
       match.batterMessageId = ctx.message.message_id;
