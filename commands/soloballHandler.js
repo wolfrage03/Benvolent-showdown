@@ -71,26 +71,6 @@ async function sendGif(groupId, gifId, text, replyToMsgId) {
   }
 }
 
-/* ── Send a disappearing gif/video to group (auto-deletes after delayMs) ── */
-async function sendDisappearing(chatId, gifId, text, replyToMsgId, delayMs = 8000) {
-  let sentMsg = null;
-  const extra = {
-    caption:    text,
-    parse_mode: "HTML",
-    ...(replyToMsgId ? { reply_parameters: { message_id: replyToMsgId } } : {}),
-  };
-  try {
-    sentMsg = await bot.telegram.sendAnimation(chatId, gifId, extra);
-  } catch {
-    try {
-      sentMsg = await bot.telegram.sendVideo(chatId, gifId, extra);
-    } catch { /* ignore */ }
-  }
-  if (sentMsg) {
-    setTimeout(() => bot.telegram.deleteMessage(chatId, sentMsg.message_id).catch(() => {}), delayMs);
-  }
-}
-
 /* ── Send a disappearing emoji/text message ── */
 async function sendDisappearingText(chatId, text, replyToMsgId, delayMs = 5000) {
   try {
@@ -262,24 +242,23 @@ async function startBall(match) {
   match.awaitingBat     = false;
   match.batterMessageId = null;
 
-  const batterName  = getSoloName(match, match.batter);
   const bowlerName  = getSoloName(match, match.bowler);
   const ballDisplay = `Ball ${match.ballsThisSet + 1}/3`;
 
-  /* Group announcement — save message_id so bowling gif can reply to it */
-  let ballAnnounceMsgId = null;
-  try {
-    const annoMsg = await bot.telegram.sendMessage(
-      match.groupId,
-      `🎯 <b>${ballDisplay}</b>\n\n<blockquote>🏏 ${batterName}  batting\n🎯 ${bowlerName}  bowling</blockquote>\n\n${ping(match.bowler, bowlerName)} — send your number in DM 👇`,
-      { parse_mode: "HTML", ...bowlDMButton() }
-    );
-    ballAnnounceMsgId = annoMsg?.message_id || null;
-  } catch (e) { console.error("[SOLO startBall]", e.message); }
+  /* ONE message: bowling call gif + ball number caption + DM button (exactly like team mode) */
+  const call    = getBowlingCall();
+  const caption = `🎯 <b>${ballDisplay}</b>\n\n${ping(match.bowler, bowlerName)} — ${call.text}`;
+  const opts    = { caption, parse_mode: "HTML", ...bowlDMButton() };
 
-  /* Bowling call gif → group as disappearing, replied to ball announcement */
-  const call = getBowlingCall();
-  await sendDisappearing(match.groupId, call.gif, call.text, ballAnnounceMsgId, 8000).catch(() => {});
+  try {
+    await bot.telegram.sendAnimation(match.groupId, call.gif, opts);
+  } catch {
+    try {
+      await bot.telegram.sendVideo(match.groupId, call.gif, opts);
+    } catch {
+      await bot.telegram.sendMessage(match.groupId, caption, { parse_mode: "HTML", ...bowlDMButton() }).catch(() => {});
+    }
+  }
 
   startTurnTimer(match, "bowl");
 }
@@ -330,8 +309,8 @@ async function processBall(match) {
         ? `💀 <b>OUT!</b>  🦆 <b>DUCK!</b>\n\n<blockquote>🏏 ${batterName} dismissed for 0!\n🎯 b ${bowlerName}\n\n${commentLine}</blockquote>`
         : `💀 <b>OUT!</b>\n\n<blockquote>🏏 ${batterName} dismissed for ${bs.runs}!\n🎯 b ${bowlerName}\n\n${commentLine}</blockquote>`;
 
-      const wicketEmoji = isDuck ? "🦆💀" : "💀🎯";
-      if (gif) await sendDisappearing(match.groupId, gif, text, replyTo, 10000);
+      const wicketEmoji = isDuck ? "💀" : "💀";
+      if (gif) await sendGif(match.groupId, gif, text, replyTo);
       else await bot.telegram.sendMessage(match.groupId, text, {
         parse_mode: "HTML",
         ...(replyTo ? { reply_parameters: { message_id: replyTo } } : {}),
@@ -368,16 +347,16 @@ async function processBall(match) {
 
     // Emoji shown as separate disappearing reply to batter's number
     const runEmoji =
-      bat === 6 ? "🔥🔥🔥" :
-      bat === 4 ? "🚀💥"   :
-      bat === 5 ? "⚡🌟"   :
+      bat === 6 ? "🔥" :
+      bat === 4 ? "💥"   :
+      bat === 5 ? "⚡"   :
       bat === 3 ? "✅✅✅"  :
       bat === 2 ? "✅✅"    :
                "✅";
 
     const text = `⚡ <b>${runLabel}</b>\n\n<blockquote>🏏 ${batterName}: ${bs.runs} runs (${bs.balls} balls)\n${commentLine}</blockquote>`;
 
-    if (gif) await sendDisappearing(match.groupId, gif, text, replyTo, 10000);
+    if (gif) await sendGif(match.groupId, gif, text, replyTo);
     else await bot.telegram.sendMessage(match.groupId, text, {
       parse_mode: "HTML",
       ...(replyTo ? { reply_parameters: { message_id: replyTo } } : {}),

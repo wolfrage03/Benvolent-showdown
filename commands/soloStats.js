@@ -40,32 +40,63 @@ async function saveSoloMatchStats(match) {
     const isMOTM    = match.motm === p.id ? 1 : 0;
 
     try {
-      const existing    = await User.findOne({ telegramId: String(p.id) }, { soloBestScore: 1 }).lean();
+      // Query with $in to handle telegramId stored as String OR Number in existing docs
+      const existing    = await User.findOne(
+        { telegramId: { $in: [String(p.id), Number(p.id)] } },
+        { soloBestScore: 1, telegramId: 1 }
+      ).lean();
       const currentBest = existing?.soloBestScore || 0;
       const newBest     = Math.max(currentBest, s.runs);
 
-      await User.updateOne(
-        { telegramId: String(p.id) },
-        {
-          $inc: {
-            soloMatchesPlayed: 1,
-            soloTotalRuns:     s.runs          || 0,
-            soloTotalBalls:    s.balls         || 0,
-            soloFours:         s.fours         || 0,
-            soloFives:         s.fives         || 0,
-            soloSixes:         s.sixes         || 0,
-            soloDucks:         isDuck    ? 1   : 0,
-            soloFifties:       isFifty   ? 1   : 0,
-            soloHundreds:      isHundred ? 1   : 0,
-            soloTotalWickets:  s.wickets       || 0,
-            soloBallsBowled:   s.ballsBowled   || 0,
-            soloRunsConceded:  s.runsConceded  || 0,
-            soloMOTM:          isMOTM,
+      if (existing) {
+        // Update existing doc — use the exact telegramId it already has
+        await User.updateOne(
+          { telegramId: existing.telegramId },
+          {
+            $inc: {
+              soloMatchesPlayed: 1,
+              soloTotalRuns:     s.runs          || 0,
+              soloTotalBalls:    s.balls         || 0,
+              soloFours:         s.fours         || 0,
+              soloFives:         s.fives         || 0,
+              soloSixes:         s.sixes         || 0,
+              soloDucks:         isDuck    ? 1   : 0,
+              soloFifties:       isFifty   ? 1   : 0,
+              soloHundreds:      isHundred ? 1   : 0,
+              soloTotalWickets:  s.wickets       || 0,
+              soloBallsBowled:   s.ballsBowled   || 0,
+              soloRunsConceded:  s.runsConceded  || 0,
+              soloMOTM:          isMOTM,
+            },
+            $set: { soloBestScore: newBest },
+          }
+        );
+      } else {
+        // No doc found — create one with String telegramId (consistent with /solostats lookup)
+        await User.updateOne(
+          { telegramId: String(p.id) },
+          {
+            $inc: {
+              soloMatchesPlayed: 1,
+              soloTotalRuns:     s.runs          || 0,
+              soloTotalBalls:    s.balls         || 0,
+              soloFours:         s.fours         || 0,
+              soloFives:         s.fives         || 0,
+              soloSixes:         s.sixes         || 0,
+              soloDucks:         isDuck    ? 1   : 0,
+              soloFifties:       isFifty   ? 1   : 0,
+              soloHundreds:      isHundred ? 1   : 0,
+              soloTotalWickets:  s.wickets       || 0,
+              soloBallsBowled:   s.ballsBowled   || 0,
+              soloRunsConceded:  s.runsConceded  || 0,
+              soloMOTM:          isMOTM,
+            },
+            $set: { soloBestScore: newBest },
           },
-          $set: { soloBestScore: newBest },
-        },
-        { upsert: true }
-      );
+          { upsert: true }
+        );
+      }
+      console.log(`[SOLO stats saved] userId=${p.id} runs=${s.runs} wkts=${s.wickets}`);
     } catch (e) {
       console.error(`[SOLO saveSoloMatchStats] userId=${p.id}`, e.message);
     }
@@ -110,7 +141,8 @@ function determineMOTM(match) {
 async function getSoloStatsText(userId, firstName) {
   let dbUser;
   try {
-    dbUser = await User.findOne({ telegramId: String(userId) }).lean();
+    // $in handles telegramId stored as String OR Number
+    dbUser = await User.findOne({ telegramId: { $in: [String(userId), Number(userId)] } }).lean();
   } catch {
     return "⚠️ Could not fetch stats. Try again later.";
   }
