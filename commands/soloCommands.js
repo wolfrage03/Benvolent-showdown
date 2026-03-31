@@ -1,23 +1,15 @@
 // ===============================================================
 // SOLO MODE COMMANDS  —  soloCommands.js
 // ===============================================================
+// Place this file in:  commands/soloCommands.js
+// Required siblings:
+//   commands/soloMatchManager.js
+//   commands/soloBallHandler.js
+//   commands/soloScorecard.js
+//   commands/soloStats.js
 //
-// Commands
-//   /solostart  — anyone opens a lobby (auto-joins as player 1)
-//   /solojoin   — anyone joins the lobby
-//   /closesolo  — GROUP ADMIN ONLY — closes lobby and starts match
-//   /endsolo    — GROUP ADMIN ONLY — force ends a running match
-//   /solostats  — personal lifetime solo stats from DB
-//
-// Input handler (text)
-//   Group:   batter sends 0–6
-//   DM:      bowler sends 1–6
-//
-// Isolation
-//   • Uses soloMatches / soloPlayerActive — zero overlap with team maps
-//   • Blocks /solostart if a team match is active in the same group
-//   • Blocks /solostart if a solo match is already active
-//
+// Register in index.js BEFORE handleInput:
+//   require("./commands/soloCommands")(bot, helpers);
 // ===============================================================
 
 const {
@@ -28,8 +20,10 @@ const {
   deleteSoloMatch,
 } = require("./soloMatchManager");
 
-const soloBallHandler = require("./soloBallHandler");
-const User            = require("../User");
+const soloBallHandler        = require("./soloBallHandler");
+const generateSoloScorecard  = require("./soloScorecard");
+const { saveSoloMatchStats, determineMOTM, getSoloStatsText } = require("./soloStats");
+const User = require("../User");
 
 
 module.exports = function registerSoloCommands(bot, helpers) {
@@ -37,9 +31,9 @@ module.exports = function registerSoloCommands(bot, helpers) {
   const { isUserBanned } = helpers;
 
 
-  /* ─────────────────────────────────────────
-     PURE HELPERS  (no side-effects)
-  ───────────────────────────────────────── */
+  /* ═══════════════════════════════════════════════════════════
+     PURE HELPERS
+  ═══════════════════════════════════════════════════════════ */
 
   function getSoloName(match, id) {
     if (!match || !id) return "Player";
@@ -58,6 +52,13 @@ module.exports = function registerSoloCommands(bot, helpers) {
     if (match.ballTimer) { clearTimeout(match.ballTimer); match.ballTimer  = null; }
   }
 
+  function clearLobbyTimers(match) {
+    if (!match) return;
+    if (match.joinTimer) { clearTimeout(match.joinTimer); match.joinTimer = null; }
+    if (match.alert60)   { clearTimeout(match.alert60);   match.alert60   = null; }
+    if (match.alert30)   { clearTimeout(match.alert30);   match.alert30   = null; }
+  }
+
   async function isGroupAdmin(ctx, userId) {
     try {
       const member = await ctx.getChatMember(userId);
@@ -68,63 +69,58 @@ module.exports = function registerSoloCommands(bot, helpers) {
   }
 
 
-  /* ─────────────────────────────────────────
-     NEXT BATTER
-     Returns the index of the next non-out player
-     after `afterIndex` (wraps around).
-     Returns -1 if nobody is left alive.
-  ───────────────────────────────────────── */
+  /* ═══════════════════════════════════════════════════════════
+     ROTATION HELPERS
+  ═══════════════════════════════════════════════════════════ */
 
   function nextBatterIndex(match, afterIndex) {
     const n = match.players.length;
     for (let i = 1; i < n; i++) {
       const idx = (afterIndex + i) % n;
-      if (!match.stats[match.players[idx].id]?.out) return idx;
+      const p   = match.players[idx];
+      if (!match.stats[p.id]?.out && !match.stats[p.id]?.timedOut) return idx;
     }
     return -1;
   }
-
-
-  /* ─────────────────────────────────────────
-     NEXT BOWLER
-     Round-robin from `afterIndex`, skipping the
-     current batter and any dismissed players.
-     Returns -1 if no valid bowler exists.
-  ───────────────────────────────────────── */
 
   function nextBowlerIndex(match, afterIndex) {
     const n = match.players.length;
     for (let i = 1; i < n; i++) {
       const idx = (afterIndex + i) % n;
       const p   = match.players[idx];
-      if (idx !== match.batterIndex && !match.stats[p.id]?.out) return idx;
+      if (idx !== match.batterIndex &&
+          !match.stats[p.id]?.out &&
+          !match.stats[p.id]?.timedOut) return idx;
     }
     return -1;
   }
 
 
-  /* ─────────────────────────────────────────
+  /* ═══════════════════════════════════════════════════════════
      ADVANCE SOLO
-     Core rotation logic called after every ball.
-     wasWicket = true  → batter just got out.
-     wasWicket = false → normal run ball.
-  ───────────────────────────────────────── */
+     Called after every ball. wasWicket = batter just got out.
+     forceRotate = bowler was removed (timed out).
+  ═══════════════════════════════════════════════════════════ */
 
-  async function advanceSolo(match, wasWicket = false) {
+  async function advanceSolo(match, wasWicket = false, forceRotate = false) {
     if (!match || match.matchEnded) return;
 
-    const aliveCount = match.players.filter(p => !match.stats[p.id]?.out).length;
+    const alive = match.players.filter(
+      p => !match.stats[p.id]?.out && !match.stats[p.id]?.timedOut
+    );
 
-    // Nobody left standing
-    if (aliveCount === 0) return endSoloMatch(match);
+    if (alive.length === 0) return endSoloMatch(match);
+    if (alive.length === 1 && alive[0].id === match.batter) return endSoloMatch(match);
 
-    // Only one alive and they are already the batter — no bowler possible
-    if (aliveCount === 1) {
-      const soleAlive = match.players.find(p => !match.stats[p.id]?.out);
-      if (soleAlive && soleAlive.id === match.batter) return endSoloMatch(match);
+    /* ── Forced bowler rotation (bowler timed out) ── */
+    if (forceRotate) {
+      // Re-index after player removal
+      match.batterIndex = match.players.findIndex(p => p.id === match.batter);
+      if (match.batterIndex === -1) return endSoloMatch(match);
+      return rotateBowler(match);
     }
 
-    /* ── Wicket: rotate batter, keep bowler's current set going ── */
+    /* ── Wicket: new batter, same bowler set ── */
     if (wasWicket) {
       const nextBI = nextBatterIndex(match, match.batterIndex);
       if (nextBI === -1) return endSoloMatch(match);
@@ -140,28 +136,24 @@ module.exports = function registerSoloCommands(bot, helpers) {
 
       await bot.telegram.sendMessage(
         match.groupId,
-`🏏 <b>New Batter</b>\n\n<blockquote>🏏 ${batterName}  is now batting\n🎯 ${bowlerName}  continues (${ballsLeft} ball${ballsLeft !== 1 ? "s" : ""} left in set)</blockquote>`,
+`🏏 <b>New Batter</b>\n\n<blockquote>🏏 ${batterName}  is now batting\n🎯 ${bowlerName}  continues (${ballsLeft} ball${ballsLeft !== 1 ? "s" : ""} left)</blockquote>`,
         { parse_mode: "HTML" }
-      );
+      ).catch(() => {});
 
-      // If bowler's set is also exhausted, rotate bowler before next ball
       if (match.ballsThisSet >= 3) return rotateBowler(match);
       return soloBallHandler.startBall(match);
     }
 
-    /* ── Run ball: check if 3-ball set is done ── */
+    /* ── Normal: check if set done ── */
     if (match.ballsThisSet >= 3) return rotateBowler(match);
 
-    /* ── Continue current set ── */
     return soloBallHandler.startBall(match);
   }
 
 
-  /* ─────────────────────────────────────────
+  /* ═══════════════════════════════════════════════════════════
      ROTATE BOWLER
-     Resets ballsThisSet, advances bowlerIndex,
-     announces new bowler, then starts next ball.
-  ───────────────────────────────────────── */
+  ═══════════════════════════════════════════════════════════ */
 
   async function rotateBowler(match) {
     match.ballsThisSet = 0;
@@ -181,86 +173,54 @@ module.exports = function registerSoloCommands(bot, helpers) {
       match.groupId,
 `🔄 <b>New Bowler</b>\n\n<blockquote>🎯 ${bowlerName}  now bowling (3 balls)\n🏏 ${batterName}  still batting</blockquote>`,
       { parse_mode: "HTML" }
-    );
+    ).catch(() => {});
 
     return soloBallHandler.startBall(match);
   }
 
 
-  /* ─────────────────────────────────────────
+  /* ═══════════════════════════════════════════════════════════
      END SOLO MATCH
-     Saves lifetime stats to DB, announces winner.
-  ───────────────────────────────────────── */
+  ═══════════════════════════════════════════════════════════ */
 
   async function endSoloMatch(match) {
     if (!match || match.matchEnded) return;
     match.matchEnded = true;
     match.phase      = "idle";
     clearSoloTimers(match);
+    clearLobbyTimers(match);
 
-    // ── Persist stats ──
-    try {
-      for (const p of match.players) {
-        const s = match.stats[p.id] || {};
-        await User.updateOne(
-          { telegramId: String(p.id) },
-          {
-            $inc: {
-              soloMatchesPlayed:  1,
-              soloTotalRuns:      s.runs          || 0,
-              soloTotalWickets:   s.wickets       || 0,
-              soloTotalBalls:     s.balls         || 0,
-              soloBallsBowled:    s.ballsBowled   || 0,
-              soloRunsConceded:   s.runsConceded  || 0,
-            }
-          },
-          { upsert: true }
-        );
-      }
-    } catch (e) {
-      console.error("[SOLO endSoloMatch] DB error:", e.message);
-    }
+    // Determine MOTM
+    match.motm = determineMOTM(match);
 
-    // ── Build result message ──
-    const sorted = [...match.players].sort((a, b) =>
-      (match.stats[b.id]?.runs || 0) - (match.stats[a.id]?.runs || 0)
-    );
+    // Save stats to DB
+    await saveSoloMatchStats(match);
 
-    const winner      = sorted[0];
-    const winnerStats = match.stats[winner.id] || {};
-
-    let msg = `🏆 <b>Solo Match Over!</b>\n\n`;
-    msg    += `<blockquote>🥇 Winner: ${winner.name}\n`;
-    msg    += `🏏 ${winnerStats.runs || 0} runs (${winnerStats.balls || 0} balls)</blockquote>\n\n`;
-    msg    += `<b>Final Standings</b>\n\n`;
-
-    const medals = ["🥇", "🥈", "🥉"];
-    for (let i = 0; i < sorted.length; i++) {
-      const p = sorted[i];
-      const s = match.stats[p.id] || { runs: 0, balls: 0, wickets: 0, ballsBowled: 0 };
-      const sr = s.balls > 0 ? ((s.runs / s.balls) * 100).toFixed(0) : "0";
-      const medal = medals[i] || `${i + 1}.`;
-      msg += `<blockquote>${medal} ${p.name}\n`;
-      msg += `🏏 ${s.runs}(${s.balls})  SR: ${sr}  🎯 ${s.wickets}w / ${s.ballsBowled}b</blockquote>\n`;
-    }
-
-    msg += `\n👉 /solostart for a new match`;
+    // Final scorecard
+    const card = generateSoloScorecard(match, { final: true, motm: match.motm });
 
     try {
-      await bot.telegram.sendMessage(match.groupId, msg, { parse_mode: "HTML" });
+      await bot.telegram.sendMessage(match.groupId, card, { parse_mode: "HTML" });
     } catch (e) {
       console.error("[SOLO endSoloMatch] send error:", e.message);
+      // Fallback plain text
+      try {
+        await bot.telegram.sendMessage(
+          match.groupId,
+          card.replace(/<[^>]*>/g, "").replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">")
+        );
+      } catch {}
     }
 
-    // Clean up active map
+    // Clean up
     for (const p of match.players) soloPlayerActive.delete(p.id);
     deleteSoloMatch(match.groupId);
   }
 
 
-  /* ─────────────────────────────────────────
+  /* ═══════════════════════════════════════════════════════════
      INJECT DEPS INTO BALL HANDLER
-  ───────────────────────────────────────── */
+  ═══════════════════════════════════════════════════════════ */
 
   soloBallHandler.init({
     bot,
@@ -272,48 +232,51 @@ module.exports = function registerSoloCommands(bot, helpers) {
 
 
   /* ═══════════════════════════════════════════════════════════
-     /solostart  — open a lobby, auto-join as player 1
+     /solostart
   ═══════════════════════════════════════════════════════════ */
 
   bot.command("solostart", async (ctx) => {
     if (ctx.chat.type === "private")
       return ctx.reply("⚠️ Use /solostart in a group chat.");
 
-    // Block if a TEAM match is running here
+    // Block if team match running
     const { matches } = require("../matchManager");
     const teamMatch   = matches.get(ctx.chat.id);
     if (teamMatch && !teamMatch.matchEnded && teamMatch.phase !== "idle") {
       return ctx.reply(
-        "⚠️ A team match is running in this group.\n\n<blockquote>End it with /endmatch before starting a solo match.</blockquote>",
+        "⚠️ A team match is running.\n\n<blockquote>End it with /endmatch first.</blockquote>",
         { parse_mode: "HTML" }
       );
     }
 
-    // Block if a solo match is already running here
+    // Block if solo match running
     const existing = soloMatches.get(ctx.chat.id);
     if (existing && !existing.matchEnded && existing.phase !== "idle") {
       return ctx.reply("⚠️ A solo match is already running here.");
     }
 
     if (await isUserBanned(ctx.from.id))
-      return ctx.reply("🚫 You are banned from this bot.");
+      return ctx.reply("🚫 You are banned.");
 
-    // Check user not already in another solo match elsewhere
     if (soloPlayerActive.has(ctx.from.id))
       return ctx.reply("❌ You are already in a solo match.");
 
-    // Check user not in a team match elsewhere
     const { playerActiveMatch } = require("../matchManager");
     if (playerActiveMatch.has(ctx.from.id))
       return ctx.reply("❌ You are already in a team match.");
 
     // Create match, initiator auto-joins as player 1
-    const match  = resetSoloMatch(ctx.chat.id);
+    const match = resetSoloMatch(ctx.chat.id);
     match.phase  = "join";
 
     const name = ctx.from.first_name || "Player";
     match.players.push({ id: ctx.from.id, name });
-    match.stats[ctx.from.id] = { runs: 0, balls: 0, wickets: 0, out: false, ballsBowled: 0, runsConceded: 0 };
+    match.stats[ctx.from.id] = {
+      runs: 0, balls: 0, fours: 0, fives: 0, sixes: 0,
+      wickets: 0, out: false,
+      ballsBowled: 0, runsConceded: 0,
+      ballHistory: [], timedOut: false,
+    };
     soloPlayerActive.set(ctx.from.id, ctx.chat.id);
 
     // DB upsert
@@ -324,49 +287,67 @@ module.exports = function registerSoloCommands(bot, helpers) {
         { $set: { telegramId: String(id), username: username?.toLowerCase(), firstName: first_name, lastName: last_name } },
         { upsert: true }
       );
-    } catch (e) { console.error("[SOLO] solostart DB error:", e.message); }
+    } catch (e) { console.error("[SOLO] solostart DB:", e.message); }
 
     try { await ctx.deleteMessage(); } catch {}
 
     await ctx.reply(
 `🏏 <b>Solo Cricket — Lobby Open!</b>
 
-<blockquote>📋 Every player bats until they get out.
+<blockquote>📋 Every player bats until out.
 🎯 Each bowler gets exactly 3 balls, then rotates.
 🔄 Join order = batting &amp; bowling order.
-👥 Min 3 · Max 10 players</blockquote>
+👥 Min 3 · Max 10 · ⏱ 120s to join</blockquote>
 
-<blockquote>1. ${name}  ✅ joined</blockquote>
+<blockquote>1. ${name}  ✅</blockquote>
 
-👉 /solojoin to enter
-👮 Group admin: /closesolo to start  |  /endsolo to end`,
+👉 /solojoin to join
+👮 Admin: /closesolo to start early`,
       { parse_mode: "HTML" }
     );
 
-    // Auto-expire lobby after 120 s if admin never closes it
+    // ── Lobby alerts ──
+    match.alert60 = setTimeout(async () => {
+      if (match.phase !== "join") return;
+      await bot.telegram.sendMessage(
+        match.groupId,
+        `⏱ <b>60s left</b> to join the solo lobby!\n\n<blockquote>${match.players.length} player${match.players.length !== 1 ? "s" : ""} joined so far. Need at least 3.</blockquote>\n\n👉 /solojoin`,
+        { parse_mode: "HTML" }
+      ).catch(() => {});
+    }, 60000);
+
+    match.alert30 = setTimeout(async () => {
+      if (match.phase !== "join") return;
+      await bot.telegram.sendMessage(
+        match.groupId,
+        `🚨 <b>30s left</b> to join!\n\n<blockquote>${match.players.length} player${match.players.length !== 1 ? "s" : ""} so far.</blockquote>\n\n👉 /solojoin`,
+        { parse_mode: "HTML" }
+      ).catch(() => {});
+    }, 90000);
+
+    // ── Auto-start / expire at 120s ──
     match.joinTimer = setTimeout(async () => {
       if (match.phase !== "join") return;
 
       if (match.players.length < 3) {
-        // Not enough players — cancel silently
+        clearLobbyTimers(match);
         for (const p of match.players) soloPlayerActive.delete(p.id);
         deleteSoloMatch(match.groupId);
         await bot.telegram.sendMessage(
           match.groupId,
-          "⏱ Solo lobby expired.\n\n<blockquote>Not enough players joined (need at least 3).</blockquote>",
+          "⏱ Solo lobby expired.\n\n<blockquote>Not enough players (need at least 3).</blockquote>",
           { parse_mode: "HTML" }
-        );
+        ).catch(() => {});
         return;
       }
 
-      // Enough players — start automatically
       await startMatch(match);
     }, 120000);
   });
 
 
   /* ═══════════════════════════════════════════════════════════
-     /solojoin  — anyone joins the open lobby
+     /solojoin
   ═══════════════════════════════════════════════════════════ */
 
   bot.command("solojoin", async (ctx) => {
@@ -375,33 +356,34 @@ module.exports = function registerSoloCommands(bot, helpers) {
 
     const match = getSoloMatch(ctx);
     if (!match || match.phase !== "join")
-      return ctx.reply("⚠️ No open solo lobby here. Use /solostart first.");
+      return ctx.reply("⚠️ No open solo lobby. Use /solostart first.");
 
     if (await isUserBanned(ctx.from.id))
-      return ctx.reply("🚫 You are banned from this bot.");
+      return ctx.reply("🚫 You are banned.");
 
-    // Already in this lobby?
     if (match.players.some(p => p.id === ctx.from.id))
-      return ctx.reply("⚠️ You already joined this lobby.");
+      return ctx.reply("⚠️ You already joined.");
 
-    // Already in a different solo match?
     if (soloPlayerActive.has(ctx.from.id))
       return ctx.reply("❌ You are already in another solo match.");
 
-    // Already in a team match?
     const { playerActiveMatch } = require("../matchManager");
     if (playerActiveMatch.has(ctx.from.id))
       return ctx.reply("❌ You are already in a team match.");
 
     if (match.players.length >= 10)
-      return ctx.reply("⚠️ Lobby is full (10 players max).");
+      return ctx.reply("⚠️ Lobby full (10 max).");
 
     const name = ctx.from.first_name || "Player";
     match.players.push({ id: ctx.from.id, name });
-    match.stats[ctx.from.id] = { runs: 0, balls: 0, wickets: 0, out: false, ballsBowled: 0, runsConceded: 0 };
+    match.stats[ctx.from.id] = {
+      runs: 0, balls: 0, fours: 0, fives: 0, sixes: 0,
+      wickets: 0, out: false,
+      ballsBowled: 0, runsConceded: 0,
+      ballHistory: [], timedOut: false,
+    };
     soloPlayerActive.set(ctx.from.id, match.groupId);
 
-    // DB upsert
     try {
       const { id, username, first_name, last_name } = ctx.from;
       await User.updateOne(
@@ -409,72 +391,67 @@ module.exports = function registerSoloCommands(bot, helpers) {
         { $set: { telegramId: String(id), username: username?.toLowerCase(), firstName: first_name, lastName: last_name } },
         { upsert: true }
       );
-    } catch (e) { console.error("[SOLO] solojoin DB error:", e.message); }
+    } catch (e) { console.error("[SOLO] solojoin DB:", e.message); }
 
     try { await ctx.deleteMessage(); } catch {}
 
     const list = match.players.map((p, i) => `${i + 1}. ${p.name}`).join("\n");
-
-    const joinMsg = await ctx.reply(
+    const msg  = await ctx.reply(
       `✅ ${name} joined! (${match.players.length}/10)\n\n<blockquote>${list}</blockquote>`,
       { parse_mode: "HTML" }
     );
-    setTimeout(() =>
-      bot.telegram.deleteMessage(match.groupId, joinMsg.message_id).catch(() => {}),
-    4000);
+    setTimeout(() => bot.telegram.deleteMessage(match.groupId, msg.message_id).catch(() => {}), 5000);
   });
 
 
   /* ═══════════════════════════════════════════════════════════
-     /closesolo  — GROUP ADMIN ONLY — close lobby & start
+     /closesolo  — admin only
   ═══════════════════════════════════════════════════════════ */
 
   bot.command("closesolo", async (ctx) => {
     if (ctx.chat.type === "private")
-      return ctx.reply("⚠️ Use this command in the group.");
+      return ctx.reply("⚠️ Use this in the group.");
 
     const match = getSoloMatch(ctx);
     if (!match || match.phase !== "join")
-      return ctx.reply("⚠️ No open solo lobby to close.");
+      return ctx.reply("⚠️ No open solo lobby.");
 
     if (!(await isGroupAdmin(ctx, ctx.from.id)))
-      return ctx.reply("❌ Only group admins can start the solo match.");
+      return ctx.reply("❌ Only group admins can start the match.");
 
     if (match.players.length < 3)
       return ctx.reply(
-        `⚠️ Need at least 3 players to start.\n\n<blockquote>Currently: ${match.players.length} player${match.players.length !== 1 ? "s" : ""}</blockquote>`,
+        `⚠️ Need at least 3 players.\n\n<blockquote>Currently: ${match.players.length}</blockquote>`,
         { parse_mode: "HTML" }
       );
 
-    if (match.joinTimer) { clearTimeout(match.joinTimer); match.joinTimer = null; }
-
+    clearLobbyTimers(match);
     try { await ctx.deleteMessage(); } catch {}
     await startMatch(match);
   });
 
 
   /* ═══════════════════════════════════════════════════════════
-     /endsolo  — GROUP ADMIN ONLY — force end running match
+     /endsolo  — admin only
   ═══════════════════════════════════════════════════════════ */
 
   bot.command("endsolo", async (ctx) => {
     if (ctx.chat.type === "private")
-      return ctx.reply("⚠️ Use this command in the group.");
+      return ctx.reply("⚠️ Use this in the group.");
 
     const match = getSoloMatch(ctx);
     if (!match || match.matchEnded || match.phase === "idle")
-      return ctx.reply("⚠️ No active solo match to end.");
+      return ctx.reply("⚠️ No active solo match.");
 
     if (!(await isGroupAdmin(ctx, ctx.from.id)))
-      return ctx.reply("❌ Only group admins can end the solo match.");
+      return ctx.reply("❌ Only group admins can end the match.");
 
     clearSoloTimers(match);
-    if (match.joinTimer) { clearTimeout(match.joinTimer); match.joinTimer = null; }
-
+    clearLobbyTimers(match);
     try { await ctx.deleteMessage(); } catch {}
 
     await ctx.reply(
-      "🛑 Solo match ended by admin.\n\n<blockquote>Calculating final standings...</blockquote>",
+      "🛑 Solo match ended by admin.\n\n<blockquote>Generating final scorecard...</blockquote>",
       { parse_mode: "HTML" }
     );
 
@@ -483,59 +460,46 @@ module.exports = function registerSoloCommands(bot, helpers) {
 
 
   /* ═══════════════════════════════════════════════════════════
-     /solostats  — personal lifetime solo stats
+     /soloscore  — live scorecard
   ═══════════════════════════════════════════════════════════ */
 
-  bot.command("solostats", async (ctx) => {
-    const userId = ctx.from.id;
+  bot.command("soloscore", async (ctx) => {
+    const match = getSoloMatch(ctx);
+    if (!match || match.matchEnded || match.phase === "idle")
+      return ctx.reply("⚠️ No active solo match.");
 
-    let dbUser;
+    const card = generateSoloScorecard(match, { final: false });
+
     try {
-      dbUser = await User.findOne({ telegramId: String(userId) }).lean();
-    } catch {
-      return ctx.reply("⚠️ Could not fetch stats. Try again later.");
+      await ctx.reply(card, { parse_mode: "HTML" });
+    } catch (e) {
+      console.error("[SOLO soloscore] HTML failed:", e.message);
+      try {
+        await ctx.reply(
+          card.replace(/<[^>]*>/g,"").replace(/&amp;/g,"&").replace(/&lt;/g,"<").replace(/&gt;/g,">")
+        );
+      } catch {}
     }
-
-    if (!dbUser || !dbUser.soloMatchesPlayed)
-      return ctx.reply("❌ No solo stats yet. Play a solo match first!");
-
-    const played  = dbUser.soloMatchesPlayed  || 0;
-    const runs    = dbUser.soloTotalRuns       || 0;
-    const wickets = dbUser.soloTotalWickets    || 0;
-    const balls   = dbUser.soloTotalBalls      || 0;
-    const bowled  = dbUser.soloBallsBowled     || 0;
-    const given   = dbUser.soloRunsConceded    || 0;
-
-    const avg  = played > 0 ? (runs / played).toFixed(1)              : "—";
-    const sr   = balls  > 0 ? ((runs / balls) * 100).toFixed(1)       : "—";
-    const econ = bowled > 0 ? ((given / bowled) * 6).toFixed(2)       : "—";
-
-    const name = ctx.from.first_name || "Player";
-
-    await ctx.reply(
-`📊 <b>Solo Stats — ${name}</b>
-
-<blockquote>🏏 Matches Played:  ${played}</blockquote>
-
-<blockquote>Batting
-🏏 Total Runs:     ${runs}
-📦 Balls Faced:    ${balls}
-⚡ Strike Rate:    ${sr}
-📈 Avg per match:  ${avg}</blockquote>
-
-<blockquote>Bowling
-🎯 Wickets Taken:  ${wickets}
-🎯 Balls Bowled:   ${bowled}
-💧 Runs Given:     ${given}
-📉 Economy:        ${econ}</blockquote>`,
-      { parse_mode: "HTML" }
-    );
   });
 
 
-  /* ─────────────────────────────────────────
-     INTERNAL: start the match after lobby closes
-  ───────────────────────────────────────── */
+  /* ═══════════════════════════════════════════════════════════
+     /solostats  — personal lifetime stats
+  ═══════════════════════════════════════════════════════════ */
+
+  bot.command("solostats", async (ctx) => {
+    const text = await getSoloStatsText(ctx.from.id, ctx.from.first_name);
+    try {
+      await ctx.reply(text, { parse_mode: "HTML" });
+    } catch {
+      await ctx.reply(text.replace(/<[^>]*>/g,"").replace(/&amp;/g,"&")).catch(() => {});
+    }
+  });
+
+
+  /* ═══════════════════════════════════════════════════════════
+     INTERNAL: close lobby and start match
+  ═══════════════════════════════════════════════════════════ */
 
   async function startMatch(match) {
     match.phase = "play";
@@ -564,11 +528,11 @@ module.exports = function registerSoloCommands(bot, helpers) {
 <blockquote>🏏 ${batterName}  bats first\n🎯 ${bowlerName}  bowls first (3 balls)</blockquote>
 
 <b>How to play</b>
-<blockquote>🏏 Batter — send 0–6 in this GROUP
+<blockquote>🏏 Batter — send 0–6 in GROUP
 🎯 Bowler — send 1–6 in DM
 💀 Same number = wicket!</blockquote>`,
       { parse_mode: "HTML" }
-    );
+    ).catch(e => console.error("[SOLO startMatch]", e.message));
 
     await soloBallHandler.startBall(match);
   }
@@ -576,26 +540,22 @@ module.exports = function registerSoloCommands(bot, helpers) {
 
   /* ═══════════════════════════════════════════════════════════
      TEXT INPUT HANDLER
-     Must be registered BEFORE team-mode text handler in index.js.
-     Passes through to next() for anything not solo-related.
+     Registered before team handleInput in index.js.
+     Passes non-solo messages to next().
   ═══════════════════════════════════════════════════════════ */
 
   bot.on("text", async (ctx, next) => {
     if (ctx.message.text.startsWith("/")) return next();
 
     const match = getSoloMatch(ctx);
-
-    // Not a solo match context — let team handler deal with it
     if (!match || match.matchEnded || match.phase !== "play") return next();
 
     const text = ctx.message.text.trim();
 
-    /* ── GROUP: batter input ── */
+    /* ── GROUP: batter ── */
     if (ctx.chat.type !== "private") {
       if (!match.awaitingBat) return next();
-
-      // Silently ignore anyone who isn't the batter
-      if (ctx.from.id !== match.batter) return;
+      if (ctx.from.id !== match.batter) return; // silently ignore non-batter
 
       if (!/^[0-6]$/.test(text))
         return ctx.reply("❌ Send a number 0–6.");
@@ -607,16 +567,15 @@ module.exports = function registerSoloCommands(bot, helpers) {
       match.batNumber        = Number(text);
       match.awaitingBat      = false;
 
-      if (match.bowlNumber === null) return; // shouldn't happen but guard it
+      if (match.bowlNumber === null) return;
 
       match.ballLocked = true;
       clearSoloTimers(match);
       return soloBallHandler.processBall(match);
     }
 
-    /* ── DM: bowler input ── */
+    /* ── DM: bowler ── */
     if (!match.awaitingBowl) return next();
-
     if (ctx.from.id !== match.bowler)
       return ctx.reply("❌ You are not the current bowler.");
 
@@ -632,13 +591,13 @@ module.exports = function registerSoloCommands(bot, helpers) {
     await ctx.reply("✅ Submitted — waiting for batter");
 
     const batterName = getSoloName(match, match.batter);
-    const ballNum    = `Ball ${match.ballsThisSet}/3`;   // ballsThisSet already incremented in processBall, so show current
+    const ballNum    = `Ball ${match.ballsThisSet}/3`;
 
     await bot.telegram.sendMessage(
       match.groupId,
       `${ping(match.batter, batterName)} 🏏 ${ballNum} — send your number (0–6)`,
       { parse_mode: "HTML" }
-    );
+    ).catch(() => {});
 
     soloBallHandler.startTurnTimer(match, "bat");
   });
