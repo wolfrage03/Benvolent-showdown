@@ -1,11 +1,15 @@
-
 // ===============================================================
-// SOLO SCORECARD GENERATOR
+// SOLO SCORECARD GENERATOR — soloScorecard.js
 // ===============================================================
-// Used for both /soloscore (live) and end-of-match final card.
-// Format per player (combined bat + bowl):
-//   Name   runs(balls)  SR  4s()  5s()  6s()
-//   Bowl history: 3 W 6 6 W 1
+// Live (/soloscore) and final (end of match) scorecard.
+//
+// Per-player block:
+//   <b>Name</b> 🏏 / 🎯 / ✗ indicator
+//   <blockquote>runs(balls)  SR:xx  4s(x) 5s(x) 6s(x)</blockquote>
+//   <blockquote>🎯 Bowling: 3 W 6 6 W 1</blockquote>   ← ball history only
+//
+// Live footer: current batter/bowler + players alive + set ball count
+// Final:       timed-out players excluded, MOTM shown at bottom
 // ===============================================================
 
 function h(str) {
@@ -17,43 +21,36 @@ function h(str) {
 }
 
 function safeNum(n) {
-  return (typeof n === "number" && !isNaN(n)) ? n : 0;
+  return typeof n === "number" && !isNaN(n) ? n : 0;
 }
 
 /**
- * Build a scorecard message for a solo match.
- *
- * @param {object} match        - the solo match object
- * @param {object} [opts]
- * @param {boolean} opts.final  - true = final scorecard (include MOTM, no live indicators)
- * @param {string}  opts.motm   - userId of man of the match (for final card)
+ * @param {object} match
+ * @param {object} opts
+ * @param {boolean} opts.final  – true = final card
+ * @param {number}  opts.motm   – userId of MOTM (final card only)
  */
 function generateSoloScorecard(match, opts = {}) {
   if (!match) return "No match data.";
 
   const { final = false } = opts;
 
-  const title = final
-    ? `🏆 <b>Final Scorecard</b>`
-    : `📊 <b>Live Scorecard</b>`;
+  // ── Build name map from ALL players who ever joined ──
+  // match.allPlayers preserves everyone including timed-out ones
+  // fallback to match.players if allPlayers not set
+  const roster = match.allPlayers || match.players;
+  const nameMap = {};
+  for (const p of roster) nameMap[p.id] = p.name;
 
+  // ── Who to show ──
+  // Live  → only current active players (timed-out removed from match.players)
+  // Final → only active players (timed-out excluded from final card per spec)
+  const showIds = match.players.map(p => p.id);
+
+  const title = final ? `🏆 <b>Final Scorecard</b>` : `📊 <b>Live Scorecard</b>`;
   const lines = [title, ""];
 
-  // All players who are still in the list (timed-out players were removed from match.players)
-  // But for the scorecard we want everyone who ever had stats
-  // For live: show all current players; for final: show all who have stats
-  const allIds = final
-    ? [...new Set([
-        ...match.players.map(p => p.id),
-        ...Object.keys(match.stats).map(Number)
-      ])]
-    : match.players.map(p => p.id);
-
-  // Build a name map — players array + fallback
-  const nameMap = {};
-  for (const p of match.players) nameMap[p.id] = p.name;
-
-  for (const id of allIds) {
+  for (const id of showIds) {
     const s = match.stats[id] || {
       runs: 0, balls: 0, fours: 0, fives: 0, sixes: 0,
       wickets: 0, out: false,
@@ -62,60 +59,56 @@ function generateSoloScorecard(match, opts = {}) {
       timedOut: false,
     };
 
-    const name    = h(nameMap[id] || `Player_${id}`);
-    const runs    = safeNum(s.runs);
-    const balls   = safeNum(s.balls);
-    const fours   = safeNum(s.fours);
-    const fives   = safeNum(s.fives);
-    const sixes   = safeNum(s.sixes);
-    const sr      = balls > 0 ? ((runs / balls) * 100).toFixed(0) : "0";
+    // Skip timed-out players on final card
+    if (final && s.timedOut) continue;
 
-    const isCurrentBatter = !final && id === match.batter;
-    const isCurrentBowler = !final && id === match.bowler;
+    const name   = h(nameMap[id] || `Player_${id}`);
+    const runs   = safeNum(s.runs);
+    const balls  = safeNum(s.balls);
+    const fours  = safeNum(s.fours);
+    const fives  = safeNum(s.fives);
+    const sixes  = safeNum(s.sixes);
+    const sr     = balls > 0 ? ((runs / balls) * 100).toFixed(0) : "0";
 
-    let statusTag = "";
+    // ── Status indicator ──
+    let indicator = "";
     if (!final) {
-      if (isCurrentBatter) statusTag = " 🏏";
-      else if (isCurrentBowler) statusTag = " 🎯";
-      else if (s.out || s.timedOut) statusTag = " ✗";
+      if (id === match.batter)       indicator = " 🏏";
+      else if (id === match.bowler)  indicator = " 🎯";
+      else if (s.out || s.timedOut) indicator = " ✗";
     } else {
-      if (s.timedOut) statusTag = " ⏱ timed out";
-      else if (s.out) statusTag = " ✗";
-      else statusTag = "*"; // not out
+      if (s.out) indicator = " ✗";
+      else       indicator = "*"; // not out
     }
 
     // ── Batting line ──
-    lines.push(`<b>${name}${statusTag}</b>`);
-    lines.push(
-      `<blockquote>🏏 ${runs}(${balls})  SR:${sr}  4s(${fours})  5s(${fives})  6s(${sixes})</blockquote>`
-    );
+    lines.push(`<b>${name}${indicator}</b>`);
+    lines.push(`<blockquote>${runs}(${balls})  SR:${sr}  4s(${fours}) 5s(${fives}) 6s(${sixes})</blockquote>`);
 
     // ── Bowling / ball history line ──
-    const history = (s.ballHistory || []).map(x => x === "W" ? "W" : String(x));
+    const history = (s.ballHistory || []).map(x => (x === "W" ? "W" : String(x)));
     const histStr = history.length > 0 ? history.join(" ") : "—";
-    lines.push(
-      `<blockquote>🎯 ${safeNum(s.wickets)}w  ${safeNum(s.ballsBowled)}b  ${safeNum(s.runsConceded)}r  |  ${histStr}</blockquote>`
-    );
+    lines.push(`<blockquote>🎯 ${histStr}</blockquote>`);
 
     lines.push("");
   }
 
-  // ── Live: current match state summary ──
+  // ── Live footer ──
   if (!final) {
-    const batterName = nameMap[match.batter] ? h(nameMap[match.batter]) : "—";
-    const bowlerName = nameMap[match.bowler] ? h(nameMap[match.bowler]) : "—";
-    const alive      = match.players.filter(p => !match.stats[p.id]?.out).length;
+    const batterName = h(nameMap[match.batter] || "—");
+    const bowlerName = h(nameMap[match.bowler] || "—");
+    const alive      = match.players.filter(p => !match.stats[p.id]?.out && !match.stats[p.id]?.timedOut).length;
     lines.push(
-      `<blockquote>🏏 Batting: ${batterName}  |  🎯 Bowling: ${bowlerName}\n` +
-      `Players alive: ${alive}/${match.players.length}  |  Set ball: ${match.ballsThisSet}/3</blockquote>`
+      `<blockquote>🏏 ${batterName}  |  🎯 ${bowlerName}\n` +
+      `Alive: ${alive}/${match.players.length}  |  Ball: ${safeNum(match.ballsThisSet)}/3</blockquote>`
     );
   }
 
-  // ── Final: Man of the Match ──
-  if (final && opts.motm) {
+  // ── Final: MOTM ──
+  if (final && opts.motm != null) {
     const motmName = h(nameMap[opts.motm] || `Player_${opts.motm}`);
-    lines.push(`🌟 <b>Man of the Match: ${motmName}</b>`);
     lines.push("");
+    lines.push(`🌟 <b>Man of the Match: ${motmName}</b>`);
   }
 
   return lines.join("\n");

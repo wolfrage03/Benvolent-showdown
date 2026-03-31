@@ -1,56 +1,42 @@
 // ===============================================================
-// SOLO STATS  —  soloStats.js
+// SOLO STATS — soloStats.js
 // ===============================================================
-// Handles all solo-mode lifetime stat tracking.
-// Kept separate from team PlayerStats so neither pollutes the other.
+// Lifetime stat tracking for solo mode, stored on User document.
 //
-// Schema fields stored on the existing User document (via $inc):
+// Fields ($inc on User):
 //   soloMatchesPlayed
 //   soloTotalRuns
 //   soloTotalBalls
-//   soloFours
-//   soloFives
-//   soloSixes
-//   soloDucks          (0 runs, not timed out)
-//   soloFifties
-//   soloHundreds
-//   soloBestScore      (highest single-match runs — stored as number)
+//   soloFours / soloFives / soloSixes
+//   soloDucks
+//   soloFifties / soloHundreds
+//   soloBestScore      ($set — highest single-match runs)
 //   soloTotalWickets
 //   soloBallsBowled
 //   soloRunsConceded
-//   soloMOTM          (Man of the Match awards)
-//
-// No new Mongoose model is needed — we just $inc on User.
+//   soloMOTM
 // ===============================================================
 
 const User = require("../User");
 
 
 /* ─────────────────────────────────────────
-   SAVE STATS FOR ALL PLAYERS AFTER A MATCH
+   SAVE STATS AFTER MATCH
 ───────────────────────────────────────── */
 
 async function saveSoloMatchStats(match) {
   const promises = match.players.map(async (p) => {
     const s = match.stats[p.id];
     if (!s) return;
-
-    // Skip timed-out players entirely (they are removed)
-    if (s.timedOut) return;
+    if (s.timedOut) return; // timed-out players are excluded
 
     const isDuck    = s.runs === 0 && s.out && !s.timedOut;
     const isFifty   = s.runs >= 50 && s.runs < 100;
     const isHundred = s.runs >= 100;
-
-    const isMOTM = match.motm === p.id ? 1 : 0;
+    const isMOTM    = match.motm === p.id ? 1 : 0;
 
     try {
-      // Fetch current best score first so we can compare
-      const existing = await User.findOne(
-        { telegramId: String(p.id) },
-        { soloBestScore: 1 }
-      ).lean();
-
+      const existing    = await User.findOne({ telegramId: String(p.id) }, { soloBestScore: 1 }).lean();
       const currentBest = existing?.soloBestScore || 0;
       const newBest     = Math.max(currentBest, s.runs);
 
@@ -58,23 +44,21 @@ async function saveSoloMatchStats(match) {
         { telegramId: String(p.id) },
         {
           $inc: {
-            soloMatchesPlayed:  1,
-            soloTotalRuns:      s.runs          || 0,
-            soloTotalBalls:     s.balls         || 0,
-            soloFours:          s.fours         || 0,
-            soloFives:          s.fives         || 0,
-            soloSixes:          s.sixes         || 0,
-            soloDucks:          isDuck    ? 1   : 0,
-            soloFifties:        isFifty   ? 1   : 0,
-            soloHundreds:       isHundred ? 1   : 0,
-            soloTotalWickets:   s.wickets       || 0,
-            soloBallsBowled:    s.ballsBowled   || 0,
-            soloRunsConceded:   s.runsConceded  || 0,
-            soloMOTM:           isMOTM,
+            soloMatchesPlayed: 1,
+            soloTotalRuns:     s.runs          || 0,
+            soloTotalBalls:    s.balls         || 0,
+            soloFours:         s.fours         || 0,
+            soloFives:         s.fives         || 0,
+            soloSixes:         s.sixes         || 0,
+            soloDucks:         isDuck    ? 1   : 0,
+            soloFifties:       isFifty   ? 1   : 0,
+            soloHundreds:      isHundred ? 1   : 0,
+            soloTotalWickets:  s.wickets       || 0,
+            soloBallsBowled:   s.ballsBowled   || 0,
+            soloRunsConceded:  s.runsConceded  || 0,
+            soloMOTM:          isMOTM,
           },
-          $set: {
-            soloBestScore: newBest,
-          }
+          $set: { soloBestScore: newBest },
         },
         { upsert: true }
       );
@@ -88,8 +72,8 @@ async function saveSoloMatchStats(match) {
 
 
 /* ─────────────────────────────────────────
-   DETERMINE MAN OF THE MATCH
-   Simple formula: runs + (wickets * 15)
+   MAN OF THE MATCH
+   Formula: runs + (wickets × 15)
 ───────────────────────────────────────── */
 
 function determineMOTM(match) {
@@ -112,7 +96,11 @@ function determineMOTM(match) {
 
 
 /* ─────────────────────────────────────────
-   FORMAT /solostats REPLY
+   /solostats REPLY
+   Layout:
+     Matches | MOTM
+     Batting: Runs Balls SR  4s 5s 6s  Ducks  50s/100s  Best
+     Bowling: Wkts Balls Eco
 ───────────────────────────────────────── */
 
 async function getSoloStatsText(userId, firstName) {
@@ -127,6 +115,8 @@ async function getSoloStatsText(userId, firstName) {
     return "❌ No solo stats yet. Play a solo match first!";
 
   const played  = dbUser.soloMatchesPlayed  || 0;
+  const motm    = dbUser.soloMOTM           || 0;
+
   const runs    = dbUser.soloTotalRuns      || 0;
   const balls   = dbUser.soloTotalBalls     || 0;
   const fours   = dbUser.soloFours          || 0;
@@ -136,35 +126,28 @@ async function getSoloStatsText(userId, firstName) {
   const fifties = dbUser.soloFifties        || 0;
   const tons    = dbUser.soloHundreds       || 0;
   const best    = dbUser.soloBestScore      || 0;
+
   const wickets = dbUser.soloTotalWickets   || 0;
   const bowled  = dbUser.soloBallsBowled    || 0;
   const given   = dbUser.soloRunsConceded   || 0;
-  const motm    = dbUser.soloMOTM           || 0;
 
-  const sr   = balls  > 0 ? ((runs / balls) * 100).toFixed(1)  : "—";
-  const econ = bowled > 0 ? ((given / bowled) * 6).toFixed(2)  : "—";
+  const sr   = balls  > 0 ? ((runs / balls) * 100).toFixed(1) : "—";
+  const econ = bowled > 0 ? ((given / bowled) * 6).toFixed(2) : "—";
   const name = firstName || "Player";
 
   return (
 `📊 <b>Solo Stats — ${name}</b>
 
-<blockquote>🏏 Matches:     ${played}
-🌟 MOTM:        ${motm}</blockquote>
+<blockquote>Matches: ${played}     🌟 MOTM: ${motm}</blockquote>
 
-<blockquote>Batting
-🏏 Runs:        ${runs}
-📦 Balls:       ${balls}
-⚡ SR:          ${sr}
-4s / 5s / 6s:  ${fours} / ${fives} / ${sixes}
-🦆 Ducks:       ${ducks}
-50s / 100s:    ${fifties} / ${tons}
-🏆 Best Score:  ${best}</blockquote>
+<blockquote>🏏 Batting
+Runs: ${runs}   Balls: ${balls}   SR: ${sr}
+4s: ${fours}   5s: ${fives}   6s: ${sixes}
+Ducks: ${ducks}   50s/100s: ${fifties}/${tons}
+Best Score: ${best}</blockquote>
 
-<blockquote>Bowling
-🎯 Wickets:     ${wickets}
-🎯 Balls:       ${bowled}
-💧 Runs Given:  ${given}
-📉 Economy:     ${econ}</blockquote>`
+<blockquote>🎯 Bowling
+Wickets: ${wickets}   Balls: ${bowled}   Eco: ${econ}</blockquote>`
   );
 }
 
