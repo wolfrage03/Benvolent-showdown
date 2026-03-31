@@ -371,7 +371,7 @@ ballHandler.init({
   endInnings: (m) => matchResult.endInnings(m),
   bowlDMButton
 });
-
+registerSoloCommands(bot, helpers);   
 require("./commands/matchCommands")(bot, helpers);
 require("./commands/hostControls")(bot, helpers);
 require("./commands/teamCommands")(bot, helpers);
@@ -382,13 +382,14 @@ require("./commands/batterBowlerCommands")(bot, helpers);
 require("./commands/scoreCommand")(bot, helpers);
 require("./commands/handleInput")(bot, helpers);
 
+    
+
 
 /* ================= REGISTER COMMAND HANDLERS ================= */
 
 registerStartHandler(bot);
 registerStatsHandler(bot);
-registerSoloCommands(bot, helpers);       
-require("./commands/handleInput")(bot, helpers);
+
 
 
 /* ================= FILE ID LOGGER ================= */
