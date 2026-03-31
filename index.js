@@ -5,6 +5,8 @@ const { Telegraf, Markup } = require("telegraf");
 const initializeApp = require("./config/appInit");
 const { bot, initializeBot } = require("./config/bot");
 
+const registerSoloCommands = require("./commands/soloCommands");
+
 const registerStartHandler = require("./handlers/startHandler");
 const registerStatsHandler = require("./handlers/statsHandler");
 const updatePlayerStats = require("./utils/updateStats");
@@ -385,6 +387,8 @@ require("./commands/handleInput")(bot, helpers);
 
 registerStartHandler(bot);
 registerStatsHandler(bot);
+registerSoloCommands(bot, helpers);       
+require("./commands/handleInput")(bot, helpers);
 
 
 /* ================= FILE ID LOGGER ================= */
