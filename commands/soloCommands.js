@@ -20,9 +20,9 @@ const {
   deleteSoloMatch,
 } = require("./soloMatchManager");
 
-const soloBallHandler        = require("./commands/soloBallHandler");
-const generateSoloScorecard  = require("./commands/soloScorecard");
-const { saveSoloMatchStats, determineMOTM, getSoloStatsText } = require("./commands/soloStats");
+const soloBallHandler        = require("./soloBallHandler");
+const generateSoloScorecard  = require("./soloScorecard");
+const { saveSoloMatchStats, determineMOTM, getSoloStatsText } = require("./soloStats");
 const User = require("../User");
 
 
