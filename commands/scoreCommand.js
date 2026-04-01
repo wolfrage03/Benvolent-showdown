@@ -9,16 +9,27 @@ module.exports = function (bot, helpers) {
     return p ? p.name : "Player";
   }
 
-  // Strips ALL characters that can break Telegram HTML parse_mode:
-  // - HTML special chars (&, <, >)
-  // - Control characters
-  // - Emoji that aren't in the BMP (some cause parse issues in certain clients)
+  // Strip invalid UTF-16 surrogates and non-BMP characters that Telegram rejects,
+  // plus control chars and HTML special chars.
   function safeHtml(str) {
     return String(str ?? "")
-      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "") // control chars
+      .replace(/[\x00-\x08\x0B\x0C\x0E-\x1F\x7F]/g, "")   // control chars
+      .replace(/[\uD800-\uDFFF]/g, "")                       // lone surrogates (invalid UTF-16)
+      .replace(/[\uFFF0-\uFFFF]/g, "")                       // specials block
+      .replace(/[^\u0000-\uFFFF]/g, "")                      // anything above BMP (emoji via surrogate pairs already stripped)
       .replace(/&/g, "&amp;")
       .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;");
+      .replace(/>/g, "&gt;")
+      .trim();
+  }
+
+  // Extra-safe version for names — also strips exotic Unicode categories
+  // that some Telegram clients choke on even inside valid UTF-8
+  function safeName(str) {
+    return safeHtml(str)
+      .replace(/[\u200B-\u200F\u202A-\u202E\u2060-\u206F\uFEFF]/g, "") // zero-width / bidi
+      .replace(/[\u0300-\u036F]/g, "")                                   // combining diacritics
+      || "Player";
   }
 
   function short(name) {
@@ -29,7 +40,6 @@ module.exports = function (bot, helpers) {
   function getLiveScore(match) {
     if (!match) return null;
 
-    // Safe fallbacks for every nullable field
     const score      = match.score        ?? 0;
     const wickets    = match.wickets      ?? 0;
     const curOver    = match.currentOver  ?? 0;
@@ -42,10 +52,10 @@ module.exports = function (bot, helpers) {
     const runRate     = ballsBowled > 0
       ? ((score / ballsBowled) * 6).toFixed(2) : "0.00";
 
-    const battingTeamLetter  = match.battingTeam  || "A";
-    const bowlingTeamLetter  = match.bowlingTeam  || "B";
-    const battingTeamName    = battingTeamLetter  === "A" ? match.teamAName : match.teamBName;
-    const bowlingTeamName    = bowlingTeamLetter  === "A" ? match.teamAName : match.teamBName;
+    const battingTeamLetter = match.battingTeam || "A";
+    const bowlingTeamLetter = match.bowlingTeam || "B";
+    const battingTeamName   = battingTeamLetter === "A" ? match.teamAName : match.teamBName;
+    const bowlingTeamName   = bowlingTeamLetter === "A" ? match.teamAName : match.teamBName;
 
     const st  = match.batterStats?.[match.striker]    || { runs: 0, balls: 0 };
     const nst = match.batterStats?.[match.nonStriker] || { runs: 0, balls: 0 };
@@ -59,11 +69,12 @@ module.exports = function (bot, helpers) {
     const partRuns  = match.currentPartnershipRuns  || 0;
     const partBalls = match.currentPartnershipBalls || 0;
 
-    const strikerName    = safeHtml(short(getName(match, match.striker)));
-    const nonStrikerName = safeHtml(short(getName(match, match.nonStriker)));
-    const bowlerName     = safeHtml(short(getName(match, match.bowler)));
-    const batTeamSafe    = safeHtml(battingTeamName  || "Team");
-    const bowlTeamSafe   = safeHtml(bowlingTeamName  || "Team");
+    // Use safeName (extra stripping) for all player/team names
+    const strikerName    = safeName(short(getName(match, match.striker)));
+    const nonStrikerName = safeName(short(getName(match, match.nonStriker)));
+    const bowlerName     = safeName(short(getName(match, match.bowler)));
+    const batTeamSafe    = safeName(battingTeamName  || "Team");
+    const bowlTeamSafe   = safeName(bowlingTeamName  || "Team");
 
     const currentOverHistory = (match.overHistory || []).find(
       o => o.bowler === match.bowler && o.over === curOver + 1
@@ -113,22 +124,27 @@ module.exports = function (bot, helpers) {
     const match = getMatch(ctx);
     if (!match) return ctx.reply("⚠️ No active match.");
 
-    // Generate ONCE — old code called getLiveScore() twice which could
-    // produce inconsistent output if match state changed between calls
     const text = getLiveScore(match);
-
     if (!text) return ctx.reply("⚠️ Could not generate score.");
 
     try {
       await ctx.reply(text, { parse_mode: "HTML" });
     } catch (e) {
       console.error("Score send failed:", e.message);
-      // Strip all HTML tags for plain text fallback — use the SAME text, not a second call
       try {
-        await ctx.reply(text.replace(/<[^>]*>/g, "").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">"));
+        // Strip HTML tags and entities for plain text fallback
+        const plain = text
+          .replace(/<[^>]*>/g, "")
+          .replace(/&amp;/g, "&")
+          .replace(/&lt;/g, "<")
+          .replace(/&gt;/g, ">")
+          // Final pass: strip any remaining non-BMP or surrogate chars
+          .replace(/[\uD800-\uDFFF]/g, "")
+          .replace(/[^\u0000-\uFFFF]/g, "");
+        await ctx.reply(plain);
       } catch (e2) {
         console.error("Score fallback failed:", e2.message);
-        await ctx.reply("⚠️ Score unavailable — try again.").catch(() => {});
+        await ctx.reply("⚠️ Score unavailable — a player name contains unsupported characters.").catch(() => {});
       }
     }
   });
