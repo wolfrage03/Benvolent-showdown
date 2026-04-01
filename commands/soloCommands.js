@@ -608,10 +608,15 @@ module.exports = function registerSoloCommands(bot, helpers) {
     const match = getSoloMatch(ctx);
     if (!match || match.phase !== "play") return next();
 
-    // Extract just the digits from the message (strip emojis/spaces around numbers)
-    const rawText  = ctx.message.text.trim();
-    const extracted = rawText.replace(/[^\d]/g, "");  // keep only digit characters
-    const text      = extracted.length === 1 ? extracted : rawText; // use extracted if single digit
+    const rawText = ctx.message.text.trim();
+    // Only accept purely numeric input: "2", "02", "006" are valid.
+    // Anything with letters ("play 3", "hit4") is rejected.
+    // Emojis alongside a number ("4") are still accepted.
+    const noLetters  = !/[a-zA-Z]/.test(rawText);
+    const digitsOnly = rawText.replace(/[^0-9]/g, "");
+    const text       = (noLetters && digitsOnly.length >= 1)
+      ? String(Number(digitsOnly))
+      : rawText;
 
     /* ── Group: batter input (0–6) ── */
     if (ctx.chat.type !== "private") {
