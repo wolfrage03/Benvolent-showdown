@@ -1,160 +1,26 @@
-// ===============================================================
-// SOLO STATS — soloStats.js
-// ===============================================================
+const mongoose = require("mongoose");
 
-const SoloStats = require("../models/SoloStats");
+const soloStatsSchema = new mongoose.Schema({
+  userId:            { type: String, required: true, unique: true, index: true },
+  soloMatchesPlayed: { type: Number, default: 0 },
+  soloTotalRuns:     { type: Number, default: 0 },
+  soloTotalBalls:    { type: Number, default: 0 },
+  soloFours:         { type: Number, default: 0 },
+  soloFives:         { type: Number, default: 0 },
+  soloSixes:         { type: Number, default: 0 },
+  soloDucks:         { type: Number, default: 0 },
+  soloFifties:       { type: Number, default: 0 },
+  soloHundreds:      { type: Number, default: 0 },
+  soloBestScore:     { type: Number, default: 0 },
+  soloTotalWickets:  { type: Number, default: 0 },
+  soloBallsBowled:   { type: Number, default: 0 },
+  soloRunsConceded:  { type: Number, default: 0 },
+  soloMOTM:          { type: Number, default: 0 },
+}, { timestamps: true });
 
+// Check mongoose.modelNames() — works before and after connection
+const SoloStats = mongoose.modelNames().includes("SoloStats")
+  ? mongoose.model("SoloStats")
+  : mongoose.model("SoloStats", soloStatsSchema);
 
-/* ─────────────────────────────────────────
-   SAVE STATS AFTER MATCH
-───────────────────────────────────────── */
-
-async function saveSoloMatchStats(match) {
-  const roster = match.allPlayers || match.players;
-  console.log(`[SOLO saveSoloMatchStats] saving for ${roster.length} players`);
-
-  const promises = roster.map(async (p) => {
-    const s = match.stats[p.id];
-    if (!s) { console.warn(`[SOLO stats] no stats for userId=${p.id}`); return; }
-    if (s.timedOut) { console.log(`[SOLO stats] skip timedOut userId=${p.id}`); return; }
-
-    const isDuck    = s.runs === 0 && s.out && !s.timedOut;
-    const isFifty   = s.runs >= 50 && s.runs < 100;
-    const isHundred = s.runs >= 100;
-    const isMOTM    = match.motm === p.id ? 1 : 0;
-
-    try {
-      const existing  = await SoloStats.findOne({ userId: String(p.id) }, { soloBestScore: 1 }).lean();
-      const finalBest = Math.max(existing?.soloBestScore || 0, s.runs || 0);
-
-      const result = await SoloStats.updateOne(
-        { userId: String(p.id) },
-        {
-          $inc: {
-            soloMatchesPlayed: 1,
-            soloTotalRuns:     s.runs         || 0,
-            soloTotalBalls:    s.balls        || 0,
-            soloFours:         s.fours        || 0,
-            soloFives:         s.fives        || 0,
-            soloSixes:         s.sixes        || 0,
-            soloDucks:         isDuck    ? 1  : 0,
-            soloFifties:       isFifty   ? 1  : 0,
-            soloHundreds:      isHundred ? 1  : 0,
-            soloTotalWickets:  s.wickets      || 0,
-            soloBallsBowled:   s.ballsBowled  || 0,
-            soloRunsConceded:  s.runsConceded || 0,
-            soloMOTM:          isMOTM,
-          },
-          $set: { soloBestScore: finalBest },
-        },
-        { upsert: true }
-      );
-
-      console.log(`[SOLO stats saved] userId=${p.id} name=${p.name} runs=${s.runs} wkts=${s.wickets} matched=${result.matchedCount} upserted=${result.upsertedCount}`);
-    } catch (e) {
-      console.error(`[SOLO saveSoloMatchStats ERROR] userId=${p.id}:`, e.message);
-    }
-  });
-
-  await Promise.allSettled(promises);
-  console.log(`[SOLO saveSoloMatchStats] done`);
-}
-
-
-/* ─────────────────────────────────────────
-   MAN OF THE MATCH
-───────────────────────────────────────── */
-
-function determineMOTM(match) {
-  const roster = match.allPlayers || match.players;
-  let bestId = null, bestScore = -1;
-  for (const p of roster) {
-    const s = match.stats[p.id];
-    if (!s || s.timedOut) continue;
-    const score = (s.runs || 0) + ((s.wickets || 0) * 15);
-    if (score > bestScore) { bestScore = score; bestId = p.id; }
-  }
-  return bestId;
-}
-
-
-/* ─────────────────────────────────────────
-   /solostats
-───────────────────────────────────────── */
-
-async function getSoloStatsText(userId, firstName) {
-  let doc;
-  try {
-    doc = await SoloStats.findOne({ userId: String(userId) }).lean();
-  } catch (e) {
-    console.error("[SOLO getSoloStatsText error]", e.message);
-    return "⚠️ Could not fetch stats. Try again later.";
-  }
-
-  console.log(`[SOLO solostats] userId=${userId} found=${!!doc} soloMatchesPlayed=${doc?.soloMatchesPlayed}`);
-
-  if (!doc || !doc.soloMatchesPlayed)
-    return "❌ No solo stats yet. Play a solo match first!";
-
-  const played  = doc.soloMatchesPlayed  || 0;
-  const motm    = doc.soloMOTM           || 0;
-  const runs    = doc.soloTotalRuns      || 0;
-  const balls   = doc.soloTotalBalls     || 0;
-  const fours   = doc.soloFours          || 0;
-  const fives   = doc.soloFives          || 0;
-  const sixes   = doc.soloSixes          || 0;
-  const ducks   = doc.soloDucks          || 0;
-  const fifties = doc.soloFifties        || 0;
-  const tons    = doc.soloHundreds       || 0;
-  const best    = doc.soloBestScore      || 0;
-  const wickets = doc.soloTotalWickets   || 0;
-  const bowled  = doc.soloBallsBowled    || 0;
-  const given   = doc.soloRunsConceded   || 0;
-
-  const sr   = balls  > 0 ? ((runs / balls) * 100).toFixed(1) : "—";
-  const econ = bowled > 0 ? ((given / bowled) * 6).toFixed(2) : "—";
-  const name = firstName || "Player";
-
-  return (
-`📊 <b>Solo Stats — ${name}</b>
-
-<blockquote>Matches: ${played}     🌟 MOTM: ${motm}</blockquote>
-
-<blockquote>🏏 Batting
-Runs: ${runs}   Balls: ${balls}   SR: ${sr}
-4s: ${fours}   5s: ${fives}   6s: ${sixes}
-Ducks: ${ducks}   50s/100s: ${fifties}/${tons}
-Best Score: ${best}</blockquote>
-
-<blockquote>🎯 Bowling
-Wickets: ${wickets}   Balls: ${bowled}   Eco: ${econ}</blockquote>`
-  );
-}
-
-
-/* ─────────────────────────────────────────
-   /solostatsdebug
-───────────────────────────────────────── */
-
-async function getSoloStatsDebug(userId) {
-  try {
-    const doc = await SoloStats.findOne({ userId: String(userId) }).lean();
-    if (!doc) return `🔍 <b>Debug userId=${userId}</b>\n\n❌ No SoloStats document found.\nCheck server logs after a match for <code>[SOLO stats saved]</code>`;
-    return (
-`🔍 <b>Debug userId=${userId}</b>
-
-<blockquote>userId: ${doc.userId}
-soloMatchesPlayed: ${doc.soloMatchesPlayed ?? "not set"}
-soloTotalRuns: ${doc.soloTotalRuns ?? "not set"}
-soloTotalBalls: ${doc.soloTotalBalls ?? "not set"}
-soloBestScore: ${doc.soloBestScore ?? "not set"}
-soloTotalWickets: ${doc.soloTotalWickets ?? "not set"}
-soloMOTM: ${doc.soloMOTM ?? "not set"}</blockquote>`
-    );
-  } catch (e) {
-    return `⚠️ DB error: ${e.message}`;
-  }
-}
-
-
-module.exports = { saveSoloMatchStats, determineMOTM, getSoloStatsText, getSoloStatsDebug };
+module.exports = SoloStats;
