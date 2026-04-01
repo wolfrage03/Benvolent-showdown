@@ -27,6 +27,16 @@ async function saveSoloMatchStats(match) {
       const existing  = await SoloStats.findOne({ userId: String(p.id) }, { soloBestScore: 1 }).lean();
       const finalBest = Math.max(existing?.soloBestScore || 0, s.runs || 0);
 
+      // Best bowling figure: more wickets = better; same wickets = fewer runs is better
+      const existing2    = await SoloStats.findOne({ userId: String(p.id) }, { soloBestBowlWickets: 1, soloBestBowlRuns: 1 }).lean();
+      const prevBestW    = existing2?.soloBestBowlWickets ?? 0;
+      const prevBestR    = existing2?.soloBestBowlRuns    ?? 999;
+      const thisW        = s.wickets      || 0;
+      const thisR        = s.runsConceded || 0;
+      const isBetterBowl = thisW > prevBestW || (thisW === prevBestW && thisR < prevBestR);
+      const newBestW     = isBetterBowl ? thisW : prevBestW;
+      const newBestR     = isBetterBowl ? thisR : prevBestR === 999 ? 0 : prevBestR;
+
       const result = await SoloStats.updateOne(
         { userId: String(p.id) },
         {
@@ -45,7 +55,11 @@ async function saveSoloMatchStats(match) {
             soloRunsConceded:  s.runsConceded || 0,
             soloMOTM:          isMOTM,
           },
-          $set: { soloBestScore: finalBest },
+          $set: {
+            soloBestScore:       finalBest,
+            soloBestBowlWickets: newBestW,
+            soloBestBowlRuns:    newBestR,
+          },
         },
         { upsert: true }
       );
@@ -87,8 +101,8 @@ async function getSoloStatsText(userId, firstName) {
   try {
     doc = await SoloStats.findOne({ userId: String(userId) }).lean();
   } catch (e) {
-    console.error("[SOLO getSoloStatsText error]", e.message);
-    return "⚠️ Could not fetch stats. Try again later.";
+    console.error("[SOLO getSoloStatsText error]", e.message, e.stack);
+    return `⚠️ Could not fetch stats: ${e.message}`;
   }
 
   console.log(`[SOLO solostats] userId=${userId} found=${!!doc} soloMatchesPlayed=${doc?.soloMatchesPlayed}`);
@@ -111,23 +125,39 @@ async function getSoloStatsText(userId, firstName) {
   const bowled  = doc.soloBallsBowled    || 0;
   const given   = doc.soloRunsConceded   || 0;
 
+  const bestBowlW = doc.soloBestBowlWickets ?? 0;
+  const bestBowlR = doc.soloBestBowlRuns    ?? 0;
+
   const sr   = balls  > 0 ? ((runs / balls) * 100).toFixed(1) : "—";
   const econ = bowled > 0 ? ((given / bowled) * 6).toFixed(2) : "—";
   const name = firstName || "Player";
 
   return (
-`📊 <b>Solo Stats — ${name}</b>
+`🏏 <b>Solo Stats — ${name}</b>
 
-<blockquote>Matches: ${played}     🌟 MOTM: ${motm}</blockquote>
+<blockquote>🏟 Matches Played : ${played}
+🌟 Man of the Match : ${motm}</blockquote>
 
-<blockquote>🏏 Batting
-Runs: ${runs}   Balls: ${balls}   SR: ${sr}
-4s: ${fours}   5s: ${fives}   6s: ${sixes}
-Ducks: ${ducks}   50s/100s: ${fifties}/${tons}
-Best Score: ${best}</blockquote>
+<blockquote>━━━ 🏏 Batting ━━━
+🏃 Runs        : ${runs}
+⚾ Balls       : ${balls}
+⚡ Strike Rate : ${sr}
+━━━━━━━━━━━━━━━
+🔵 Fours       : ${fours}
+💫 Fives       : ${fives}
+🚀 Sixes       : ${sixes}
+━━━━━━━━━━━━━━━
+🌟 Best Score  : ${best}
+🦆 Ducks       : ${ducks}
+🥈 Fifties     : ${fifties}
+🥇 Centuries   : ${tons}</blockquote>
 
-<blockquote>🎯 Bowling
-Wickets: ${wickets}   Balls: ${bowled}   Eco: ${econ}</blockquote>`
+<blockquote>━━━ 🎯 Bowling ━━━
+🎳 Wickets     : ${wickets}
+⚾ Balls       : ${bowled}
+💸 Runs Given  : ${given}
+📉 Economy     : ${econ}
+🏆 Best Figure : ${bestBowlW}/${bestBowlR}</blockquote>`
   );
 }
 

@@ -15,6 +15,10 @@ const soloStatsSchema = new mongoose.Schema({
   soloTotalWickets:  { type: Number, default: 0 },
   soloBallsBowled:   { type: Number, default: 0 },
   soloRunsConceded:  { type: Number, default: 0 },
+
+  soloBestBowlWickets: { type: Number, default: 0 },
+  soloBestBowlRuns:    { type: Number, default: 0 },
+
   soloMOTM:          { type: Number, default: 0 },
 }, { timestamps: true });
 
