@@ -12,6 +12,17 @@ const { isHost } = helpers;
 
 async function startToss(match) {
   if (!match) return;
+
+  // Guard: both captains must be set before toss can begin
+  if (!match.captains?.A || !match.captains?.B) {
+    await bot.telegram.sendMessage(
+      match.groupId,
+      "⚠️ <b>Cannot start toss</b>\n\n<blockquote>Both team captains must be set first.\nUse /captain to assign captains.</blockquote>",
+      { parse_mode: "HTML" }
+    ).catch(() => {});
+    return;
+  }
+
   match.phase = "toss";
 
   await bot.telegram.sendMessage(
@@ -30,18 +41,56 @@ async function startToss(match) {
 }
 
 
+/* ================= /toss — MANUAL TRIGGER ================= */
+
+bot.command("toss", async (ctx) => {
+  if (ctx.chat.type === "private")
+    return ctx.reply("⚠️ Use this command in a group.");
+
+  const match = getMatch(ctx);
+  if (!match) return ctx.reply("❌ No active match.");
+
+  if (!isHost(match, ctx.from.id))
+    return ctx.reply("❌ Only the host can start the toss.");
+
+  // Allow re-triggering if toss stalled — valid phases to call /toss from
+  const validPhases = ["teams_set", "captain_set", "toss", "idle"];
+  // Also allow if captains are set but phase got stuck anywhere before batbowl
+  const captainsReady = match.captains?.A && match.captains?.B;
+
+  if (!captainsReady)
+    return ctx.reply(
+      "⚠️ <b>Captains not set</b>\n\n<blockquote>Assign both captains before starting the toss.</blockquote>",
+      { parse_mode: "HTML" }
+    );
+
+  if (match.phase === "batbowl")
+    return ctx.reply("⏳ Toss already done — waiting for bat/bowl decision.");
+
+  if (["setovers", "set_striker", "play", "switch", "set_bowler", "new_batter"].includes(match.phase))
+    return ctx.reply("❌ Match already in progress.");
+
+  try { await ctx.deleteMessage(); } catch {}
+  return startToss(match);
+});
+
+
 /* ================= TOSS CHOICE ================= */
 
 bot.action(["toss_odd", "toss_even"], async (ctx) => {
 
   const match = getMatch(ctx);
-  if (!match || match.phase !== "toss") return ctx.answerCbQuery();
+  if (!match || match.phase !== "toss") return ctx.answerCbQuery("Toss is not active.");
 
   const captainA = match.captains.A;
   const captainB = match.captains.B;
 
   if (![captainA, captainB].includes(ctx.from.id))
     return ctx.answerCbQuery("Only captains can choose.");
+
+  // Prevent double-tap — lock the toss choice immediately
+  if (match.tossLocked) return ctx.answerCbQuery("Toss already in progress...");
+  match.tossLocked = true;
 
   await ctx.answerCbQuery();
 
@@ -64,8 +113,8 @@ bot.action(["toss_odd", "toss_even"], async (ctx) => {
   match.tossWinner = diceWinner;
   const winnerTeamFinal = diceWinner === captainA ? "A" : "B";
 
-  const winnerArr   = winnerTeamFinal === "A" ? match.teamA : match.teamB;
-  const chooserArr  = choice === diceResult ? winnerArr : (winnerTeamFinal === "A" ? match.teamB : match.teamA);
+  const winnerArr      = winnerTeamFinal === "A" ? match.teamA : match.teamB;
+  const chooserArr     = choice === diceResult ? winnerArr : (winnerTeamFinal === "A" ? match.teamB : match.teamA);
   const chooserCapName = chooserArr?.find(p => p.id === chooser)?.name || "Captain";
   const winnerCapName  = winnerArr?.find(p => p.id === diceWinner)?.name || "Captain";
   const winnerTeamName = winnerTeamFinal === "A" ? match.teamAName : match.teamBName;
@@ -93,7 +142,8 @@ bot.action(["toss_odd", "toss_even"], async (ctx) => {
   );
 
   // Set phase AFTER sending the bat/bowl message
-  match.phase = "batbowl";
+  match.phase      = "batbowl";
+  match.tossLocked = false;
 });
 
 
