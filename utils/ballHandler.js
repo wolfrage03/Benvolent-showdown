@@ -302,11 +302,19 @@ async function processBall(match) {
     const bat  = parseInt(match.batNumber);
     const bowl = parseInt(match.bowlNumber);
 
-    /* HATTRICK BLOCK */
-    if (match.wicketStreak === 2 && bat === 0) {
+    /* NO-0 BLOCK — last 2 delivered balls were wickets (regardless of hattrick resets) */
+    // Check the actual ball history of the current over, not just wicketStreak,
+    // so this holds true even after a hattrick resets the streak counter.
+    const lastOverEntry = (match.overHistory || []).find(
+      o => o.over === match.currentOver + 1
+    );
+    const recentBalls = (lastOverEntry?.balls || []).slice(-2);
+    const lastTwoWickets = recentBalls.length === 2 && recentBalls.every(b => b === "W");
+
+    if (lastTwoWickets && bat === 0) {
       await bot.telegram.sendMessage(
         match.groupId,
-        "⚠️ Hattrick Ball!\n\n<blockquote>Cannot play 0 — two wickets in a row!</blockquote>",
+        "⚠️ No 0 Allowed!\n\n<blockquote>Last 2 balls were wickets — you cannot play 0!</blockquote>",
         { parse_mode: "HTML" }
       );
       match.batNumber   = null;
