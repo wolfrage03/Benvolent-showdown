@@ -350,8 +350,8 @@ async function processBall(match) {
       bat === 6 ? "🔥" :
       bat === 4 ? "💥"   :
       bat === 5 ? "⚡"   :
-      bat === 3 ? "✅✅✅"  :
-      bat === 2 ? "✅✅"    :
+      bat === 3 ? "✅"  :
+      bat === 2 ? "✅"    :
                "✅";
 
     const text = `⚡ <b>${runLabel}</b>\n\n<blockquote>🏏 ${batterName}: ${bs.runs} runs (${bs.balls} balls)\n${commentLine}</blockquote>`;
