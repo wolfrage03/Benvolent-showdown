@@ -41,6 +41,7 @@ const {
   saveSoloMatchStats,
   determineMOTM,
   getSoloStatsText,
+  getSoloStatsDebug,
 } = require("./soloStats");
 
 const {
@@ -578,6 +579,23 @@ module.exports = function registerSoloCommands(bot, helpers) {
 
     soloBallHandler.startBall(match);
   }
+
+
+  /* ══════════════════════════════════════════
+     /solostatsdebug  — admin raw DB dump
+  ══════════════════════════════════════════ */
+
+  bot.command("solostatsdebug", async (ctx) => {
+    try {
+      const member = await ctx.telegram.getChatMember(ctx.chat.id, ctx.from.id);
+      if (!["administrator", "creator"].includes(member.status) && ctx.chat.type !== "private")
+        return ctx.reply("🚫 Admin only.");
+    } catch { /* allow in private */ }
+
+    const targetId = ctx.from.id;
+    const text = await getSoloStatsDebug(targetId);
+    return ctx.reply(text, { parse_mode: "HTML" });
+  });
 
 
   /* ══════════════════════════════════════════
