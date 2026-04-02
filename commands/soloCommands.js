@@ -302,6 +302,8 @@ module.exports = function registerSoloCommands(bot, helpers) {
   bot.command("solostart", async (ctx) => {
     if (ctx.chat.type === "private")
       return ctx.reply("⚠️ Use this command in a group.");
+    if (!ctx.from || ctx.from.is_bot) return;
+    if (ctx.message?.sender_chat) return;
 
     const existing = soloMatches.get(ctx.chat.id);
     if (existing && !existing.matchEnded) {
@@ -369,11 +371,18 @@ module.exports = function registerSoloCommands(bot, helpers) {
      /solojoin
   ══════════════════════════════════════════ */
 
-  bot.command("solojoin", async (ctx) => {
+ bot.command("solojoin", async (ctx) => {
+
     if (ctx.chat.type === "private")
       return ctx.reply("⚠️ Use this command in a group.");
 
-    const match = soloMatches.get(ctx.chat.id);
+    if (!ctx.from || ctx.from.is_bot)
+      return ctx.reply("🚫 Bots cannot join the lobby.");
+
+    if (ctx.message?.sender_chat)
+      return ctx.reply("🚫 Channels cannot join the lobby.");
+
+    const match = soloMatches.get(ctx.chat.id); // rest unchanged
     if (!match || match.phase !== "join")
       return ctx.reply("❌ No open solo lobby right now.");
 

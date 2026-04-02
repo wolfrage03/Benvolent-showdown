@@ -101,6 +101,12 @@ bot.command("joina", async (ctx) => {
   if (await isUserBanned(ctx.from.id))
     return ctx.reply("🚫 You are banned from this bot.");
 
+  if (!ctx.from || ctx.from.is_bot)
+    return ctx.reply("🚫 Bots cannot join.");
+
+  if (ctx.message?.sender_chat)
+    return ctx.reply("🚫 Channels cannot join.");
+
   if (playerActiveMatch.has(ctx.from.id))
     return ctx.reply("❌ You're already in a match.");
 
@@ -142,6 +148,12 @@ bot.command("joinb", async (ctx) => {
 
   if (match.phase !== "join")
     return ctx.reply("⚠️ Joining is closed.");
+
+  if (!ctx.from || ctx.from.is_bot)
+    return ctx.reply("🚫 Bots cannot join.");
+
+  if (ctx.message?.sender_chat)
+    return ctx.reply("🚫 Channels cannot join.");
 
   // FIX: Use in-memory cache via isUserBanned — no DB query
   if (await isUserBanned(ctx.from.id))
@@ -211,6 +223,9 @@ or reply to a message + /add A`
   if (ctx.message.reply_to_message) {
     const user = ctx.message.reply_to_message.from;
     if (user.is_bot) return ctx.reply("❌ Cannot add a bot.");
+    
+      if (ctx.message.reply_to_message.sender_chat)
+    return ctx.reply("❌ Cannot add a channel.");
 
     const userId  = user.id;
     const name    = user.first_name || user.username || "Player";
@@ -272,6 +287,11 @@ or reply to a message + /add A`
 
     } else if (/^\d+$/.test(raw)) {
       userId = Number(raw);
+  
+      if (userId < 0) {
+         skipped.push(`${raw} (channels/groups cannot be added as players)`);
+         continue;
+      }
       const dbUser = await User.findOne({ telegramId: String(userId) });
       if (dbUser) {
         name = dbUser.firstName
