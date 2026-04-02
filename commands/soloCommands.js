@@ -26,11 +26,11 @@ const {
   getBattingCall,
 } = require("../commentary");
 
-/* All other requires are lazy (inside registerSoloCommands) to break circular deps */
+/* ── All other requires are inside registerSoloCommands() to prevent circular deps ── */
 
 module.exports = function registerSoloCommands(bot, helpers) {
 
-  /* ── All lazy requires: fully breaks circular dependency chain ── */
+  /* ── Lazy requires: prevents circular dependency at module load time ── */
   const {
     soloMatches,
     soloPlayerActive,
@@ -87,7 +87,6 @@ module.exports = function registerSoloCommands(bot, helpers) {
     };
   }
 
-
   /* ── Debounce solo player list pins — batches rapid joins into 1 API call ── */
   const _soloPinDebounce = new Map();
   function debouncedSoloPin(match) {
@@ -96,13 +95,11 @@ module.exports = function registerSoloCommands(bot, helpers) {
     }
     _soloPinDebounce.set(match.groupId, setTimeout(() => {
       _soloPinDebounce.delete(match.groupId);
-      sendAndPinSoloPlayerList(match, bot.telegram).catch(e =>
-        console.error("Solo pin debounce error:", e.message)
-      );
+      sendAndPinSoloPlayerList(match, bot.telegram).catch(() => {});
     }, 300));
   }
 
-  /* ── send batting call gif to group ── */
+    /* ── send batting call gif to group ── */
   async function sendBattingCallToGroup(match, batterName) {
     const call = getBattingCall();
     const text = `${ping(match.batter, batterName)} — ${call.text}`;
