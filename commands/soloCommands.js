@@ -22,30 +22,15 @@
 //   /endsolo    — admin force-end
 // ===============================================================
 
-/* soloMatchManager required lazily inside registerSoloCommands() to break
-   the circular dependency with soloballHandler / soloScorecard */
-
-const soloBallHandler = require("./soloballHandler");
-
-const {
-  generateSoloScorecard,
-  sendAndPinSoloPlayerList,
-} = require("./soloScorecard");
-
-const {
-  saveSoloMatchStats,
-  determineMOTM,
-  getSoloStatsText,
-  getSoloStatsDebug,
-} = require("./soloStats");
-
 const {
   getBattingCall,
 } = require("../commentary");
 
+/* All other requires are lazy (inside registerSoloCommands) to break circular deps */
+
 module.exports = function registerSoloCommands(bot, helpers) {
 
-  /* ── Lazy require: breaks circular dependency with soloballHandler/soloScorecard ── */
+  /* ── All lazy requires: fully breaks circular dependency chain ── */
   const {
     soloMatches,
     soloPlayerActive,
@@ -53,6 +38,20 @@ module.exports = function registerSoloCommands(bot, helpers) {
     resetSoloMatch,
     deleteSoloMatch,
   } = require("./soloMatchManager");
+
+  const soloBallHandler = require("./soloballHandler");
+
+  const {
+    generateSoloScorecard,
+    sendAndPinSoloPlayerList,
+  } = require("./soloScorecard");
+
+  const {
+    saveSoloMatchStats,
+    determineMOTM,
+    getSoloStatsText,
+    getSoloStatsDebug,
+  } = require("./soloStats");
 
   /* ══════════════════════════════════════════
      TINY HELPERS
