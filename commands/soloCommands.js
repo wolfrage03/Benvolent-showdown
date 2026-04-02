@@ -22,13 +22,8 @@
 //   /endsolo    — admin force-end
 // ===============================================================
 
-const {
-  soloMatches,
-  soloPlayerActive,
-  getSoloMatch,
-  resetSoloMatch,
-  deleteSoloMatch,
-} = require("./soloMatchManager");
+/* soloMatchManager required lazily inside registerSoloCommands() to break
+   the circular dependency with soloballHandler / soloScorecard */
 
 const soloBallHandler = require("./soloballHandler");
 
@@ -49,6 +44,15 @@ const {
 } = require("../commentary");
 
 module.exports = function registerSoloCommands(bot, helpers) {
+
+  /* ── Lazy require: breaks circular dependency with soloballHandler/soloScorecard ── */
+  const {
+    soloMatches,
+    soloPlayerActive,
+    getSoloMatch,
+    resetSoloMatch,
+    deleteSoloMatch,
+  } = require("./soloMatchManager");
 
   /* ══════════════════════════════════════════
      TINY HELPERS
@@ -82,6 +86,21 @@ module.exports = function registerSoloCommands(bot, helpers) {
       timedOut: false,
       consecutiveTimeouts: 0,
     };
+  }
+
+
+  /* ── Debounce solo player list pins — batches rapid joins into 1 API call ── */
+  const _soloPinDebounce = new Map();
+  function debouncedSoloPin(match) {
+    if (_soloPinDebounce.has(match.groupId)) {
+      clearTimeout(_soloPinDebounce.get(match.groupId));
+    }
+    _soloPinDebounce.set(match.groupId, setTimeout(() => {
+      _soloPinDebounce.delete(match.groupId);
+      sendAndPinSoloPlayerList(match, bot.telegram).catch(e =>
+        console.error("Solo pin debounce error:", e.message)
+      );
+    }, 300));
   }
 
   /* ── send batting call gif to group ── */
@@ -180,7 +199,7 @@ module.exports = function registerSoloCommands(bot, helpers) {
       { parse_mode: "HTML" }
     ).catch(() => {});
 
-    await sendAndPinSoloPlayerList(match, bot.telegram);
+    debouncedSoloPin(match);
     return soloBallHandler.startBall(match);
   }
 
@@ -217,7 +236,7 @@ module.exports = function registerSoloCommands(bot, helpers) {
         { parse_mode: "HTML" }
       ).catch(() => {});
 
-      await sendAndPinSoloPlayerList(match, bot.telegram);
+      debouncedSoloPin(match);
 
       if (match.bowler === match.batter) {
         // The old bowler is now the new batter.
