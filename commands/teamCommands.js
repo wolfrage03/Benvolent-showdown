@@ -157,7 +157,7 @@ bot.command("joinb", async (ctx) => {
     return ctx.reply("⚠️ Already in Team B.");
 
   if (match.teamA.some(p => p.id === ctx.from.id))
-    return ctx.reply("⚠️ Already in Team B.");
+    return ctx.reply("⚠️ Already in Team A.");
 
   const name = ctx.from.first_name || "Player";
 

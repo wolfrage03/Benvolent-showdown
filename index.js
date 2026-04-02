@@ -1,9 +1,17 @@
 require("dotenv").config();
 
+const mongoose = require("mongoose");
 const User = require("./User"); 
 const { Telegraf, Markup } = require("telegraf");
 const initializeApp = require("./config/appInit");
 const { bot, initializeBot } = require("./config/bot");
+
+/* ================= MONGOOSE POOL CONFIG ================= */
+/* Increase pool from default 5 → 50 for 100 concurrent players */
+mongoose.set("maxPoolSize", 50);
+mongoose.set("minPoolSize", 10);
+mongoose.set("socketTimeoutMS", 45000);
+mongoose.set("serverSelectionTimeoutMS", 5000);
 
 const registerSoloCommands = require("./commands/soloCommands");
 
@@ -460,10 +468,30 @@ bot.use(async (ctx, next) => {
 (async () => {
   await initializeApp();
   await initializeBot();
-  // Load banned users from DB into memory cache before bot starts polling
   await loadBannedUsersFromDB();
-  await bot.launch();
-  console.log("🚀 Bot started successfully");
+
+  const WEBHOOK_DOMAIN = process.env.WEBHOOK_DOMAIN; // e.g. https://yourapp.up.railway.app
+
+  if (WEBHOOK_DOMAIN) {
+    /* ── Webhook mode (production on Railway) ── */
+    await bot.launch({
+      webhook: {
+        domain: WEBHOOK_DOMAIN,
+        port:   Number(process.env.PORT) || 3000,
+      }
+    });
+    console.log("🚀 Bot started on webhook:", WEBHOOK_DOMAIN);
+
+    /* ── Keep-alive ping every 25 min (prevents Railway free-tier sleep) ── */
+    setInterval(() => {
+      fetch(`${WEBHOOK_DOMAIN}/health`).catch(() => {});
+    }, 25 * 60 * 1000);
+
+  } else {
+    /* ── Long-polling mode (local dev) ── */
+    await bot.launch();
+    console.log("🚀 Bot started (polling — local dev)");
+  }
 })();
 
 process.once("SIGINT",  () => { console.log("🛑 SIGINT received");  bot.stop("SIGINT");  });

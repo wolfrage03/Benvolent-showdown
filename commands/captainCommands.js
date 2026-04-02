@@ -44,7 +44,11 @@ function buildPlayerListText(match) {
   ].join("\n");
 }
 
-async function sendAndPinPlayerList(match, telegram) {
+/* ── Debounce map: groups pending pin updates by groupId ── */
+/* Batches all join calls within 300ms into a single Telegram API call */
+const _pinDebounce = new Map();
+
+async function _doSendAndPin(match, telegram) {
   const text = buildPlayerListText(match);
   try {
     if (match.playerListMessageId) {
@@ -75,6 +79,20 @@ async function sendAndPinPlayerList(match, telegram) {
   } catch (e) {
     console.error("PlayerList update error:", e.message);
   }
+}
+
+async function sendAndPinPlayerList(match, telegram) {
+  /* If a call is already queued for this group, cancel it — we'll
+     send one fresh call after all joins in this tick are collected. */
+  if (_pinDebounce.has(match.groupId)) {
+    clearTimeout(_pinDebounce.get(match.groupId));
+  }
+  _pinDebounce.set(match.groupId, setTimeout(() => {
+    _pinDebounce.delete(match.groupId);
+    _doSendAndPin(match, telegram).catch(e =>
+      console.error("Debounced pin error:", e.message)
+    );
+  }, 300));
 }
 
 
