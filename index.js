@@ -6,12 +6,7 @@ const { Telegraf, Markup } = require("telegraf");
 const initializeApp = require("./config/appInit");
 const { bot, initializeBot } = require("./config/bot");
 
-/* ================= MONGOOSE POOL CONFIG ================= */
-/* Increase pool from default 5 → 50 for 100 concurrent players */
-mongoose.set("maxPoolSize", 50);
-mongoose.set("minPoolSize", 10);
-mongoose.set("socketTimeoutMS", 45000);
-mongoose.set("serverSelectionTimeoutMS", 5000);
+
 
 const registerSoloCommands = require("./commands/soloCommands");
 
