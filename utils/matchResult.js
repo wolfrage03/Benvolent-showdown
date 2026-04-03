@@ -1,8 +1,9 @@
-const generateScorecard   = require("../utils/scorecardGenerator");
-const box               = require("../utils/boxMessage");
-const updatePlayerStats   = require("../utils/updateStats");
+const generateScorecard        = require("../utils/scorecardGenerator");
+const box                      = require("../utils/boxMessage");
+const updatePlayerStats        = require("../utils/updateStats");
 const { sendAndPinPlayerList } = require("../commands/captainCommands");
 const { matches, playerActiveMatch } = require("../matchManager");
+const { generateMatchGraph }   = require("../utils/graphGenerator");
 
 let bot, getName, clearTimers, clearActiveMatchPlayers, initTimerState, getCountdownCall;
 
@@ -13,6 +14,21 @@ function init(deps) {
   clearActiveMatchPlayers = deps.clearActiveMatchPlayers;
   initTimerState          = deps.initTimerState;
   getCountdownCall        = deps.getCountdownCall;
+}
+
+
+/* ================= GRAPH HELPER ================= */
+
+async function sendGraph(match) {
+  try {
+    const buffer = await generateMatchGraph(match);
+    await bot.telegram.sendPhoto(match.groupId, { source: buffer }, {
+      caption:    "📊 Match Graph",
+      parse_mode: "HTML",
+    });
+  } catch (e) {
+    console.error("Graph generation failed:", e.message);
+  }
 }
 
 
@@ -188,9 +204,13 @@ async function endInnings(match) {
     match.firstInningsScore = match.score;
     match.firstInningsData  = JSON.parse(JSON.stringify(match));
 
+    // Scorecard
     try {
       await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "HTML" });
     } catch (e) { console.error("Scorecard send failed:", e.message); }
+
+    // ── Graph after innings 1 ──
+    await sendGraph(match);
 
     try {
       await bot.telegram.sendMessage(
@@ -352,7 +372,7 @@ async function endInnings(match) {
 
   } catch (err) { console.error("Stats update error:", err); }
 
-  // Send innings 2 done message
+  // Innings 2 done message
   try {
     await bot.telegram.sendMessage(
       match.groupId,
@@ -365,12 +385,16 @@ async function endInnings(match) {
     );
   } catch (e) { console.error("Innings 2 done failed:", e.message); }
 
-  // Send both scorecards at end of match
+  // Both scorecards
   try {
     await bot.telegram.sendMessage(match.groupId, generateScorecard(match.firstInningsData, getName), { parse_mode: "HTML" });
     await bot.telegram.sendMessage(match.groupId, generateScorecard(match, getName), { parse_mode: "HTML" });
   } catch (e) { console.error("Final scorecard failed:", e.message); }
 
+  // ── Full match graph (both innings) ──
+  await sendGraph(match);
+
+  // Result
   if (match.score > match.firstInningsScore) {
     await endMatchWithWinner(match, match.battingTeam);
   } else if (match.score < match.firstInningsScore) {
